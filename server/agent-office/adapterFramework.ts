@@ -33,7 +33,7 @@ export interface AgentRunInput {
 }
 
 export interface AgentEvent {
-  type: 'delta' | 'tool_start' | 'tool_end' | 'file_change' | 'test_start' | 'test_end' | 'warning' | 'error' | 'complete' | 'cancelled';
+  type: 'delta' | 'tool_start' | 'tool_end' | 'file_change' | 'test_start' | 'test_end' | 'warning' | 'error' | 'complete' | 'cancelled' | 'max_tool_steps';
   timestamp: string;
   payload: Record<string, unknown>;
 }

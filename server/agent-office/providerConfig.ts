@@ -27,6 +27,7 @@ interface ProviderConfigRow {
   health_endpoint: string;
   health_method: 'GET' | 'POST';
   secret_ref: string | null;
+  max_tool_steps: number;
 }
 
 export class ProviderConfigRepository {
@@ -46,17 +47,17 @@ export class ProviderConfigRepository {
       health_endpoint: row.health_endpoint,
       health_method: row.health_method,
       secret_ref: row.secret_ref,
-      max_tool_steps: 8,
+      max_tool_steps: row.max_tool_steps,
     };
   }
 
   save(config: Omit<ProviderConfig, 'max_tool_steps'> & { max_tool_steps?: number }): ProviderConfig {
     const updatedAt = new Date().toISOString();
     this.database.prepare(`
-      INSERT INTO provider_configs (provider_id, base_url, model, auth_scheme, auth_header, custom_headers_json, timeout_ms, health_endpoint, health_method, secret_ref, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(provider_id) DO UPDATE SET base_url = excluded.base_url, model = excluded.model, auth_scheme = excluded.auth_scheme, auth_header = excluded.auth_header, custom_headers_json = excluded.custom_headers_json, timeout_ms = excluded.timeout_ms, health_endpoint = excluded.health_endpoint, health_method = excluded.health_method, secret_ref = excluded.secret_ref, updated_at = excluded.updated_at
-    `).run(config.provider_id, config.base_url, config.model, config.auth_scheme, config.auth_header, JSON.stringify(config.custom_headers), config.timeout_ms, config.health_endpoint, config.health_method, config.secret_ref, updatedAt);
+      INSERT INTO provider_configs (provider_id, base_url, model, auth_scheme, auth_header, custom_headers_json, timeout_ms, health_endpoint, health_method, secret_ref, max_tool_steps, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(provider_id) DO UPDATE SET base_url = excluded.base_url, model = excluded.model, auth_scheme = excluded.auth_scheme, auth_header = excluded.auth_header, custom_headers_json = excluded.custom_headers_json, timeout_ms = excluded.timeout_ms, health_endpoint = excluded.health_endpoint, health_method = excluded.health_method, secret_ref = excluded.secret_ref, max_tool_steps = excluded.max_tool_steps, updated_at = excluded.updated_at
+    `).run(config.provider_id, config.base_url, config.model, config.auth_scheme, config.auth_header, JSON.stringify(config.custom_headers), config.timeout_ms, config.health_endpoint, config.health_method, config.secret_ref, config.max_tool_steps ?? 20, updatedAt);
     return this.get(config.provider_id)!;
   }
 }

@@ -28,4 +28,16 @@ describe('provider configuration and secrets', () => {
   it('keeps the production credential boundary explicit', async () => {
     await expect(new SystemSecretStore().get('claude')).rejects.toThrow('SYSTEM_SECRET_STORE_UNAVAILABLE');
   });
+
+  it('persists max_tool_steps with a default of 20', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-office-provider-'));
+    const database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
+    const repository = new ProviderConfigRepository(database.connection);
+    const base = { provider_id: 'claude', base_url: 'https://provider.invalid', model: 'model', auth_scheme: 'bearer' as const, auth_header: null, custom_headers: {}, timeout_ms: 5000, health_endpoint: '/v1/models', health_method: 'GET' as const, secret_ref: null };
+    expect(repository.save(base).max_tool_steps).toBe(20);
+    repository.save({ ...base, max_tool_steps: 7 });
+    expect(repository.get('claude')?.max_tool_steps).toBe(7);
+    database.connection.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
 });

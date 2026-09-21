@@ -84,7 +84,7 @@ export async function executeLocalTool(name: LocalToolName, input: Record<string
       return { ok: true, data: { path: requested, files: entries.filter(entry => !entry.isSymbolicLink()).map(entry => ({ name: entry.name, type: entry.isDirectory() ? 'directory' : 'file' })) } };
     }
     if (name === 'search_files') {
-      const needle = String(input.query || '');
+      const needle = String(input.pattern ?? input.query ?? '');
       if (!needle) throw new Error('SEARCH_QUERY_REQUIRED');
       const target = safePath(context, String(input.path || '.'));
       const entries = await fs.readdir(target, { withFileTypes: true });

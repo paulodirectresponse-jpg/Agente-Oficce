@@ -160,6 +160,12 @@ const migrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_tasks_project_lock ON tasks(project_id, writer_lock);
     `,
   },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE provider_configs ADD COLUMN max_tool_steps INTEGER NOT NULL DEFAULT 20;
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {
