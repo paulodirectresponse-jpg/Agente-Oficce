@@ -119,7 +119,7 @@ export function createCodexAdapter(config: CodexAdapterConfig): AgentAdapter {
       const state = { threadId: null as string | null, cancelRequested: false, timedOut: false, terminalEmitted: false };
       const emit: CodexEventHandler = event => {
         queue.push(event);
-        while (waiters.length) waiters.shift()!();
+        for (const waiter of waiters.splice(0)) waiter();
       };
       const nextEvent = (): Promise<AgentEvent | null> => {
         if (queue.length) return Promise.resolve(queue.shift()!);
@@ -153,8 +153,7 @@ export function createCodexAdapter(config: CodexAdapterConfig): AgentAdapter {
       child.on('error', error => {
         emitOnce({ type: 'error', timestamp: new Date().toISOString(), payload: { message: `CODEX_SPAWN_FAILED: ${error.message}` } });
       });
-      child.on('close', () => {
-        clearTimeout(timer);
+      const settleOnClose = (): void => {
         if (!state.terminalEmitted) {
           if (state.cancelRequested) {
             emitOnce({ type: 'cancelled', timestamp: new Date().toISOString(), payload: { reason: 'aborted' } });
@@ -165,9 +164,16 @@ export function createCodexAdapter(config: CodexAdapterConfig): AgentAdapter {
           }
         }
         activeProcesses.delete(taskId);
-        while (waiters.length) waiters.shift()!();
-      });      if (child.stdout) {
+        for (const waiter of waiters.splice(0)) waiter();
+      };
+      child.on('close', () => {
+        clearTimeout(timer);
+        activeProcesses.delete(taskId);
+        for (const waiter of waiters.splice(0)) waiter();
+      });
+      if (child.stdout) {
         const lines = createInterface({ input: child.stdout });
+        lines.on('close', settleOnClose);
         lines.on('line', line => {
           const trimmed = line.trim();
           if (!trimmed) return;
@@ -184,8 +190,10 @@ export function createCodexAdapter(config: CodexAdapterConfig): AgentAdapter {
           } else {
             mapCodexEvent(parsed, emit, state);
           }
-          while (waiters.length) waiters.shift()!();
+          for (const waiter of waiters.splice(0)) waiter();
         });
+      } else {
+        child.on('close', settleOnClose);
       }
       try {
         while (true) {

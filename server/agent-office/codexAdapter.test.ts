@@ -12,6 +12,8 @@ class FakeChild extends EventEmitter {
   lines: string[] = [];
   kill(): boolean {
     this.killed = true;
+    this.stdout.end();
+    this.stderr.end();
     queueMicrotask(() => this.emit('close', null, null));
     return true;
   }
@@ -19,9 +21,13 @@ class FakeChild extends EventEmitter {
     for (const line of lines) this.stdout.write(`${line}\n`);
   }
   finish(): void {
+    this.stdout.end();
+    this.stderr.end();
     queueMicrotask(() => this.emit('close', 0, null));
   }
   failSpawn(): void {
+    this.stdout.end();
+    this.stderr.end();
     queueMicrotask(() => this.emit('error', new Error('ENOENT')));
   }
 }
