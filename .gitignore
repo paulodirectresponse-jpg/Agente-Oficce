@@ -1,0 +1,44 @@
+# Agent Office - Git Ignore
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Data (SQLite, logs, etc.)
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Test coverage
+coverage/
+
+# Misc
+*.tmp
+*.temp
+.tmp/
+.temp/
