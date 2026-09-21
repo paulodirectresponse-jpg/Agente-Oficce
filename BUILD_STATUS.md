@@ -14,8 +14,8 @@
 | 2 | Single Conversation | DONE | Conversation and message repositories plus integration tests pass locally. |
 | 3 | Adapter Framework | DONE | Adapter contract, registry, mock adapter, and integration tests pass locally. |
 | 4 | Claude / Gateway | BLOCKED_REAL_VALIDATION | Tool-use loop fully implemented and covered by 19 deterministic mock/SSE tests; capabilities now advertise the 9 local tools. Real provider smoke test is blocked until valid Gateway credentials/base URL are supplied. |
-| 5 | Tasks + Autonomous Loop | NOT_STARTED | Depends on bounded tool execution and persisted orchestration checkpoints. |
-| 6 | Context Pack + Shared Memory | NOT_STARTED | Existing schema is present; context-pack behavior is not yet implemented and validated. |
+| 5 | Tasks + Autonomous Loop | DONE | TaskOrchestrator drives runs with event persistence (dedup via event_key), retry with diagnosis up to 3 attempts, blocked on max_tool_steps/max attempts, waiting_approval on denied dangerous ops, cancelled runs idempotent. 7 orchestrator tests pass. |
+| 6 | Context Pack + Shared Memory | DONE | MemoryRepository (project memory, FTS5-ranked chunks, handoffs), ContextPackBuilder with 8 sections inside token budgets, orchestrator checkpoint summaries; raw history preserved. 5 memory tests pass. |
 | 7 | Kimi | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
 | 8 | Codex | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
 | 9 | Router | NOT_STARTED | No deterministic multi-provider routing implementation in this standalone checkpoint. |
@@ -26,7 +26,7 @@
 | 14 | Dogfooding | NOT_STARTED | No real-user validation recorded. |
 
 ## Verified local checks
-- `npm test`: 11 files, 41 tests passing (16 tool-loop scenarios + 3 Claude SSE integration tests added).
+- `npm test`: 13 files, 53 tests passing.
 - `npm run lint`: TypeScript no-emit check passing.
 - `npm run build`: client and server build passing.
 - Crash recovery test: a fresh SQLite connection marks an orphan run failed, blocks the task, clears the writer lock, and permits a subsequent successful run.
