@@ -2,6 +2,7 @@ import type { Database } from 'better-sqlite3';
 import type { AgentAdapter, AgentId } from './adapterFramework.js';
 import { MockAdapter } from './adapterFramework.js';
 import { createClaudeAdapter } from './claudeAdapter.js';
+import { createKimiAdapter } from './kimiAdapter.js';
 import { ProviderConfigRepository } from './providerConfig.js';
 import type { SecretStore } from './secretStore.js';
 
@@ -23,6 +24,19 @@ export async function buildAdapterRegistry(database: Database, secrets: SecretSt
         healthCheckEndpoint: claudeConfig.health_endpoint,
         healthCheckMethod: claudeConfig.health_method,
         maxToolSteps: claudeConfig.max_tool_steps,
+      }));
+    }
+  }
+  const kimiConfig = configs.get('kimi');
+  if (kimiConfig?.secret_ref) {
+    const apiKey = await secrets.get(kimiConfig.secret_ref);
+    if (apiKey) {
+      registry.set('kimi', createKimiAdapter({
+        baseUrl: kimiConfig.base_url,
+        apiKey,
+        model: kimiConfig.model,
+        timeoutMs: kimiConfig.timeout_ms,
+        maxToolSteps: kimiConfig.max_tool_steps,
       }));
     }
   }
