@@ -3,6 +3,9 @@ import { openAgentOfficeDatabase } from '../agent-office/database.js';
 import { ProjectRepository } from '../agent-office/projectRepository.js';
 import { ConversationRepository, MessageRepository } from '../agent-office/conversationRepository.js';
 import { TaskRunManager } from '../agent-office/taskRunManager.js';
+import { TaskOrchestrator } from '../agent-office/orchestrator.js';
+import { buildAdapterRegistry, resolveAgentId } from '../agent-office/adapterFactory.js';
+import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
 import { getAgentOfficeConfig, ensureAgentOfficeDataDir } from '../agent-office/config.js';
 
 export const agentOfficeRouter = Router();
@@ -150,5 +153,59 @@ agentOfficeRouter.get('/agent-office/projects/:projectId/tasks/:taskId', (reques
     response.json({ ok: true, data: task });
   } catch (error) {
     response.status(500).json({ ok: false, error: { code: 'TASK_GET_FAILED', message: error instanceof Error ? error.message : 'Unable to get task.' } });
+  }
+});
+
+// Run execution (autonomous loop, runs in background; poll task/events for progress)
+agentOfficeRouter.post('/agent-office/projects/:projectId/tasks/:taskId/run', async (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const task = database.connection.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?').get(request.params.taskId, request.params.projectId) as { id: string } | undefined;
+    if (!task) {
+      database.connection.close();
+      response.status(404).json({ ok: false, error: { code: 'TASK_NOT_FOUND', message: 'Task not found.' } });
+      return;
+    }
+    const project = new ProjectRepository(database.connection).get(request.params.projectId);
+    if (!project) {
+      database.connection.close();
+      response.status(404).json({ ok: false, error: { code: 'PROJECT_NOT_FOUND', message: 'Project not found.' } });
+      return;
+    }
+    const config = getAgentOfficeConfig();
+    const activeRun = database.connection.prepare(`
+      SELECT runs.id FROM runs INNER JOIN tasks ON tasks.id = runs.task_id
+      WHERE tasks.project_id = ? AND runs.status IN ('started', 'running') LIMIT 1
+    `).get(request.params.projectId);
+    if (activeRun) {
+      database.connection.close();
+      response.status(409).json({ ok: false, error: { code: 'WRITER_LOCK_ACTIVE', message: 'Another run is already active for this project.' } });
+      return;
+    }
+    const secrets = new DevelopmentSecretStore(config.dataDir);
+    const registry = await buildAdapterRegistry(database.connection, secrets);
+    const manager = new TaskRunManager({ database: database.connection, adapterRegistry: registry, maxAutoAttempts: 3, maxAgentSwitches: 3 });
+    const orchestrator = new TaskOrchestrator({ database: database.connection, manager, projectRoot: project.root_path });
+    const agentId = resolveAgentId(request.body?.agent_id, registry);
+    void orchestrator.executeTask(task.id, agentId)
+      .catch(() => undefined)
+      .finally(() => database.connection.close());
+    response.status(202).json({ ok: true, data: { task_id: task.id, agent_id: agentId, status: 'running' } });
+  } catch (error) {
+    database.connection.close();
+    const code = error instanceof Error ? error.message : 'TASK_RUN_FAILED';
+    const status = code === 'WRITER_LOCK_ACTIVE' ? 409 : code === 'ADAPTER_NOT_FOUND' || code === 'ADAPTER_UNAVAILABLE' ? 503 : 500;
+    response.status(status).json({ ok: false, error: { code, message: 'Unable to start task run.' } });
+  }
+});
+
+agentOfficeRouter.get('/agent-office/projects/:projectId/tasks/:taskId/events', (request, response) => {
+  try {
+    const database = openAgentOfficeDatabase();
+    const events = database.connection.prepare('SELECT run_id, event_type, payload_json, created_at FROM agent_office_events WHERE task_id = ? ORDER BY created_at, event_key LIMIT 500').all(request.params.taskId);
+    database.connection.close();
+    response.json({ ok: true, data: events });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: { code: 'EVENT_LIST_FAILED', message: error instanceof Error ? error.message : 'Unable to list events.' } });
   }
 });

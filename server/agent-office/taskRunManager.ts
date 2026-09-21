@@ -175,6 +175,28 @@ export class TaskRunManager {
     if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
   }
 
+  blockTask(taskId: string, reason: string): void {
+    const timestamp = now();
+    this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ? WHERE id = ?').run('blocked', timestamp, taskId);
+    this.options.database.prepare(`INSERT INTO agent_office_events (id, run_id, task_id, event_type, payload_json, created_at, event_key) VALUES (?, NULL, ?, 'task.status_changed', ?, ?, ?)`).run(
+      id(), taskId, JSON.stringify({ status: 'blocked', reason }), timestamp, `${taskId}:blocked:${timestamp}`,
+    );
+  }
+
+  async setWaitingApproval(taskId: string, runId: string, reason: string): Promise<void> {
+    const run = this.options.database.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as unknown as Run | undefined;
+    if (run) {
+      const adapter = this.options.adapterRegistry.get(run.agent_id);
+      if (adapter) await adapter.cancel(runId);
+      const timestamp = now();
+      this.options.database.prepare('UPDATE runs SET status = ?, ended_at = ?, error_json = ? WHERE id = ?').run(
+        'cancelled', timestamp, JSON.stringify({ reason: 'approval_required', detail: reason }), runId,
+      );
+      this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ? WHERE id = ?').run('waiting_approval', timestamp, taskId);
+      if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
+    }
+  }
+
   getActiveRun(): { runId: string; taskId: string } | null {
     const first = this.activeRuns.values().next().value as { runId: string; taskId: string } | undefined;
     return first ? { runId: first.runId, taskId: first.taskId } : null;
