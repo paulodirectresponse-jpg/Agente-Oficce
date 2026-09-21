@@ -15,10 +15,12 @@ data/
 *.sqlite-shm
 *.log
 
-# Environment
+# Environment and local development secrets
 .env
 .env.local
 .env.*.local
+.agent-office/development-secrets.json
+**/development-secrets.json
 
 # IDE
 .vscode/

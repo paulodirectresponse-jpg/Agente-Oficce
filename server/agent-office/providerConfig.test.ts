@@ -1,0 +1,31 @@
+import { describe, expect, it } from 'vitest';
+import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
+import { openAgentOfficeDatabase } from './database.js';
+import { ProviderConfigRepository } from './providerConfig.js';
+import { DevelopmentSecretStore, SystemSecretStore } from './secretStore.js';
+
+describe('provider configuration and secrets', () => {
+  it('persists nonsecret config while keeping secret outside SQLite', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-office-provider-'));
+    const database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
+    const secrets = new DevelopmentSecretStore(dataDir);
+    await secrets.set('claude-main', 'super-secret-key');
+    new ProviderConfigRepository(database.connection).save({ provider_id: 'claude', base_url: 'https://provider.invalid', model: 'model', auth_scheme: 'x-api-key', auth_header: null, custom_headers: { 'x-client': 'agent-office' }, timeout_ms: 5000, health_endpoint: '/health', health_method: 'GET', secret_ref: 'claude-main' });
+    expect(database.connection.prepare("SELECT COUNT(*) AS count FROM provider_configs WHERE custom_headers_json LIKE '%super-secret-key%'").get()).toEqual({ count: 0 });
+    expect(await secrets.get('claude-main')).toBe('super-secret-key');
+    expect(fsSync.statSync(path.join(dataDir, 'development-secrets.json')).mode & 0o400).toBe(0o400);
+    if (process.platform !== 'win32') {
+      expect((fsSync.statSync(path.join(dataDir, 'development-secrets.json')).mode & 0o077)).toBe(0);
+    }
+    database.connection.close();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  it('keeps the production credential boundary explicit', async () => {
+    await expect(new SystemSecretStore().get('claude')).rejects.toThrow('SYSTEM_SECRET_STORE_UNAVAILABLE');
+  });
+});

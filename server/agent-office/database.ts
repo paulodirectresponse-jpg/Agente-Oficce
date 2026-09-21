@@ -140,6 +140,26 @@ const migrations: Array<{ version: number; sql: string }> = [
       );
     `,
   },
+  {
+    version: 2,
+    sql: `
+      CREATE TABLE IF NOT EXISTS provider_configs (
+        provider_id TEXT PRIMARY KEY,
+        base_url TEXT NOT NULL,
+        model TEXT NOT NULL,
+        auth_scheme TEXT NOT NULL,
+        auth_header TEXT,
+        custom_headers_json TEXT NOT NULL DEFAULT '{}',
+        timeout_ms INTEGER NOT NULL DEFAULT 60000,
+        health_endpoint TEXT NOT NULL DEFAULT '/v1/models',
+        health_method TEXT NOT NULL DEFAULT 'GET',
+        secret_ref TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_runs_task_status ON runs(task_id, status);
+      CREATE INDEX IF NOT EXISTS idx_tasks_project_lock ON tasks(project_id, writer_lock);
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {

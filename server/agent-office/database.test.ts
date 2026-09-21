@@ -9,7 +9,7 @@ describe('Agent Office local database', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-'));
     const database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
     expect(database.connection.prepare('PRAGMA journal_mode').get()).toMatchObject({ journal_mode: 'wal' });
-    expect(database.connection.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }]);
+    expect(database.connection.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }]);
     expect(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projects'").get()).toEqual({ name: 'projects' });
     closeAgentOfficeDatabase(database);
     fs.rmSync(dataDir, { recursive: true, force: true });

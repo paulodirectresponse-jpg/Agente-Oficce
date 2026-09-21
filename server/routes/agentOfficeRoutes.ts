@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import crypto from 'node:crypto';
 import { openAgentOfficeDatabase } from '../agent-office/database.js';
 import { ProjectRepository } from '../agent-office/projectRepository.js';
 import { ConversationRepository, MessageRepository } from '../agent-office/conversationRepository.js';
+import { TaskRunManager } from '../agent-office/taskRunManager.js';
 import { getAgentOfficeConfig, ensureAgentOfficeDataDir } from '../agent-office/config.js';
 
 export const agentOfficeRouter = Router();
@@ -122,25 +122,15 @@ agentOfficeRouter.post('/agent-office/projects/:projectId/tasks', (request, resp
     const database = openAgentOfficeDatabase();
     const conversations = new ConversationRepository(database.connection);
     const conversationId = conversations.ensureForProject(request.params.projectId);
-    const task = {
-      id: crypto.randomUUID(),
-      project_id: request.params.projectId,
-      conversation_id: conversationId,
-      title: request.body?.title || 'Untitled Task',
-      description: request.body?.description || '',
-      category: request.body?.category || 'unknown',
-      risk: request.body?.risk || 'medium',
-      status: 'queued',
-      assigned_agent: null,
-      attempt_count: 0,
-      writer_lock: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      completed_at: null,
-    };
-    database.connection.prepare(`INSERT INTO tasks (id, project_id, conversation_id, title, description, category, risk, status, assigned_agent, attempt_count, writer_lock, created_at, updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      task.id, task.project_id, task.conversation_id, task.title, task.description, task.category, task.risk, task.status, task.assigned_agent, task.attempt_count, task.writer_lock, task.created_at, task.updated_at, task.completed_at,
-    );
+    const manager = new TaskRunManager({ database: database.connection, adapterRegistry: new Map(), maxAutoAttempts: 3, maxAgentSwitches: 3 });
+    const task = manager.createTask({
+      projectId: request.params.projectId,
+      conversationId,
+      title: String(request.body?.title || 'Untitled Task'),
+      description: String(request.body?.description || ''),
+      category: String(request.body?.category || 'unknown'),
+      risk: request.body?.risk === 'low' || request.body?.risk === 'high' ? request.body.risk : 'medium',
+    });
     database.connection.close();
     response.status(201).json({ ok: true, data: task });
   } catch (error) {

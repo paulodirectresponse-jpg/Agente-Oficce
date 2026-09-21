@@ -1,108 +1,45 @@
 # Build Status - Agent Office (Standalone)
 
-## Fase atual: 1 — SQLite + Projects (Foundation Fixes)
-- Estado: IN_PROGRESS
-- Última atualização: 2026-09-21
+## Current checkpoint
+- Updated: 2026-09-21
+- Branch: `main`
+- Evidence scope: local code, tests, typecheck, and build only unless explicitly marked otherwise.
 
-## Fases
+## Phase status
 
-| Fase | Descrição | Status | Observações |
-|------|-----------|--------|-------------|
-| 0 | Bootstrap | DONE | Config, logger, health endpoint, project structure, tests passing |
-| 1 | SQLite + Projects | IN_PROGRESS | Foundation fixes needed (writer lock, retry state, FTS5) |
-| 2 | Single Conversation | NOT_STARTED | Conversation/Message repos migrated, tests passing |
-| 3 | Adapter Framework | NOT_STARTED | Adapter interface/registry migrated, tests passing |
-| 4 | Claude/Gateway | BLOCKED_REAL_VALIDATION | Base adapter migrated, needs real credentials + fixes |
-| 5 | Tasks + Autonomous Loop | NOT_STARTED | |
-| 6 | Context Pack + Shared Memory | NOT_STARTED | |
-| 7 | Kimi | NOT_STARTED | |
-| 8 | Codex | NOT_STARTED | |
-| 9 | Router | NOT_STARTED | |
-| 10 | Usage | NOT_STARTED | |
-| 11 | UI Final | NOT_STARTED | |
-| 12 | Office View | NOT_STARTED | |
-| 13 | Release Gate | NOT_STARTED | |
-| 14 | Dogfooding | NOT_STARTED | |
+| Phase | Description | Status | Evidence / blocker |
+|---:|---|---|---|
+| 0 | Bootstrap | DONE | Standalone config, server, client entrypoint, health route, and tests exist. |
+| 1 | SQLite + Projects | DONE | WAL, migrations 1–2, project-scoped writer lock, persisted retry counters, cancellation registry, FTS triggers, and fresh-manager crash recovery test pass locally. |
+| 2 | Single Conversation | DONE | Conversation and message repositories plus integration tests pass locally. |
+| 3 | Adapter Framework | DONE | Adapter contract, registry, mock adapter, and integration tests pass locally. |
+| 4 | Claude / Gateway | IN_PROGRESS | Configurable auth and health probe exist; real provider validation remains blocked until credentials and a reachable provider are supplied. |
+| 5 | Tasks + Autonomous Loop | NOT_STARTED | Depends on bounded tool execution and persisted orchestration checkpoints. |
+| 6 | Context Pack + Shared Memory | NOT_STARTED | Existing schema is present; context-pack behavior is not yet implemented and validated. |
+| 7 | Kimi | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
+| 8 | Codex | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
+| 9 | Router | NOT_STARTED | No deterministic multi-provider routing implementation in this standalone checkpoint. |
+| 10 | Usage | NOT_STARTED | Provider usage persistence and aggregation are not yet implemented. |
+| 11 | UI Final | IN_PROGRESS | Minimal health page and Vite entrypoint build; task/project UI is not complete. |
+| 12 | Office View | NOT_STARTED | Not implemented. |
+| 13 | Release Gate | NOT_STARTED | Tauri packaging and release evidence are not complete. |
+| 14 | Dogfooding | NOT_STARTED | No real-user validation recorded. |
 
-## Concluído (Migração + Validação + Foundation Fixes Parciais)
-- ✅ Repositório standalone criado em `../Agente-Office`
-- ✅ Core modules migrados: config, logger, database, projectRepository, conversationRepository, adapterFramework, claudeAdapter, taskRunManager
-- ✅ 8 test files, 16 testes migrados e **passando**
-- ✅ Blueprint docs (12 arquivos) copiados
-- ✅ Build configs: package.json, tsconfig, vite, vitest
-- ✅ Express server + REST API routes
-- ✅ README.md, MIGRATION_REPORT.md, .env.example, .gitignore
-- ✅ BUILD_STATUS.md atualizado para projeto standalone
-- ✅ TypeScript typecheck PASS
-- ✅ `npm test` - 16/16 testes Agent Office passando
-- ✅ better-sqlite3 instalado (Node 24 compatível)
-- ✅ **Phase B - Item 1: Writer Lock por Projeto** - Implementado (persistido no SQLite, verificado por project_id)
-- ✅ **Phase B - Item 2: Retry State no SQLite** - Colunas `attempt_count`, `agent_switches` na tabela tasks, leitura direta do DB
-- ✅ **Phase B - Item 3: Claude Cancel Real** - Registry de AbortController por runId implementado
-- ✅ **Phase B - Item 4: Capabilities Honestas** - Removidas tools falsas (read/write/bash/web_search) de todos adapters
-- ✅ **Phase B - Item 5: Auth Configurável** - Suporte a Bearer, x-api-key, custom headers
-- ✅ **Phase B - Item 6: Health Check Configurável** - Endpoint, method customizáveis (não assume /v1/models)
-- ✅ **Phase B - Item 7: SQLite FTS5 Sync** - Triggers para memory_chunks ↔ memory_chunks_fts
+## Verified local checks
+- `npm test`: 8 files, 16 tests passing.
+- `npm run lint`: TypeScript no-emit check passing.
+- `npm run build`: client and server build passing.
+- Crash recovery test: a fresh SQLite connection marks an orphan run failed, blocks the task, clears the writer lock, and permits a subsequent successful run.
 
-## Em andamento
-- Phase B - Item 8: Crash Recovery Real (teste E2E simulando morte do processo + restart)
-- Phase B - Item 9: Phase Status Consistente
-- Phase B - Item 10: Configuração Provider completa
+## Security boundaries
+- Provider configuration persists nonsecret fields in `provider_configs`; SQLite stores only `secret_ref`, never the secret value.
+- `DevelopmentSecretStore` stores local development secrets outside SQLite in an ignored file with restrictive permissions.
+- `SystemSecretStore` is an explicit unavailable boundary until a Tauri credential-manager implementation exists.
+- Local tools constrain paths to the canonical project root, reject traversal and symlink escapes, bound file/output sizes, and use allowlisted executables without a shell.
+- Destructive command forms return a denial rather than executing.
 
-## Pendências Críticas (Phase B - Bloqueiam Fase 1 Done)
-
-8. **Crash Recovery Real** - Teste E2E simulando morte do processo + restart
-9. **Phase Status Consistente** - BUILD_STATUS deve refletir estado real por fase
-10. **Configuração Provider** - base URL, API key, auth scheme, model, custom headers, timeout
-
-## Testes
-- Unit: 16/16 (Agent Office tests passing)
-- Integration: 0/0
-- E2E: 0/0
-- Typecheck: PASS
-- Build: PENDING
-- Tauri: PENDING
-- Real provider: BLOCKED (no credentials)
-
-## Integrações
-### Claude
-- status: base implementada (createClaudeAdapter)
-- método: HTTP streaming com Anthropic API compatível
-- observações: aguardando credencial real + correções Phase B
-
-### Kimi
-- status: não iniciado
-- método: pendente Fase 7
-
-### Codex
-- status: não iniciado
-- método: pendente Fase 8
-
-## Bugs conhecidos
-- Writer lock global bloqueia todos os projetos
-- Retry state perdido no restart
-- Cancel não funciona
-- Capabilities declaradas mas não implementadas
-- Health check frágil
-- FTS5 não sincronizado
-- Phase status contraditório
-
-## Decisões técnicas desta sessão
-- Migração completa para repositório standalone
-- IA Connect preservado intacto
-- node:sqlite (Node 24+) como primário, better-sqlite3 como fallback
-- Configuração via env vars, segredos em armazenamento seguro
-- Tauri 2 para desktop, React + Vite para frontend
-- Manter projeto pequeno: sem Supabase, Postgres, Redis, Docker obrigatório
-
-## Próximo passo exato
-1. `npm install` no projeto Agente-Office
-2. `npm test` para validar fundação migrada
-3. Aplicar correções Phase B (1-10)
-4. Atualizar BUILD_STATUS conforme correções
-5. Commit + push para origin/main
-
-## Git
-- branch: main
-- remote: https://github.com/paulodirectresponse-jpg/Agente-Office.git (aguardando criação)
-- commit SHA: local only (initial + migration files)
+## Known blockers and next work
+- Claude tool-use loop is not yet connected to `localTools`; adapter capabilities remain `tools: []` until the protocol loop is implemented and tested.
+- Provider config repository and secret store need integration tests and bootstrapping into adapter creation.
+- Real Claude validation is blocked only by unavailable credentials/reachable provider in this local environment.
+- Kimi, Codex, routing, usage aggregation, Office View, Tauri release, and dogfooding remain unimplemented.

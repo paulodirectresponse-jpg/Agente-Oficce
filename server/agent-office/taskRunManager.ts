@@ -56,9 +56,7 @@ function normalizeRun(row: any): Run {
 }
 
 export class TaskRunManager {
-  private activeRun: { runId: string; taskId: string; controller: AbortController } | null = null;
-  private attemptCount = new Map<string, number>();
-  private agentSwitches = new Map<string, number>();
+  private activeRuns = new Map<string, { runId: string; taskId: string; projectId: string }>();
 
   constructor(private readonly options: TaskRunManagerOptions) {}
 
@@ -107,15 +105,14 @@ export class TaskRunManager {
     const task = this.getTask(taskId);
     if (!task) throw new Error('TASK_NOT_FOUND');
 
-    // Check writer lock per project
-    const lock = this.options.database.prepare('SELECT writer_lock FROM tasks WHERE id = ?').get(taskId) as { writer_lock: string | null } | undefined;
-    if (lock?.writer_lock && lock.writer_lock !== 'released') {
-      // Check if the lock is from a running run
-      const existingRun = this.options.database.prepare('SELECT * FROM runs WHERE id = ? AND status IN ("started", "running")').get(lock.writer_lock);
-      if (existingRun) throw new Error('WRITER_LOCK_ACTIVE');
-      // Lock is stale (run completed/failed), release it
-      this.options.database.prepare('UPDATE tasks SET writer_lock = NULL WHERE id = ?').run(taskId);
-    }
+    const activeProjectRun = this.options.database.prepare(`
+      SELECT runs.id
+      FROM runs
+      INNER JOIN tasks ON tasks.id = runs.task_id
+      WHERE tasks.project_id = ? AND runs.status IN ('started', 'running')
+      LIMIT 1
+    `).get(task.project_id) as { id: string } | undefined;
+    if (activeProjectRun) throw new Error('WRITER_LOCK_ACTIVE');
 
     const adapter = this.options.adapterRegistry.get(agentId);
     if (!adapter) throw new Error('ADAPTER_NOT_FOUND');
@@ -138,17 +135,18 @@ export class TaskRunManager {
       usage_json: null,
       error_json: null,
     };
-    this.options.database.prepare(`INSERT INTO runs (id, task_id, agent_id, provider_session_id, status, started_at, ended_at, input_summary, output_summary, usage_json, error_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      run.id, run.task_id, run.agent_id, run.provider_session_id, run.status, run.started_at, run.ended_at, run.input_summary, run.output_summary, run.usage_json, run.error_json,
-    );
+    const begin = this.options.database.transaction(() => {
+      this.options.database.prepare(`INSERT INTO runs (id, task_id, agent_id, provider_session_id, status, started_at, ended_at, input_summary, output_summary, usage_json, error_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        run.id, run.task_id, run.agent_id, run.provider_session_id, run.status, run.started_at, run.ended_at, run.input_summary, run.output_summary, run.usage_json, run.error_json,
+      );
+      this.options.database.prepare('UPDATE tasks SET status = ?, assigned_agent = ?, attempt_count = attempt_count + 1, writer_lock = ?, updated_at = ? WHERE id = ?').run(
+        'running', agentId, runId, timestamp, taskId,
+      );
+    });
+    begin();
 
-    this.options.database.prepare('UPDATE tasks SET status = ?, assigned_agent = ?, attempt_count = attempt_count + 1, writer_lock = ?, updated_at = ? WHERE id = ?').run(
-      'running', agentId, runId, timestamp, taskId,
-    );
-
-    this.activeRun = { runId, taskId, controller: new AbortController() };
-
-    const events = adapter.startRun({ taskId, contextPack, projectRoot });
+    this.activeRuns.set(runId, { runId, taskId, projectId: task.project_id });
+    const events = adapter.startRun({ taskId: runId, contextPack, projectRoot, metadata: { task_id: taskId } });
     return { runId, events };
   }
 
@@ -160,7 +158,7 @@ export class TaskRunManager {
     const timestamp = now();
     this.options.database.prepare('UPDATE runs SET status = ?, ended_at = ? WHERE id = ?').run('cancelled', timestamp, runId);
     this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ? WHERE id = ?').run('cancelled', timestamp, run.task_id);
-    if (this.activeRun?.runId === runId) this.activeRun = null;
+    if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
   }
 
   async completeRun(runId: string, success: boolean, outputSummary: string, usage?: Record<string, unknown>, error?: Record<string, unknown>): Promise<void> {
@@ -174,11 +172,12 @@ export class TaskRunManager {
         success ? 'completed' : 'failed', timestamp, success ? timestamp : null, run.task_id,
       );
     }
-    if (this.activeRun?.runId === runId) this.activeRun = null;
+    if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
   }
 
   getActiveRun(): { runId: string; taskId: string } | null {
-    return this.activeRun ? { runId: this.activeRun.runId, taskId: this.activeRun.taskId } : null;
+    const first = this.activeRuns.values().next().value as { runId: string; taskId: string } | undefined;
+    return first ? { runId: first.runId, taskId: first.taskId } : null;
   }
 
   canAutoRetry(taskId: string): boolean {

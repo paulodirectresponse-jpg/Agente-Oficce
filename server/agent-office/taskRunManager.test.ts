@@ -102,8 +102,16 @@ describe('TaskRunManager', () => {
     const { recoveredTasks } = await manager2.resumeAfterCrash();
     expect(recoveredTasks.length).toBe(1);
     expect(recoveredTasks[0].status).toBe('blocked');
-    const run = database2.connection.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as { status: string } | undefined;
+    expect(recoveredTasks[0].writer_lock).toBeNull();
+    const run = database2.connection.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as { status: string; error_json: string } | undefined;
     expect(run?.status).toBe('failed');
+    expect(JSON.parse(run?.error_json || '{}')).toMatchObject({ recovered_from_crash: true });
+
+    const resumed = await manager2.startRun(task.id, 'kimi', 'Recovered context', projectDir);
+    for await (const event of resumed.events) expect(event.type).toBeTruthy();
+    await manager2.completeRun(resumed.runId, true, 'Recovered successfully');
+    expect(manager2.getTask(task.id)?.status).toBe('completed');
+    expect(database2.connection.prepare('SELECT status FROM runs WHERE id = ?').get(resumed.runId)).toEqual({ status: 'completed' });
 
     database2.connection.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
