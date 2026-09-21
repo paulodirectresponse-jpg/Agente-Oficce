@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type { AgentEvent } from './adapterFramework.js';
 import { TaskRunManager, type Task } from './taskRunManager.js';
+import { ContextPackBuilder, MemoryRepository } from './memory.js';
 
 export type RunOutcome = 'completed' | 'failed' | 'cancelled' | 'blocked' | 'waiting_approval';
 
@@ -21,10 +22,27 @@ export interface TaskOrchestratorOptions {
 
 const OUTPUT_SUMMARY_LIMIT = 1000;
 
-function defaultContextPack(task: Task, _attempt: number, lastError?: string): string {
-  const parts = [`# Task\n${task.title}`, task.description ? `\n# Description\n${task.description}` : ''];
-  if (lastError) parts.push(`\n# Previous attempt failed\n${lastError}\nDiagnose the failure and try a different approach.`);
-  return parts.filter(Boolean).join('\n');
+function defaultContextPack(database: Database, task: Task, _attempt: number, lastError?: string): string {
+  const builder = new ContextPackBuilder(database);
+  const pack = builder.build({
+    projectId: task.project_id,
+    taskId: task.id,
+    conversationId: task.conversation_id,
+    extraInstructions: lastError ? `Previous attempt failed: ${lastError}. Diagnose the failure and try a different approach.` : undefined,
+  });
+  return pack.text;
+}
+
+export function recordTaskCheckpoint(database: Database, task: Task, outcome: RunOutcome, summary: string): void {
+  if (!summary) return;
+  const memory = new MemoryRepository(database);
+  memory.addChunk({
+    projectId: task.project_id,
+    conversationId: task.conversation_id,
+    taskId: task.id,
+    kind: 'task_summary',
+    text: `[${outcome}] ${task.title}: ${summary}`,
+  });
 }
 
 function persistEvent(database: Database, taskId: string, runId: string, sequence: number, event: AgentEvent): void {
@@ -43,17 +61,19 @@ export class TaskOrchestrator {
       const task = this.options.manager.getTask(taskId);
       if (!task) throw new Error('TASK_NOT_FOUND');
       if (task.status === 'completed' || task.status === 'cancelled') return task.status;
-      const buildContext = this.options.buildContextPack ?? defaultContextPack;
+      const buildContext = this.options.buildContextPack ?? ((t, attempt, error) => defaultContextPack(this.options.database, t, attempt, error));
       const contextPack = buildContext(task, task.attempt_count, lastError);
       const { runId, events } = await this.options.manager.startRun(taskId, agentId, contextPack, this.options.projectRoot);
       const terminal = await this.drive(taskId, runId, events);
       switch (terminal.type) {
         case 'complete':
           await this.options.manager.completeRun(runId, true, terminal.summary, terminal.usage);
+          recordTaskCheckpoint(this.options.database, task, 'completed', terminal.summary);
           return 'completed';
         case 'max_tool_steps':
           await this.options.manager.completeRun(runId, false, terminal.summary, terminal.usage, { reason: 'max_tool_steps' });
           this.options.manager.blockTask(taskId, 'max_tool_steps');
+          recordTaskCheckpoint(this.options.database, task, 'blocked', terminal.summary || 'Stopped at max tool steps.');
           return 'blocked';
         case 'waiting_approval':
           await this.options.manager.setWaitingApproval(taskId, runId, String(terminal.error?.reason ?? 'approval_required'));
@@ -68,6 +88,7 @@ export class TaskOrchestrator {
             continue;
           }
           this.options.manager.blockTask(taskId, 'max_auto_attempts');
+          recordTaskCheckpoint(this.options.database, task, 'blocked', terminal.summary || String(terminal.error?.message ?? 'failed'));
           return 'blocked';
         }
       }
