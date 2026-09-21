@@ -17,16 +17,16 @@
 | 5 | Tasks + Autonomous Loop | DONE | TaskOrchestrator drives runs with event persistence (dedup via event_key), retry with diagnosis up to 3 attempts, blocked on max_tool_steps/max attempts, waiting_approval on denied dangerous ops, cancelled runs idempotent. 7 orchestrator tests pass. |
 | 6 | Context Pack + Shared Memory | DONE | MemoryRepository (project memory, FTS5-ranked chunks, handoffs), ContextPackBuilder with 8 sections inside token budgets, orchestrator checkpoint summaries; raw history preserved. 5 memory tests pass. |
 | 7 | Kimi | DONE | Kimi adapter over the official Moonshot Server API (openai_compatible) sharing the local tool layer; health, streaming, cancel, timeout covered by mocked-fetch tests. Kimi CLI/ACP upgrade path documented; real validation needs a KIMI_API_KEY. |
-| 8 | Codex | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
-| 9 | Router | NOT_STARTED | No deterministic multi-provider routing implementation in this standalone checkpoint. |
-| 10 | Usage | NOT_STARTED | Provider usage persistence and aggregation are not yet implemented. |
+| 8 | Codex | DONE | codexAdapter spawns `codex exec --json` (ChatGPT-auth CLI, no paid API), maps JSONL events, cancel/timeout/prompt guards; deadlock fixed. Registry probes `codex --version` before registering. Real validation needs the CLI on PATH (auth.json exists under ~/.codex). |
+| 9 | Router | DONE | Rule classifier (15 categories + risk heuristics), blueprint routing defaults, failure escalation (kimi→claude→codex), manual override @agent, Codex Protected Mode (25%/10% thresholds, unknown-quota state), team plans. 10 router tests pass. |
+| 10 | Usage | DONE | UsageTracker persists run usage to usage_snapshots, per-agent 30-day aggregation, GET /agent-office/usage; no fabricated values when empty. 3 usage tests pass. |
 | 11 | UI Final | IN_PROGRESS | Minimal health page and Vite entrypoint build; task/project UI is not complete. |
 | 12 | Office View | NOT_STARTED | Not implemented. |
 | 13 | Release Gate | NOT_STARTED | Tauri packaging and release evidence are not complete. |
 | 14 | Dogfooding | NOT_STARTED | No real-user validation recorded. |
 
 ## Verified local checks
-- `npm test`: 13 files, 53 tests passing.
+- `npm test`: 17 files, 83 tests passing.
 - `npm run lint`: TypeScript no-emit check passing.
 - `npm run build`: client and server build passing.
 - Crash recovery test: a fresh SQLite connection marks an orphan run failed, blocks the task, clears the writer lock, and permits a subsequent successful run.
