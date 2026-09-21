@@ -16,7 +16,7 @@
 | 4 | Claude / Gateway | BLOCKED_REAL_VALIDATION | Tool-use loop fully implemented and covered by 19 deterministic mock/SSE tests; capabilities now advertise the 9 local tools. Real provider smoke test is blocked until valid Gateway credentials/base URL are supplied. |
 | 5 | Tasks + Autonomous Loop | DONE | TaskOrchestrator drives runs with event persistence (dedup via event_key), retry with diagnosis up to 3 attempts, blocked on max_tool_steps/max attempts, waiting_approval on denied dangerous ops, cancelled runs idempotent. 7 orchestrator tests pass. |
 | 6 | Context Pack + Shared Memory | DONE | MemoryRepository (project memory, FTS5-ranked chunks, handoffs), ContextPackBuilder with 8 sections inside token budgets, orchestrator checkpoint summaries; raw history preserved. 5 memory tests pass. |
-| 7 | Kimi | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
+| 7 | Kimi | DONE | Kimi adapter over the official Moonshot Server API (openai_compatible) sharing the local tool layer; health, streaming, cancel, timeout covered by mocked-fetch tests. Kimi CLI/ACP upgrade path documented; real validation needs a KIMI_API_KEY. |
 | 8 | Codex | NOT_STARTED | No documented provider adapter implementation in this standalone checkpoint. |
 | 9 | Router | NOT_STARTED | No deterministic multi-provider routing implementation in this standalone checkpoint. |
 | 10 | Usage | NOT_STARTED | Provider usage persistence and aggregation are not yet implemented. |

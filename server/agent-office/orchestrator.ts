@@ -3,6 +3,7 @@ import type { Database } from 'better-sqlite3';
 import type { AgentEvent } from './adapterFramework.js';
 import { TaskRunManager, type Task } from './taskRunManager.js';
 import { ContextPackBuilder, MemoryRepository } from './memory.js';
+import { UsageTracker } from './usageTracker.js';
 
 export type RunOutcome = 'completed' | 'failed' | 'cancelled' | 'blocked' | 'waiting_approval';
 
@@ -68,6 +69,12 @@ export class TaskOrchestrator {
       switch (terminal.type) {
         case 'complete':
           await this.options.manager.completeRun(runId, true, terminal.summary, terminal.usage);
+          if (terminal.usage) {
+            new UsageTracker(this.options.database).recordRunUsage(agentId, agentId, {
+              input_tokens: (terminal.usage as { input_tokens?: number }).input_tokens,
+              output_tokens: (terminal.usage as { output_tokens?: number }).output_tokens,
+            });
+          }
           recordTaskCheckpoint(this.options.database, task, 'completed', terminal.summary);
           return 'completed';
         case 'max_tool_steps':

@@ -4,7 +4,10 @@ import { ProjectRepository } from '../agent-office/projectRepository.js';
 import { ConversationRepository, MessageRepository } from '../agent-office/conversationRepository.js';
 import { TaskRunManager } from '../agent-office/taskRunManager.js';
 import { TaskOrchestrator } from '../agent-office/orchestrator.js';
-import { buildAdapterRegistry, resolveAgentId } from '../agent-office/adapterFactory.js';
+import { buildAdapterRegistry } from '../agent-office/adapterFactory.js';
+import { TaskRouter } from '../agent-office/router.js';
+import { UsageTracker } from '../agent-office/usageTracker.js';
+import { ProviderConfigRepository } from '../agent-office/providerConfig.js';
 import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
 import { getAgentOfficeConfig, ensureAgentOfficeDataDir } from '../agent-office/config.js';
 
@@ -185,12 +188,19 @@ agentOfficeRouter.post('/agent-office/projects/:projectId/tasks/:taskId/run', as
     const secrets = new DevelopmentSecretStore(config.dataDir);
     const registry = await buildAdapterRegistry(database.connection, secrets);
     const manager = new TaskRunManager({ database: database.connection, adapterRegistry: registry, maxAutoAttempts: 3, maxAgentSwitches: 3 });
+    const taskRow = database.connection.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id) as { title: string; description: string; attempt_count: number; status: string };
+    const router = new TaskRouter(registry);
+    const manual = request.body?.agent_id === 'kimi' || request.body?.agent_id === 'claude' || request.body?.agent_id === 'codex' ? request.body.agent_id : null;
+    const decision = router.decide({
+      title: taskRow.title,
+      description: taskRow.description,
+      failures: Math.max(0, taskRow.attempt_count - 1),
+    }, manual);
     const orchestrator = new TaskOrchestrator({ database: database.connection, manager, projectRoot: project.root_path });
-    const agentId = resolveAgentId(request.body?.agent_id, registry);
-    void orchestrator.executeTask(task.id, agentId)
+    void orchestrator.executeTask(task.id, decision.agent)
       .catch(() => undefined)
       .finally(() => database.connection.close());
-    response.status(202).json({ ok: true, data: { task_id: task.id, agent_id: agentId, status: 'running' } });
+    response.status(202).json({ ok: true, data: { task_id: task.id, agent_id: decision.agent, reason: decision.reason, status: 'running' } });
   } catch (error) {
     database.connection.close();
     const code = error instanceof Error ? error.message : 'TASK_RUN_FAILED';
@@ -207,5 +217,65 @@ agentOfficeRouter.get('/agent-office/projects/:projectId/tasks/:taskId/events', 
     response.json({ ok: true, data: events });
   } catch (error) {
     response.status(500).json({ ok: false, error: { code: 'EVENT_LIST_FAILED', message: error instanceof Error ? error.message : 'Unable to list events.' } });
+  }
+});
+
+// Usage dashboard
+agentOfficeRouter.get('/agent-office/usage', (_request, response) => {
+  try {
+    const database = openAgentOfficeDatabase();
+    const summaries = new UsageTracker(database.connection).summarizeAll();
+    database.connection.close();
+    response.json({ ok: true, data: summaries });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: { code: 'USAGE_FAILED', message: error instanceof Error ? error.message : 'Unable to load usage.' } });
+  }
+});
+
+// Provider configuration (secrets stored outside SQLite, only secret_ref persisted)
+agentOfficeRouter.post('/agent-office/providers/:providerId/config', async (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const config = getAgentOfficeConfig();
+    const secrets = new DevelopmentSecretStore(config.dataDir);
+    const body = request.body ?? {};
+    let secretRef: string | null = body.secret_ref ?? null;
+    if (typeof body.api_key === 'string' && body.api_key.trim()) {
+      secretRef = `${request.params.providerId}-api-key`;
+      await secrets.set(secretRef, body.api_key.trim());
+    }
+    const saved = new ProviderConfigRepository(database.connection).save({
+      provider_id: request.params.providerId,
+      base_url: String(body.base_url || ''),
+      model: String(body.model || ''),
+      auth_scheme: body.auth_scheme === 'x-api-key' || body.auth_scheme === 'custom' ? body.auth_scheme : 'bearer',
+      auth_header: body.auth_header ?? null,
+      custom_headers: body.custom_headers && typeof body.custom_headers === 'object' ? body.custom_headers : {},
+      timeout_ms: Number(body.timeout_ms) > 0 ? Number(body.timeout_ms) : 60000,
+      health_endpoint: String(body.health_endpoint || '/v1/models'),
+      health_method: body.health_method === 'POST' ? 'POST' : 'GET',
+      secret_ref: secretRef,
+      max_tool_steps: Number(body.max_tool_steps) > 0 ? Number(body.max_tool_steps) : undefined,
+    });
+    database.connection.close();
+    response.json({ ok: true, data: { ...saved, secret_ref: saved.secret_ref ? '***' : null } });
+  } catch (error) {
+    database.connection.close();
+    response.status(500).json({ ok: false, error: { code: 'PROVIDER_CONFIG_FAILED', message: error instanceof Error ? error.message : 'Unable to save provider config.' } });
+  }
+});
+
+agentOfficeRouter.get('/agent-office/providers/:providerId/config', (request, response) => {
+  try {
+    const database = openAgentOfficeDatabase();
+    const config = new ProviderConfigRepository(database.connection).get(request.params.providerId);
+    database.connection.close();
+    if (!config) {
+      response.status(404).json({ ok: false, error: { code: 'PROVIDER_NOT_FOUND', message: 'Provider not configured.' } });
+      return;
+    }
+    response.json({ ok: true, data: { ...config, secret_ref: config.secret_ref ? '***' : null } });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: { code: 'PROVIDER_GET_FAILED', message: error instanceof Error ? error.message : 'Unable to load provider config.' } });
   }
 });

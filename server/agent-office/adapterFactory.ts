@@ -3,8 +3,33 @@ import type { AgentAdapter, AgentId } from './adapterFramework.js';
 import { MockAdapter } from './adapterFramework.js';
 import { createClaudeAdapter } from './claudeAdapter.js';
 import { createKimiAdapter } from './kimiAdapter.js';
+import { createCodexAdapter } from './codexAdapter.js';
 import { ProviderConfigRepository } from './providerConfig.js';
 import type { SecretStore } from './secretStore.js';
+
+async function probeCodexInstalled(): Promise<boolean> {
+  try {
+    const { spawn } = await import('node:child_process');
+    const child = spawn('codex', ['--version'], { timeout: 3000, windowsHide: true });
+    const code = await new Promise<number | null>(resolve => {
+      const timer = setTimeout(() => {
+        child.kill();
+        resolve(null);
+      }, 3500);
+      child.on('close', exitCode => {
+        clearTimeout(timer);
+        resolve(exitCode);
+      });
+      child.on('error', () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+    });
+    return code === 0;
+  } catch {
+    return false;
+  }
+}
 
 export async function buildAdapterRegistry(database: Database, secrets: SecretStore): Promise<Map<string, AgentAdapter>> {
   const registry = new Map<string, AgentAdapter>();
@@ -39,6 +64,9 @@ export async function buildAdapterRegistry(database: Database, secrets: SecretSt
         maxToolSteps: kimiConfig.max_tool_steps,
       }));
     }
+  }
+  if (await probeCodexInstalled()) {
+    registry.set('codex', createCodexAdapter({}));
   }
   return registry;
 }
