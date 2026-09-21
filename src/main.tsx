@@ -1,4 +1,4 @@
 import { createRoot } from 'react-dom/client';
-import { AgentOfficeHealthPage } from './agent-office/AgentOfficeHealthPage.js';
+import { AgentOfficeApp } from './agent-office/AgentOfficeApp.js';
 
-createRoot(document.getElementById('root')!).render(<AgentOfficeHealthPage />);
+createRoot(document.getElementById('root')!).render(<AgentOfficeApp />);

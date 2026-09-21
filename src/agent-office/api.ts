@@ -1,0 +1,39 @@
+import type { Conversation, Project, ProviderConfig, Task, TaskEvent, UsageEntry } from './types.js';
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  });
+  const payload = (await response.json()) as { ok: boolean; data?: T; error?: { message?: string } };
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error?.message || `Request failed (${response.status})`);
+  }
+  return payload.data as T;
+}
+
+export const api = {
+  listProjects: () => request<Project[]>('/api/agent-office/projects'),
+  createProject: (input: { name: string; root_path: string }) =>
+    request<Project>('/api/agent-office/projects', { method: 'POST', body: JSON.stringify(input) }),
+  getConversation: (projectId: string) =>
+    request<Conversation>(`/api/agent-office/projects/${projectId}/conversation`),
+  listTasks: (projectId: string) => request<Task[]>(`/api/agent-office/projects/${projectId}/tasks`),
+  createTask: (projectId: string, input: { title: string; description?: string; category?: string; risk?: string }) =>
+    request<Task>(`/api/agent-office/projects/${projectId}/tasks`, { method: 'POST', body: JSON.stringify(input) }),
+  runTask: (projectId: string, taskId: string, agentId?: string) =>
+    request<{ task_id: string; agent_id: string; reason: string }>(
+      `/api/agent-office/projects/${projectId}/tasks/${taskId}/run`,
+      { method: 'POST', body: JSON.stringify(agentId ? { agent_id: agentId } : {}) },
+    ),
+  listTaskEvents: (projectId: string, taskId: string) =>
+    request<TaskEvent[]>(`/api/agent-office/projects/${projectId}/tasks/${taskId}/events`),
+  getUsage: () => request<UsageEntry[]>('/api/agent-office/usage'),
+  getProviderConfig: (providerId: string) =>
+    request<ProviderConfig>(`/api/agent-office/providers/${providerId}/config`),
+  saveProviderConfig: (providerId: string, config: ProviderConfig) =>
+    request<ProviderConfig>(`/api/agent-office/providers/${providerId}/config`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+};
