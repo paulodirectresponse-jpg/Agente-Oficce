@@ -120,6 +120,26 @@ function normalizePath(value: string): string {
   return value.startsWith('/') ? value : `/${value}`;
 }
 
+function sanitizeProviderError(value: string, secret: string | null): string {
+  if (!secret) return value;
+  return value.split(secret).join('***');
+}
+
+function validateBaseUrl(baseUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new UniversalProviderError('PROVIDER_BASE_URL_INVALID', 'Provider base URL is invalid.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new UniversalProviderError('PROVIDER_BASE_URL_INVALID', 'Provider base URL must use http or https.');
+  }
+  if (parsed.username || parsed.password) {
+    throw new UniversalProviderError('PROVIDER_BASE_URL_CREDENTIALS_FORBIDDEN', 'Put credentials in the authentication fields, not in the base URL.');
+  }
+}
+
 function joinUrl(baseUrl: string, path: string): string {
   const base = stripTrailingSlash(baseUrl);
   if (!base) throw new UniversalProviderError('PROVIDER_BASE_URL_REQUIRED', 'Provider base URL is required.');
@@ -822,6 +842,7 @@ class HttpTransport {
     url: string;
     init: RequestInit;
   } {
+    validateBaseUrl(provider.base_url);
     const auth = authHeadersAndQuery(provider, secret);
     const url = new URL(joinUrl(provider.base_url, request.path));
     for (const [key, value] of Object.entries(provider.query)) url.searchParams.set(key, value);
@@ -896,7 +917,7 @@ class HttpTransport {
         const retryable = [408, 429, 500, 502, 503, 504].includes(response.status);
         let detail = '';
         try {
-          detail = (await response.text()).slice(0, 1000);
+          detail = sanitizeProviderError((await response.text()).slice(0, 1000), secret);
         } catch {
           detail = '';
         }
@@ -935,7 +956,7 @@ class HttpTransport {
         }
         throw new UniversalProviderError(
           'PROVIDER_NETWORK_ERROR',
-          error instanceof Error ? error.message : 'Provider request failed.',
+          error instanceof Error ? sanitizeProviderError(error.message, secret) : 'Provider request failed.',
         );
       } finally {
         clearTimeout(timeout);
