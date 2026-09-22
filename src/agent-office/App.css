@@ -3158,3 +3158,28 @@ textarea {
     justify-content: flex-start;
   }
 }
+
+
+.cancel-run-button {
+  min-height: 28px;
+  border: 1px solid rgba(255, 109, 130, 0.22);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #ff9eae;
+  background: rgba(117, 35, 49, 0.10);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.cancel-run-button:hover {
+  background: rgba(150, 42, 59, 0.18);
+  border-color: rgba(255, 109, 130, 0.38);
+}
+
+.run-pill.cancelled .status-dot {
+  background: var(--ao-amber);
+}
+
+.run-pill.cancelled {
+  color: #e6b46f;
+}
