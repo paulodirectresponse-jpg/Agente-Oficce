@@ -582,7 +582,62 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_resource_lock_lookup ON resource_locks(project_id,resource_key,status,expires_at);
       CREATE INDEX IF NOT EXISTS idx_execution_artifact_step ON execution_artifacts(step_id,created_at);
     `,
-  },
+  },,
+  {
+    version: 12,
+    sql: `
+      ALTER TABLE execution_plans ADD COLUMN parent_plan_id TEXT REFERENCES execution_plans(id) ON DELETE SET NULL;
+      ALTER TABLE execution_plans ADD COLUMN replan_count INTEGER NOT NULL DEFAULT 0 CHECK(replan_count >= 0);
+      ALTER TABLE execution_steps ADD COLUMN resume_state TEXT NOT NULL DEFAULT 'queued'
+        CHECK(resume_state IN ('queued','ready','waiting_approval','waiting_provider','blocked','running_model','running_tool_read','running_tool_side_effect','blocked_manual_review','completed','cancelled'));
+      ALTER TABLE step_attempts ADD COLUMN idempotency_key TEXT;
+      ALTER TABLE tool_approvals ADD COLUMN execution_plan_id TEXT REFERENCES execution_plans(id) ON DELETE SET NULL;
+      ALTER TABLE tool_approvals ADD COLUMN execution_step_id TEXT REFERENCES execution_steps(id) ON DELETE SET NULL;
+      ALTER TABLE tool_approvals ADD COLUMN expires_at TEXT;
+      ALTER TABLE tool_approvals ADD COLUMN actor TEXT;
+      ALTER TABLE tool_approvals ADD COLUMN tool_invocation_id TEXT;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_step_attempt_idempotency
+        ON step_attempts(step_id,idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+
+      CREATE TABLE IF NOT EXISTS execution_checkpoints (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(plan_id,sequence)
+      );
+      CREATE INDEX IF NOT EXISTS idx_execution_checkpoint_plan ON execution_checkpoints(plan_id,sequence DESC);
+
+      CREATE TABLE IF NOT EXISTS replan_requests (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        fingerprint TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','committed','rejected','blocked')),
+        proposed_plan_id TEXT REFERENCES execution_plans(id) ON DELETE SET NULL,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_replan_plan_status ON replan_requests(plan_id,status,created_at);
+      CREATE INDEX IF NOT EXISTS idx_replan_fingerprint ON replan_requests(plan_id,fingerprint,status);
+
+      CREATE TABLE IF NOT EXISTS execution_commands (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        command_type TEXT NOT NULL CHECK(command_type IN ('orient','enqueue_message','cancel','request_replan')),
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied','rejected')),
+        created_at TEXT NOT NULL,
+        applied_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_execution_commands_plan_status ON execution_commands(plan_id,status,created_at);
+    `,
+  }
 ];
 
 function assertMigrationPlan(): void {
