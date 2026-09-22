@@ -4,11 +4,12 @@ use std::{
     fs::OpenOptions,
     io::Write,
     net::TcpListener,
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
 };
 
-use tauri::{path::BaseDirectory, Manager, State};
+use tauri::{Manager, State};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -51,6 +52,24 @@ fn reserve_loopback_port() -> Result<u16, std::io::Error> {
     Ok(port)
 }
 
+fn bundled_runtime_paths() -> Result<(PathBuf, PathBuf, PathBuf), std::io::Error> {
+    let exe = std::env::current_exe()?;
+    let install_dir = exe
+        .parent()
+        .ok_or_else(|| std::io::Error::other("Agent Office executable has no parent directory"))?;
+    let runtime_dir = install_dir.join("runtime");
+    let runtime_name = if cfg!(target_os = "windows") {
+        "node-runtime.exe"
+    } else {
+        "node-runtime"
+    };
+    Ok((
+        runtime_dir.join(runtime_name),
+        runtime_dir.join("server").join("index.js"),
+        runtime_dir,
+    ))
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![backend_url])
@@ -58,25 +77,11 @@ fn main() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
 
-            let runtime_name = if cfg!(target_os = "windows") {
-                "runtime/node-runtime.exe"
-            } else {
-                "runtime/node-runtime"
-            };
+            let (runtime_path, server_path, runtime_dir) = bundled_runtime_paths()?;
 
-            let runtime_path = app
-                .path()
-                .resolve(runtime_name, BaseDirectory::Resource)?;
-            let server_path = app
-                .path()
-                .resolve("runtime/server/index.js", BaseDirectory::Resource)?;
-            let runtime_dir = app
-                .path()
-                .resolve("runtime", BaseDirectory::Resource)?;
-
-            // In development, the Node/Vite stack is started by beforeDevCommand.
-            // In an installed build, the bundled runtime is present and is launched here.
-            if !runtime_path.exists() || !server_path.exists() {
+            // During `tauri dev`, beforeDevCommand owns the local Node/Vite stack.
+            // Installed builds have a sibling ./runtime directory bundled by the MSI.
+            if !runtime_path.is_file() || !server_path.is_file() {
                 app.manage(BackendRuntime {
                     child: Mutex::new(None),
                     url: "http://127.0.0.1:3001".to_string(),
