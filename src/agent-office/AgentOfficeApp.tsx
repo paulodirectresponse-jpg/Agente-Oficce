@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AgentProfile, Project, UniversalProvider } from './types.js';
 import { WorkspaceView } from './WorkspaceView.js';
 import { UsageView } from './UsageView.js';
 import { SettingsView } from './SettingsView.js';
 import { OfficeView } from './OfficeView.js';
+import { AgentManagerView } from './AgentManagerView.js';
+import { ProviderManagerView } from './ProviderManagerView.js';
 import { api } from './api.js';
 import './App.css';
 
@@ -24,71 +26,6 @@ function providerDotClass(provider: UniversalProvider): string {
   if (!provider.enabled || provider.health_status === 'unavailable') return 'offline';
   if (provider.health_status === 'healthy') return 'online';
   return 'unknown';
-}
-
-function AgentsOverview({ agents, providers }: { agents: AgentProfile[]; providers: UniversalProvider[] }) {
-  const providerById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers]);
-  return (
-    <div className="overview-page">
-      <header className="overview-header">
-        <div>
-          <span className="office-kicker">Equipe</span>
-          <h1>Agentes</h1>
-          <p>Visão atual dos agentes dinâmicos. A edição completa entra na Fase F.</p>
-        </div>
-        <span className="overview-count">{agents.filter((agent) => agent.enabled).length} ativos</span>
-      </header>
-      <div className="overview-grid">
-        {agents.map((agent, index) => {
-          const provider = agent.provider_id ? providerById.get(agent.provider_id) : undefined;
-          return (
-            <article key={agent.id} className="overview-card">
-              <div className={`overview-avatar avatar-${index % 3}`}>{agent.name.slice(0, 1).toUpperCase()}</div>
-              <div className="overview-card-copy">
-                <strong>{agent.name}</strong>
-                <span>{agent.role || 'AI Agent'}</span>
-                <small>{provider?.name ?? 'Sem provider'} · {agent.model_id ? 'modelo vinculado' : 'sem modelo'}</small>
-              </div>
-              <span className={`mini-status ${agent.enabled ? 'online' : 'offline'}`} />
-            </article>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function ProvidersOverview({ providers }: { providers: UniversalProvider[] }) {
-  return (
-    <div className="overview-page">
-      <header className="overview-header">
-        <div>
-          <span className="office-kicker">Conexões</span>
-          <h1>Providers</h1>
-          <p>Estado das conexões do Universal Provider Engine.</p>
-        </div>
-        <span className="overview-count">{providers.length} cadastrados</span>
-      </header>
-      <div className="overview-grid providers">
-        {providers.map((provider) => (
-          <article key={provider.id} className="overview-card provider-card">
-            <span className={`provider-mark ${providerDotClass(provider)}`}>⌁</span>
-            <div className="overview-card-copy">
-              <strong>{provider.name}</strong>
-              <span>{provider.protocol_driver}</span>
-              <small>{provider.base_url || 'Base URL não configurada'}</small>
-            </div>
-            <span className={`provider-health ${providerDotClass(provider)}`}>
-              {provider.health_status}
-            </span>
-          </article>
-        ))}
-        {!providers.length && (
-          <div className="overview-empty">Nenhum provider cadastrado ainda.</div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export function AgentOfficeApp() {
@@ -249,8 +186,8 @@ export function AgentOfficeApp() {
           <OfficeView project={activeProject} focus={view === 'chat' ? 'chat' : 'office'} />
         )}
 
-        {view === 'agents' && <AgentsOverview agents={agents} providers={providers} />}
-        {view === 'providers' && <ProvidersOverview providers={providers} />}
+        {view === 'agents' && <AgentManagerView agents={agents} providers={providers} onChanged={loadShellData} />}
+        {view === 'providers' && <ProviderManagerView providers={providers} onChanged={loadShellData} />}
 
         {view === 'projects' && (
           <div className="legacy-view-wrap">
