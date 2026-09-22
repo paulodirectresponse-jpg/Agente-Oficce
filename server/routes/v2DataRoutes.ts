@@ -568,7 +568,7 @@ v2DataRouter.post('/tools/health/test', async (request, response) => {
     const projectRoot = typeof request.body?.project_root === 'string' && request.body.project_root.trim()
       ? request.body.project_root.trim()
       : process.cwd();
-    response.json({ ok: true, data: await getFullAccessToolHealth(projectRoot) });
+    response.json({ ok: true, data: await getFullAccessToolHealth(projectRoot, true) });
   } catch (error) {
     const code = codeOf(error, 'TOOL_HEALTH_FAILED');
     response.status(500).json({ ok: false, error: { code, message: messageOf(error, code) } });
