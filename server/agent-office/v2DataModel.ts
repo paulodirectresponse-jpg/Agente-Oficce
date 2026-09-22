@@ -380,6 +380,46 @@ export class ProviderRepositoryV2 {
     return this.getModel(modelPk)!;
   }
 
+  upsertDiscoveredModel(providerId: string, input: {
+    model_id: string;
+    display_name: string;
+    capabilities?: Record<string, unknown>;
+    context_window?: number | null;
+    max_output_tokens?: number | null;
+    metadata?: Record<string, unknown>;
+  }): ProviderModel {
+    if (!this.get(providerId)) throw new Error('PROVIDER_NOT_FOUND');
+    const existing = this.database.prepare(
+      'SELECT id FROM provider_models WHERE provider_id = ? AND model_id = ?',
+    ).get(providerId, input.model_id) as { id: string } | undefined;
+
+    if (existing) {
+      const current = this.getModel(existing.id)!;
+      return this.updateModel(existing.id, {
+        display_name: input.display_name || current.display_name,
+        capabilities: { ...current.capabilities, ...(input.capabilities ?? {}) },
+        context_window: input.context_window ?? current.context_window,
+        max_output_tokens: input.max_output_tokens ?? current.max_output_tokens,
+        metadata: { ...current.metadata, ...(input.metadata ?? {}), discovery_source: 'provider' },
+      });
+    }
+
+    const hasAny = Boolean(this.database.prepare(
+      'SELECT 1 AS ok FROM provider_models WHERE provider_id = ? LIMIT 1',
+    ).get(providerId));
+
+    return this.createModel(providerId, {
+      model_id: input.model_id,
+      display_name: input.display_name,
+      capabilities: input.capabilities ?? {},
+      context_window: input.context_window ?? null,
+      max_output_tokens: input.max_output_tokens ?? null,
+      metadata: { ...(input.metadata ?? {}), discovery_source: 'provider' },
+      enabled: true,
+      is_default: !hasAny,
+    });
+  }
+
   getModel(modelPk: string): ProviderModel | null {
     const row = this.database.prepare('SELECT * FROM provider_models WHERE id = ?').get(modelPk);
     return row ? normalizeModel(row) : null;
