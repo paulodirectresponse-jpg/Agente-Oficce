@@ -471,7 +471,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_agent_capability_key ON agent_capabilities(capability_key, enabled, agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_capability_agent ON agent_capabilities(agent_id, enabled);
     `,
-  },,
+  },
   {
     version: 10,
     sql: `
