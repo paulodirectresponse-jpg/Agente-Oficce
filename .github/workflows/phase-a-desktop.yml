@@ -39,16 +39,42 @@ jobs:
       - name: Tauri desktop build
         run: npm run tauri:build
 
-      - name: Smoke packaged runtime lifecycle
+      - name: Smoke installed desktop runtime lifecycle
         shell: pwsh
         run: |
-          $exe = Resolve-Path "src-tauri/target/release/agent-office.exe"
-          $app = Start-Process -FilePath $exe -PassThru
-          Start-Sleep -Seconds 6
+          $msi = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "MSI was not generated" }
+
+          $install = Start-Process msiexec.exe -ArgumentList @(
+            "/i", "`"$($msi.FullName)`"", "/qn", "/norestart"
+          ) -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "MSI installation failed with code $($install.ExitCode)"
+          }
+
+          $roots = @(
+            "$env:ProgramFiles",
+            "$env:LOCALAPPDATA"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          $exe = $null
+          foreach ($root in $roots) {
+            $exe = Get-ChildItem -Path $root -Filter "agent-office.exe" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if ($exe) { break }
+          }
+
+          if (-not $exe) {
+            throw "Installed Agent Office executable was not found"
+          }
+
+          Write-Host "Installed executable: $($exe.FullName)"
+          $app = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 10
 
           $app.Refresh()
           if ($app.HasExited) {
-            throw "Packaged Agent Office exited during startup (code $($app.ExitCode))"
+            throw "Installed Agent Office exited during startup (code $($app.ExitCode))"
           }
 
           $backend = Get-CimInstance Win32_Process |
@@ -59,16 +85,28 @@ jobs:
             Get-CimInstance Win32_Process |
               Where-Object { $_.ParentProcessId -eq $app.Id } |
               Format-Table ProcessId, ParentProcessId, Name, CommandLine
-            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
-            throw "Bundled backend process did not start"
+            throw "Bundled backend process did not start after MSI installation"
+          }
+
+          $db = Get-ChildItem -Path "$env:APPDATA" -Filter "agent-office.sqlite" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $db) {
+            throw "Frontend/backend health handshake did not initialize SQLite"
           }
 
           Write-Host "Desktop process: $($app.Id); backend process: $($backend.ProcessId)"
-          Stop-Process -Id $app.Id -Force
-          Start-Sleep -Seconds 3
+          Write-Host "SQLite: $($db.FullName)"
 
+          $closed = $app.CloseMainWindow()
+          if (-not $closed) {
+            throw "Could not request graceful desktop shutdown"
+          }
+          if (-not $app.WaitForExit(10000)) {
+            throw "Desktop app did not exit after close request"
+          }
+
+          Start-Sleep -Seconds 2
           if (Get-Process -Id $backend.ProcessId -ErrorAction SilentlyContinue) {
-            Stop-Process -Id $backend.ProcessId -Force -ErrorAction SilentlyContinue
             throw "Bundled backend remained orphaned after desktop exit"
           }
 
