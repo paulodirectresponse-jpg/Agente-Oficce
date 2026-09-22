@@ -149,4 +149,3 @@ describe('TaskRunManager', () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 });
-});
