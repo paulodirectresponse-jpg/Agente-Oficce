@@ -34,6 +34,8 @@ export function UsageView() {
                 <th>Input tokens</th>
                 <th>Output tokens</th>
                 <th>Execuções</th>
+                <th>Custo estimado</th>
+                <th>Latência média</th>
               </tr>
             </thead>
             <tbody>
@@ -44,6 +46,8 @@ export function UsageView() {
                   <td>{entry.has_data ? entry.input_tokens.toLocaleString('pt-BR') : 'sem dados'}</td>
                   <td>{entry.has_data ? entry.output_tokens.toLocaleString('pt-BR') : 'sem dados'}</td>
                   <td>{entry.has_data ? entry.runs : 'sem dados'}</td>
+                  <td>{entry.cost_usd == null ? 'não informado' : `US$ ${entry.cost_usd.toFixed(4)}`}</td>
+                  <td>{entry.average_duration_ms == null ? 'sem dados' : `${(entry.average_duration_ms / 1000).toFixed(1)}s`}</td>
                 </tr>
               ))}
             </tbody>
