@@ -3207,3 +3207,71 @@ textarea {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+
+/* UX refinement: Office adapts to the number of active agents. */
+.agent-stations {
+  grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+  align-items: start;
+}
+
+.agent-station::after {
+  display: none;
+}
+
+.agent-stations.agent-count-1 {
+  grid-template-columns: minmax(220px, 320px);
+  justify-content: center;
+}
+
+.agent-stations.agent-count-2 {
+  grid-template-columns: repeat(2, minmax(220px, 320px));
+  justify-content: center;
+}
+
+.agent-stations.agent-count-7,
+.agent-stations.agent-count-8,
+.agent-stations.agent-count-9,
+.agent-stations.agent-count-10 {
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 18px;
+}
+
+.agent-count-7 .agent-floating-card,
+.agent-count-8 .agent-floating-card,
+.agent-count-9 .agent-floating-card,
+.agent-count-10 .agent-floating-card {
+  width: min(185px, 92%);
+}
+
+.agent-count-7 .desk-illustration,
+.agent-count-8 .desk-illustration,
+.agent-count-9 .desk-illustration,
+.agent-count-10 .desk-illustration {
+  transform: scale(0.94);
+  transform-origin: bottom center;
+}
+
+.chat-emphasis .office-scene-card {
+  display: none;
+}
+
+.chat-emphasis .office-chat-card {
+  margin-top: 2px;
+}
+
+.chat-emphasis .chat-transcript {
+  max-height: calc(100vh - 280px);
+  min-height: 420px;
+}
+
+@media (max-width: 1180px) {
+  .agent-stations {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+
+  .agent-stations.agent-count-1,
+  .agent-stations.agent-count-2 {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 280px));
+  }
+}
