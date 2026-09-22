@@ -66,4 +66,4 @@ export interface ProviderConfig {
   [key: string]: unknown;
 }
 
-export type AgentId = 'kimi' | 'claude' | 'codex';
+export type AgentId = string;
