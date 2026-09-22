@@ -656,6 +656,156 @@ export class ChatRunnerService {
     return result;
   }
 
+  private projectRoot(projectId: string): string {
+    const row = this.database.prepare('SELECT root_path FROM projects WHERE id = ?').get(projectId) as { root_path: string } | undefined;
+    if (!row?.root_path) throw new Error('CHAT_PROJECT_ROOT_NOT_FOUND');
+    return row.root_path;
+  }
+
+  private mergeUsage(current: UniversalUsage | undefined, next: UniversalUsage | undefined): UniversalUsage | undefined {
+    if (!current && !next) return undefined;
+    return {
+      input_tokens: (current?.input_tokens ?? 0) + (next?.input_tokens ?? 0),
+      output_tokens: (current?.output_tokens ?? 0) + (next?.output_tokens ?? 0),
+    };
+  }
+
+  private async runToolAwareCompletion(input: {
+    rootRun: ChatRun;
+    childRun: ChatRun;
+    binding: AgentBinding;
+    stage: 'planner' | 'responder' | 'reviewer';
+    messages: UniversalMessage[];
+    signal?: AbortSignal;
+  }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number }> {
+    const { rootRun, childRun, binding, stage, signal } = input;
+    const policy = this.toolPolicies.get(binding.agent.id);
+    const definitions = toolRegistry.definitionsForPolicy(policy);
+    const messages = input.messages.slice();
+    let usage: UniversalUsage | undefined;
+    let requestCount = 0;
+    let toolSteps = 0;
+
+    for (let step = 0; step <= policy.max_tool_steps; step += 1) {
+      if (signal?.aborted) throw new ChatRunCancelledError();
+      const result = await this.engine.complete(binding.provider.id, {
+        model: binding.model.model_id,
+        messages,
+        max_output_tokens: binding.model.max_output_tokens ?? undefined,
+        tools: definitions.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.input_schema,
+        })),
+        metadata: {
+          run_id: childRun.id,
+          agent_id: binding.agent.id,
+          tools_enabled: true,
+          tool_step: step,
+        },
+      }, { signal });
+
+      requestCount += 1;
+      usage = this.mergeUsage(usage, result.usage);
+
+      if (!result.tool_calls?.length) {
+        if (result.text) {
+          this.hub.publish(rootRun.id, 'response.delta', {
+            agent_id: binding.agent.id,
+            child_run_id: childRun.id,
+            stage,
+            text: result.text,
+            tools_enabled: true,
+          });
+        }
+        return {
+          text: result.text,
+          usage,
+          finish_reason: result.finish_reason,
+          request_count: requestCount,
+          tool_steps: toolSteps,
+        };
+      }
+
+      messages.push({
+        role: 'assistant',
+        content: result.text || '',
+        tool_calls: result.tool_calls,
+      });
+
+      for (const call of result.tool_calls) {
+        toolSteps += 1;
+        if (toolSteps > policy.max_tool_steps) throw new Error('CHAT_MAX_TOOL_STEPS');
+
+        const executionState = call.name === 'run_tests' ? 'testing' : 'coding';
+        this.states.upsert({
+          agent_id: binding.agent.id,
+          project_id: rootRun.project_id,
+          run_id: rootRun.id,
+          state: executionState,
+          activity: `Usando ${call.name}`,
+          progress: Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
+        });
+        this.emit(rootRun, 'tool.started', `${binding.agent.name} iniciou ${call.name}`, {
+          agent_id: binding.agent.id,
+          child_run_id: childRun.id,
+          tool_name: call.name,
+          tool_call_id: call.id,
+          step: toolSteps,
+        });
+
+        const toolResult = await toolRegistry.execute(
+          call.name,
+          call.arguments,
+          policy,
+          {
+            database: this.database,
+            project_id: rootRun.project_id,
+            project_root: this.projectRoot(rootRun.project_id),
+            run_id: childRun.id,
+            agent_id: binding.agent.id,
+            signal,
+          },
+        );
+
+        const eventType = toolResult.approval_required ? 'tool.approval_required' : 'tool.completed';
+        this.emit(
+          rootRun,
+          eventType,
+          toolResult.approval_required
+            ? `${call.name} precisa de aprovação`
+            : `${binding.agent.name} concluiu ${call.name}`,
+          {
+            agent_id: binding.agent.id,
+            child_run_id: childRun.id,
+            tool_name: call.name,
+            tool_call_id: call.id,
+            ok: toolResult.ok,
+            error: toolResult.error ?? null,
+            approval_id: toolResult.approval_id ?? null,
+            audit_id: toolResult.audit_id,
+          },
+          toolResult.ok ? 'info' : toolResult.approval_required ? 'warning' : 'error',
+        );
+
+        messages.push({
+          role: 'tool',
+          name: call.name,
+          tool_call_id: call.id,
+          content: JSON.stringify({
+            ok: toolResult.ok,
+            data: toolResult.data ?? null,
+            error: toolResult.error ?? null,
+            approval_required: toolResult.approval_required ?? false,
+            approval_id: toolResult.approval_id ?? null,
+          }),
+        });
+      }
+    }
+
+    throw new Error('CHAT_MAX_TOOL_STEPS');
+  }
+
   private async runAgent(input: {
     rootRun: ChatRun;
     childRun: ChatRun;
@@ -683,13 +833,14 @@ export class ChatRunnerService {
       stage,
     });
 
+    const toolsEnabled = stage === 'responder' && this.toolsAvailable(binding);
     const messages = this.buildMessages(
       rootRun.project_id,
       rootRun.conversation_id,
       binding.agent,
       stage,
       previousText,
-      this.toolsAvailable(binding),
+      toolsEnabled,
     );
 
     const completionInput: UniversalCompletionInput = {
@@ -699,7 +850,7 @@ export class ChatRunnerService {
       metadata: {
         run_id: childRun.id,
         agent_id: binding.agent.id,
-        tools_enabled: false,
+        tools_enabled: toolsEnabled,
       },
     };
 
@@ -729,7 +880,24 @@ export class ChatRunnerService {
     let usage: UniversalUsage | undefined;
     let finishReason: string | undefined;
     let deltaCount = 0;
+    let requestCount = 1;
+    let toolSteps = 0;
 
+    if (toolsEnabled) {
+      const toolResult = await this.runToolAwareCompletion({
+        rootRun,
+        childRun,
+        binding,
+        stage,
+        messages,
+        signal,
+      });
+      text = toolResult.text;
+      usage = toolResult.usage;
+      finishReason = toolResult.finish_reason;
+      requestCount = toolResult.request_count;
+      toolSteps = toolResult.tool_steps;
+    } else {
     const streamingSupported = binding.model.capabilities.streaming !== false;
     if (streamingSupported) {
       try {
@@ -787,6 +955,7 @@ export class ChatRunnerService {
         });
       }
     }
+    }
 
     const assistantMessage = this.messages.create({
       conversation_id: rootRun.conversation_id,
@@ -803,7 +972,8 @@ export class ChatRunnerService {
         model: binding.model.model_id,
         finish_reason: finishReason ?? null,
         final: isFinal,
-        tools_enabled: false,
+        tools_enabled: toolsEnabled,
+        tool_steps: toolSteps,
       },
     });
 
@@ -818,6 +988,8 @@ export class ChatRunnerService {
         message_id: assistantMessage.id,
         finish_reason: finishReason ?? null,
         duration_ms: duration,
+        tools_enabled: toolsEnabled,
+        tool_steps: toolSteps,
       },
     });
 
@@ -825,7 +997,7 @@ export class ChatRunnerService {
       input_tokens: usage?.input_tokens,
       output_tokens: usage?.output_tokens,
       cost_usd: estimateCostUsd(binding.model, usage),
-      request_count: 1,
+      request_count: requestCount,
       duration_ms: duration,
     });
 
@@ -836,6 +1008,8 @@ export class ChatRunnerService {
         model_id: binding.model.id,
         usage,
         duration_ms: duration,
+        request_count: requestCount,
+        tool_steps: toolSteps,
       });
     }
 
@@ -847,6 +1021,8 @@ export class ChatRunnerService {
       finish_reason: finishReason ?? null,
       usage: usage ?? null,
       final: isFinal,
+      tools_enabled: toolsEnabled,
+      tool_steps: toolSteps,
     });
 
     return {
