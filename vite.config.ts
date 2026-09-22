@@ -13,9 +13,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // Rust keeps DLLs locked under target/ on Windows. Vite must never
+      // traverse that directory or the watcher can crash with EBUSY.
+      ignored: ['**/src-tauri/target/**'],
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
     },
