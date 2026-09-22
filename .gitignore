@@ -35,6 +35,7 @@ Thumbs.db
 # Tauri
 src-tauri/target/
 src-tauri/gen/
+src-tauri/resources/runtime/
 
 # Test coverage
 coverage/
