@@ -88,8 +88,8 @@ export class TeamService {
   const active=this.listMembers(teamId).filter(m=>m.enabled&&m.agent_enabled&&m.provider_enabled&&m.model_enabled);
   const defs=new Map(this.caps.list().map(d=>[d.key,d]));const rows=new Map<string,{capability:string;coverage:boolean;specialists:string[];redundancy:number;tool_coverage:string[];confidence:number;evidence_count:number}>();
   for(const member of active)for(const cap of this.caps.listAgent(member.agent_id).filter(c=>c.enabled)){const score=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence);const cur=rows.get(cap.capability_key)??{capability:cap.capability_key,coverage:false,specialists:[],redundancy:0,tool_coverage:[],confidence:0,evidence_count:0};if(score>0){cur.coverage=true;cur.specialists.push(member.agent_id);cur.redundancy=cur.specialists.length;cur.confidence=Math.max(cur.confidence,cap.confidence);cur.evidence_count+=cap.evidence_count}rows.set(cap.capability_key,cur)}
-  const policies=this.db.prepare('SELECT agent_id,enabled,allowed_tools_json FROM agent_tool_policies').all() as any[];const pmap=new Map(policies.map(p=>[p.agent_id,p]));
-  for(const cur of rows.values()){const tools=new Set<string>();for(const aid of cur.specialists){const p=pmap.get(aid);if(p?.enabled)for(const x of parse<string[]>(p.allowed_tools_json,[]))tools.add(x)}cur.tool_coverage=[...tools].sort()}
+  const policies=this.db.prepare('SELECT agent_id,enabled,allowed_tools_json FROM agent_tool_policies').all() as any[];const pmap=new Map(policies.map(p=>[p.agent_id,p])),teamTools=new Set<string>(team.policy?.allowed_tools??[]);
+  for(const cur of rows.values()){const tools=new Set<string>();for(const aid of cur.specialists){const p=pmap.get(aid);if(p?.enabled)for(const x of parse<string[]>(p.allowed_tools_json,[]))if(teamTools.has(x))tools.add(x)}cur.tool_coverage=[...tools].sort()}
   const missing=requirements.filter(r=>!active.some(m=>this.agentCovers(m.agent_id,r,defs))).map(r=>r.key);
   return{team_id:teamId,active_members:active.map(m=>m.agent_id),capabilities:[...rows.values()].sort((a,b)=>a.capability.localeCompare(b.capability)),missing_capabilities:missing};
  }
