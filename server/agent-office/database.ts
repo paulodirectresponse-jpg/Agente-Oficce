@@ -582,7 +582,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_resource_lock_lookup ON resource_locks(project_id,resource_key,status,expires_at);
       CREATE INDEX IF NOT EXISTS idx_execution_artifact_step ON execution_artifacts(step_id,created_at);
     `,
-  },,
+  },
   {
     version: 12,
     sql: `
