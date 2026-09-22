@@ -8,7 +8,7 @@ export interface AgentOfficeDatabase {
   path: string;
 }
 
-const migrations: Array<{ version: number; sql: string }> = [
+export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
   {
     version: 1,
     sql: `
@@ -166,6 +166,182 @@ const migrations: Array<{ version: number; sql: string }> = [
       ALTER TABLE provider_configs ADD COLUMN max_tool_steps INTEGER NOT NULL DEFAULT 20;
     `,
   },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE IF NOT EXISTS providers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        protocol_driver TEXT NOT NULL,
+        base_url TEXT NOT NULL DEFAULT '',
+        auth_driver TEXT NOT NULL DEFAULT 'bearer',
+        secret_ref TEXT,
+        headers_json TEXT NOT NULL DEFAULT '{}',
+        query_json TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+        health_status TEXT NOT NULL DEFAULT 'unknown',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS provider_models (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+        model_id TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        capabilities_json TEXT NOT NULL DEFAULT '{}',
+        context_window INTEGER,
+        max_output_tokens INTEGER,
+        pricing_json TEXT NOT NULL DEFAULT '{}',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+        is_default INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(provider_id, model_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS agents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        role TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        avatar_key TEXT NOT NULL DEFAULT 'default',
+        provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL,
+        model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL,
+        system_prompt TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        idle_after_seconds INTEGER NOT NULL DEFAULT 300,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS chat_runs (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL,
+        model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL,
+        status TEXT NOT NULL,
+        mode TEXT NOT NULL DEFAULT 'single' CHECK(mode IN ('single', 'team', 'review')),
+        parent_run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        error_json TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}'
+      );
+
+      CREATE TABLE IF NOT EXISTS activity_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE CASCADE,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'info' CHECK(severity IN ('debug', 'info', 'warning', 'error')),
+        title TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_states (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        state TEXT NOT NULL DEFAULT 'offline',
+        activity TEXT NOT NULL DEFAULT '',
+        progress REAL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_provider_models_provider ON provider_models(provider_id, enabled, is_default);
+      CREATE INDEX IF NOT EXISTS idx_agents_enabled_order ON agents(enabled, sort_order, name);
+      CREATE INDEX IF NOT EXISTS idx_agents_provider_model ON agents(provider_id, model_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_runs_project_started ON chat_runs(project_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_chat_runs_conversation_started ON chat_runs(conversation_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_events_project_created ON activity_events(project_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_activity_events_run_created ON activity_events(run_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_agent_states_project ON agent_states(project_id, updated_at DESC);
+
+      INSERT OR IGNORE INTO providers (
+        id, name, protocol_driver, base_url, auth_driver, secret_ref,
+        headers_json, query_json, enabled, health_status, created_at, updated_at
+      )
+      SELECT
+        provider_id,
+        provider_id,
+        CASE
+          WHEN provider_id = 'claude' THEN 'anthropic_messages'
+          WHEN provider_id = 'kimi' THEN 'openai_chat'
+          ELSE 'legacy'
+        END,
+        base_url,
+        auth_scheme,
+        secret_ref,
+        custom_headers_json,
+        '{}',
+        1,
+        'unknown',
+        updated_at,
+        updated_at
+      FROM provider_configs;
+
+      INSERT OR IGNORE INTO provider_models (
+        id, provider_id, model_id, display_name, capabilities_json,
+        context_window, max_output_tokens, pricing_json, metadata_json,
+        enabled, is_default, created_at, updated_at
+      )
+      SELECT
+        provider_id || ':legacy-default',
+        provider_id,
+        model,
+        model,
+        '{}',
+        NULL,
+        NULL,
+        '{}',
+        '{"source":"legacy_provider_config"}',
+        1,
+        1,
+        updated_at,
+        updated_at
+      FROM provider_configs
+      WHERE TRIM(model) <> '';
+
+      INSERT OR IGNORE INTO agents (
+        id, name, slug, role, description, avatar_key, provider_id, model_id,
+        system_prompt, enabled, sort_order, idle_after_seconds, metadata_json,
+        created_at, updated_at
+      ) VALUES
+        (
+          'kimi', 'Kimi', 'kimi', 'Executor',
+          'Agente legado preservado durante a migração V2.', 'kimi',
+          CASE WHEN EXISTS(SELECT 1 FROM providers WHERE id = 'kimi') THEN 'kimi' ELSE NULL END,
+          CASE WHEN EXISTS(SELECT 1 FROM provider_models WHERE id = 'kimi:legacy-default') THEN 'kimi:legacy-default' ELSE NULL END,
+          '', 1, 10, 300, '{"source":"legacy_seed"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ),
+        (
+          'claude', 'Claude', 'claude', 'Reviewer',
+          'Agente legado preservado durante a migração V2.', 'claude',
+          CASE WHEN EXISTS(SELECT 1 FROM providers WHERE id = 'claude') THEN 'claude' ELSE NULL END,
+          CASE WHEN EXISTS(SELECT 1 FROM provider_models WHERE id = 'claude:legacy-default') THEN 'claude:legacy-default' ELSE NULL END,
+          '', 1, 20, 300, '{"source":"legacy_seed"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        ),
+        (
+          'codex', 'Codex', 'codex', 'Architect',
+          'Agente legado preservado durante a migração V2.', 'codex',
+          NULL, NULL, '', 1, 30, 300, '{"source":"legacy_seed"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        );
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {
@@ -174,7 +350,7 @@ export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentO
   database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   database.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);');
   const applied = new Set<number>(database.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map((row: any) => Number(row.version)));
-  for (const migration of migrations) {
+  for (const migration of agentOfficeMigrations) {
     if (applied.has(migration.version)) continue;
     database.exec('BEGIN');
     try {

@@ -66,4 +66,97 @@ export interface ProviderConfig {
   [key: string]: unknown;
 }
 
-export type AgentId = 'kimi' | 'claude' | 'codex';
+export type AgentId = string;
+
+
+export interface UniversalProvider {
+  id: string;
+  name: string;
+  protocol_driver: string;
+  base_url: string;
+  auth_driver: string;
+  secret_ref: string | null;
+  headers: Record<string, string>;
+  query: Record<string, string>;
+  enabled: boolean;
+  health_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderModel {
+  id: string;
+  provider_id: string;
+  model_id: string;
+  display_name: string;
+  capabilities: Record<string, unknown>;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  pricing: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  enabled: boolean;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+  description: string;
+  avatar_key: string;
+  provider_id: string | null;
+  model_id: string | null;
+  system_prompt: string;
+  enabled: boolean;
+  sort_order: number;
+  idle_after_seconds: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatRun {
+  id: string;
+  conversation_id: string;
+  project_id: string;
+  agent_id: string | null;
+  provider_id: string | null;
+  model_id: string | null;
+  status: string;
+  mode: 'single' | 'team' | 'review';
+  parent_run_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  error: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ActivityEventV2 {
+  id: string;
+  project_id: string | null;
+  conversation_id: string | null;
+  run_id: string | null;
+  agent_id: string | null;
+  type: string;
+  severity: 'debug' | 'info' | 'warning' | 'error';
+  title: string;
+  detail: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentState {
+  id: string;
+  agent_id: string;
+  project_id: string | null;
+  run_id: string | null;
+  state: string;
+  activity: string;
+  progress: number | null;
+  updated_at: string;
+}

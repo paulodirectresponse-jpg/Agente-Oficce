@@ -1,4 +1,4 @@
-import type { Conversation, Project, ProviderConfig, Task, TaskEvent, UsageEntry } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, Conversation, Project, ProviderConfig, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -73,4 +73,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(config),
     }),
+
+  // V2 dynamic data model
+  listProvidersV2: () => request<UniversalProvider[]>('/api/agent-office/v2/providers'),
+  listProviderModelsV2: (providerId: string) =>
+    request<ProviderModel[]>(`/api/agent-office/v2/providers/${providerId}/models`),
+  listAgentsV2: () => request<AgentProfile[]>('/api/agent-office/v2/agents'),
+  listChatRunsV2: (projectId: string) =>
+    request<ChatRun[]>(`/api/agent-office/v2/projects/${projectId}/chat-runs`),
+  listActivityV2: (projectId: string) =>
+    request<ActivityEventV2[]>(`/api/agent-office/v2/projects/${projectId}/activity`),
+  listAgentStatesV2: (projectId: string) =>
+    request<AgentState[]>(`/api/agent-office/v2/projects/${projectId}/agent-states`),
 };

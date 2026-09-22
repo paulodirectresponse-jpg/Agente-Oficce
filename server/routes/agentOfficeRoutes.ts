@@ -10,8 +10,12 @@ import { UsageTracker } from '../agent-office/usageTracker.js';
 import { ProviderConfigRepository } from '../agent-office/providerConfig.js';
 import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
 import { getAgentOfficeConfig, ensureAgentOfficeDataDir } from '../agent-office/config.js';
+import { v2DataRouter } from './v2DataRoutes.js';
 
 export const agentOfficeRouter = Router();
+
+// V2 data model endpoints live behind a versioned namespace while the V1 API remains intact.
+agentOfficeRouter.use('/agent-office/v2', v2DataRouter);
 
 // Health check - validates local SQLite foundation
 agentOfficeRouter.get('/agent-office/health', (_request, response) => {
@@ -190,7 +194,8 @@ agentOfficeRouter.post('/agent-office/projects/:projectId/tasks/:taskId/run', as
     const manager = new TaskRunManager({ database: database.connection, adapterRegistry: registry, maxAutoAttempts: 3, maxAgentSwitches: 3 });
     const taskRow = database.connection.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id) as { title: string; description: string; attempt_count: number; status: string };
     const router = new TaskRouter(registry);
-    const manual = request.body?.agent_id === 'kimi' || request.body?.agent_id === 'claude' || request.body?.agent_id === 'codex' ? request.body.agent_id : null;
+    const requestedAgent = typeof request.body?.agent_id === 'string' ? request.body.agent_id : null;
+    const manual = requestedAgent && registry.has(requestedAgent) ? requestedAgent : null;
     const decision = router.decide({
       title: taskRow.title,
       description: taskRow.description,
