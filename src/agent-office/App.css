@@ -3275,3 +3275,102 @@ textarea {
     grid-template-columns: repeat(auto-fit, minmax(210px, 280px));
   }
 }
+
+
+/* UX simplification: advanced technical controls stay available but hidden by default. */
+.simple-mode .provider-advanced-field,
+.simple-mode .agent-advanced-field {
+  display: none !important;
+}
+
+.project-root-panel {
+  border-color: rgba(60, 180, 210, 0.16);
+}
+
+.project-root-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.project-root-heading h3 {
+  margin: 0 0 4px;
+}
+
+.project-root-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.project-root-row input {
+  min-width: 0;
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid rgba(91, 132, 171, 0.19);
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: none;
+  color: #dce9f7;
+  background: #08131e;
+}
+
+.project-root-row input:focus {
+  border-color: rgba(56, 168, 255, 0.52);
+  box-shadow: 0 0 0 3px rgba(56, 168, 255, 0.05);
+}
+
+.root-status {
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.root-status.configured {
+  color: #72e3af;
+  background: rgba(77, 231, 157, 0.08);
+  border: 1px solid rgba(77, 231, 157, 0.14);
+}
+
+.root-status.pending {
+  color: #e6b46f;
+  background: rgba(255, 184, 92, 0.07);
+  border: 1px solid rgba(255, 184, 92, 0.14);
+}
+
+.project-path-preview {
+  margin: 9px 0 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(91, 132, 171, 0.11);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.012);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-path-preview span {
+  color: #60788f;
+  font-size: 8px;
+}
+
+.project-path-preview strong {
+  color: #a9bfd2;
+  font-size: 9px;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.placement-preview {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+}
+
+@media (max-width: 760px) {
+  .project-root-row {
+    grid-template-columns: 1fr;
+  }
+}
