@@ -118,15 +118,28 @@ jobs:
             throw "Installed Agent Office exited during startup (code $($app.ExitCode))"
           }
 
-          $backend = Get-CimInstance Win32_Process |
-            Where-Object { $_.Name -ieq "node-runtime.exe" } |
-            Sort-Object CreationDate -Descending |
-            Select-Object -First 1
+          $backend = $null
+          for ($i = 0; $i -lt 60; $i++) {
+            $backend = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.Name -ieq "node-runtime.exe" -and
+                $_.CommandLine -match "Agent Office.*runtime.*server.*index\.js"
+              } |
+              Sort-Object CreationDate -Descending |
+              Select-Object -First 1
+            if ($backend) { break }
+            Start-Sleep -Milliseconds 500
+          }
 
           if (-not $backend) {
             Write-Host "--- Agent Office children ---"
             Get-CimInstance Win32_Process |
               Where-Object { $_.ParentProcessId -eq $app.Id } |
+              Format-Table ProcessId, ParentProcessId, Name, CommandLine
+
+            Write-Host "--- node-runtime candidates ---"
+            Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -ieq "node-runtime.exe" } |
               Format-Table ProcessId, ParentProcessId, Name, CommandLine
 
             Write-Host "--- Installed files ---"
