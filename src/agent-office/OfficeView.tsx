@@ -210,6 +210,38 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [conversation?.messages.length, streamingByAgent]);
 
+  useEffect(() => {
+    if (!project || !currentRun || !sending) return;
+
+    let active = true;
+    const reconcile = async () => {
+      try {
+        const run = await api.getChatRun(currentRun.run_id);
+        if (!active) return;
+        if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+          setSending(false);
+          setRunStatus(run.status);
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
+          setStreamingByAgent({});
+          setLiveStates({});
+          const nextConversation = await api.getConversation(project.id);
+          if (active) setConversation(nextConversation);
+        }
+      } catch {
+        // SSE remains the primary channel; reconciliation is best-effort.
+      }
+    };
+
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 1800);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [project, currentRun?.run_id, sending]);
+
+
   const visibleAgents = useMemo(
     () => agents
       .slice()
@@ -352,8 +384,23 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     }
 
     source.onerror = () => {
-      if (source.readyState === EventSource.CLOSED) return;
-      setError('A conexão ao stream foi interrompida. O histórico continuará sendo sincronizado.');
+      void api.getChatRun(receipt.run_id)
+        .then((run) => {
+          if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+            setRunStatus(run.status);
+            setSending(false);
+            source.close();
+            if (eventSourceRef.current === source) eventSourceRef.current = null;
+            if (project) {
+              void api.getConversation(project.id).then(setConversation).catch(() => undefined);
+            }
+            return;
+          }
+          setError('A conexão ao stream foi interrompida. O Agent Office continuará sincronizando esta execução.');
+        })
+        .catch(() => {
+          setError('A conexão ao stream foi interrompida. O Agent Office continuará tentando recuperar o estado.');
+        });
     };
   }, [loadSnapshot, project]);
 
