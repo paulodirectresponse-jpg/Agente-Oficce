@@ -34,10 +34,13 @@ writeFileSync(
   }, null, 2),
 );
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmCli = process.env.npm_execpath;
+if (!npmCli) {
+  throw new Error('npm_execpath is unavailable; run this script through npm.');
+}
 execFileSync(
-  npm,
-  ['install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts=false'],
+  process.execPath,
+  [npmCli, 'install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts=false'],
   {
     cwd: runtimeDir,
     stdio: 'inherit',
