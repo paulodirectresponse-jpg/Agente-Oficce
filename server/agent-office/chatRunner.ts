@@ -258,7 +258,7 @@ export class ChatRunnerService {
       },
     });
 
-    const mode = selected.length > 1 ? 'team' : 'single';
+    const mode = target === 'team' || selected.length > 1 ? 'team' : 'single';
     if (mode === 'team' && input.model_override) throw new Error('CHAT_MODEL_OVERRIDE_TEAM_UNSUPPORTED');
     const first = selected[0];
     const run = this.runs.create({
@@ -516,7 +516,7 @@ export class ChatRunnerService {
     const complexSignal = message.length > 700
       || /\b(arquitet|planej|refator|migra|integra|deploy|release|sistema completo|end[- ]to[- ]end|do zero)\b/i.test(normalized);
     const reviewSignal = /\b(test|teste|revis|review|qa|valid|bug|corrig|seguran|security|release)\b/i.test(normalized);
-    const planSignal = complexSignal || ['architecture', 'integration', 'devops', 'auth_security'].includes(category);
+    const planSignal = complexSignal || ['architecture', 'devops', 'auth_security'].includes(category);
 
     const selected: AgentBinding[] = [];
     if (planSignal) {
