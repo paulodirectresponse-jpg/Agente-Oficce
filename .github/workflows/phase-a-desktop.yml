@@ -39,6 +39,47 @@ jobs:
       - name: Tauri desktop build
         run: npm run tauri:build
 
+      - name: Smoke bundled backend runtime directly
+        shell: pwsh
+        run: |
+          $runtime = Resolve-Path "src-tauri/resources/runtime/node-runtime.exe"
+          $server = Resolve-Path "src-tauri/resources/runtime/server/index.js"
+          $data = Join-Path $env:RUNNER_TEMP "agent-office-runtime-smoke"
+          New-Item -ItemType Directory -Path $data -Force | Out-Null
+
+          $env:AGENT_OFFICE_DESKTOP = "1"
+          $env:AGENT_OFFICE_DATA_DIR = $data
+          $env:HOST = "127.0.0.1"
+          $env:PORT = "39001"
+
+          $stdout = Join-Path $data "stdout.log"
+          $stderr = Join-Path $data "stderr.log"
+          $backend = Start-Process -FilePath $runtime -ArgumentList @($server) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          $healthy = $false
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+              $response = Invoke-RestMethod "http://127.0.0.1:39001/api/agent-office/health" -TimeoutSec 2
+              if ($response.ok -eq $true) {
+                $healthy = $true
+                break
+              }
+            } catch {}
+          }
+
+          if (-not $healthy) {
+            Write-Host "--- stdout ---"
+            if (Test-Path $stdout) { Get-Content $stdout }
+            Write-Host "--- stderr ---"
+            if (Test-Path $stderr) { Get-Content $stderr }
+            Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue
+            throw "Bundled backend runtime failed direct health smoke"
+          }
+
+          Write-Host "Bundled backend direct health smoke passed (PID $($backend.Id))"
+          Stop-Process -Id $backend.Id -Force
+
       - name: Smoke installed desktop runtime lifecycle
         shell: pwsh
         run: |
@@ -78,13 +119,27 @@ jobs:
           }
 
           $backend = Get-CimInstance Win32_Process |
-            Where-Object { $_.ParentProcessId -eq $app.Id -and $_.Name -eq "node-runtime.exe" } |
+            Where-Object { $_.CommandLine -and $_.CommandLine -match "runtime[\\\\/]server[\\\\/]index\\.js" } |
             Select-Object -First 1
 
           if (-not $backend) {
+            Write-Host "--- Agent Office children ---"
             Get-CimInstance Win32_Process |
               Where-Object { $_.ParentProcessId -eq $app.Id } |
               Format-Table ProcessId, ParentProcessId, Name, CommandLine
+
+            Write-Host "--- Installed files ---"
+            Get-ChildItem "C:\\Program Files\\Agent Office" -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+              Select-Object FullName, Length |
+              Format-Table -AutoSize
+
+            Write-Host "--- backend.log ---"
+            Get-ChildItem "$env:APPDATA" -Filter "backend.log" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+              ForEach-Object {
+                Write-Host $_.FullName
+                Get-Content $_.FullName
+              }
+
             throw "Bundled backend process did not start after MSI installation"
           }
 
