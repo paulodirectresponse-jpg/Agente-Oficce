@@ -52,6 +52,8 @@ export interface UsageEntry {
   input_tokens: number;
   output_tokens: number;
   runs: number;
+  cost_usd: number | null;
+  average_duration_ms: number | null;
   window_days: number;
   has_data: boolean;
 }

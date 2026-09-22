@@ -454,4 +454,94 @@ describe('UniversalProviderEngine', () => {
     expect(stored.last_health_error).not.toContain('do-not-leak');
     fixture.cleanup();
   });
+
+  it('retries transient GET discovery failures with bounded backoff', async () => {
+    const fixture = tempDatabase();
+    const providers = new ProviderRepositoryV2(fixture.database.connection);
+    providers.create({
+      id: 'retry-provider',
+      name: 'Retry Provider',
+      protocol_driver: 'openai_chat',
+      base_url: 'https://retry.example',
+      auth_driver: 'none',
+      protocol_config: { retry_attempts: 2, retry_backoff_ms: 1 },
+    });
+
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      if (calls < 3) return jsonResponse({ error: 'temporary' }, 503);
+      return jsonResponse({ data: [{ id: 'model-ok' }] });
+    };
+
+    const engine = new UniversalProviderEngine(fixture.database.connection, new MemorySecretStore(), fetchImpl);
+    const models = await engine.discoverModels('retry-provider', false);
+    expect(calls).toBe(3);
+    expect(models[0].model_id).toBe('model-ok');
+    fixture.cleanup();
+  });
+
+  it('cancels an in-flight provider request through AbortSignal', async () => {
+    const fixture = tempDatabase();
+    const providers = new ProviderRepositoryV2(fixture.database.connection);
+    providers.create({
+      id: 'cancel-provider',
+      name: 'Cancel Provider',
+      protocol_driver: 'openai_chat',
+      base_url: 'https://cancel.example',
+      auth_driver: 'none',
+      timeout_ms: 60_000,
+    });
+
+    const fetchImpl: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    });
+
+    const engine = new UniversalProviderEngine(fixture.database.connection, new MemorySecretStore(), fetchImpl);
+    const controller = new AbortController();
+    const pending = engine.complete('cancel-provider', {
+      model: 'model',
+      messages: [{ role: 'user', content: 'hello' }],
+    }, { signal: controller.signal });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: 'PROVIDER_CANCELLED' });
+    fixture.cleanup();
+  });
+
+
+  it('rejects non-http provider URLs before sending credentials', async () => {
+    const fixture = tempDatabase();
+    const secrets = new MemorySecretStore();
+    await secrets.set('unsafe-secret', 'never-send-me');
+    const providers = new ProviderRepositoryV2(fixture.database.connection);
+    providers.create({
+      id: 'unsafe-provider',
+      name: 'Unsafe Provider',
+      protocol_driver: 'openai_chat',
+      base_url: 'file:///tmp/provider',
+      auth_driver: 'bearer',
+      secret_ref: 'unsafe-secret',
+    });
+
+    let called = false;
+    const fetchImpl: typeof fetch = async () => {
+      called = true;
+      return jsonResponse({});
+    };
+    const engine = new UniversalProviderEngine(fixture.database.connection, secrets, fetchImpl);
+
+    await expect(engine.complete('unsafe-provider', {
+      model: 'model',
+      messages: [{ role: 'user', content: 'hello' }],
+    })).rejects.toMatchObject({ code: 'PROVIDER_BASE_URL_INVALID' });
+    expect(called).toBe(false);
+    fixture.cleanup();
+  });
+
 });

@@ -17,9 +17,14 @@ describe('provider configuration and secrets', () => {
     new ProviderConfigRepository(database.connection).save({ provider_id: 'claude', base_url: 'https://provider.invalid', model: 'model', auth_scheme: 'x-api-key', auth_header: null, custom_headers: { 'x-client': 'agent-office' }, timeout_ms: 5000, health_endpoint: '/health', health_method: 'GET', secret_ref: 'claude-main' });
     expect(database.connection.prepare("SELECT COUNT(*) AS count FROM provider_configs WHERE custom_headers_json LIKE '%super-secret-key%'").get()).toEqual({ count: 0 });
     expect(await secrets.get('claude-main')).toBe('super-secret-key');
-    expect(fsSync.statSync(path.join(dataDir, 'development-secrets.json')).mode & 0o400).toBe(0o400);
+    const encryptedPath = path.join(dataDir, 'secrets.enc.json');
+    const keyPath = path.join(dataDir, 'secrets.master.key');
+    expect(fsSync.statSync(encryptedPath).mode & 0o400).toBe(0o400);
+    expect(fsSync.statSync(keyPath).mode & 0o400).toBe(0o400);
+    expect(fsSync.readFileSync(encryptedPath, 'utf8')).not.toContain('super-secret-key');
     if (process.platform !== 'win32') {
-      expect((fsSync.statSync(path.join(dataDir, 'development-secrets.json')).mode & 0o077)).toBe(0);
+      expect((fsSync.statSync(encryptedPath).mode & 0o077)).toBe(0);
+      expect((fsSync.statSync(keyPath).mode & 0o077)).toBe(0);
     }
     database.connection.close();
     await fs.rm(dataDir, { recursive: true, force: true });

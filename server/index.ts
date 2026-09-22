@@ -3,6 +3,8 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { agentOfficeRouter } from './routes/agentOfficeRoutes.js';
+import { openAgentOfficeDatabase } from './agent-office/database.js';
+import { recoverInterruptedChatRuns } from './agent-office/runtimeRecovery.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,6 +22,20 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api', agentOfficeRouter);
+
+try {
+  const database = openAgentOfficeDatabase();
+  try {
+    const recovered = recoverInterruptedChatRuns(database.connection);
+    if (recovered.recovered_runs || recovered.recovered_agents) {
+      console.log(`♻️ Recovered ${recovered.recovered_runs} interrupted chat run(s) and ${recovered.recovered_agents} agent state(s)`);
+    }
+  } finally {
+    database.connection.close();
+  }
+} catch (error) {
+  console.error('Agent Office startup recovery failed:', error);
+}
 
 // Browser preview serves dist/client. In the packaged Tauri build the webview
 // serves frontend assets itself and this process exposes only health + API.

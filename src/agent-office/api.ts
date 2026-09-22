@@ -82,6 +82,10 @@ export const api = {
     }),
   getChatRun: (runId: string) =>
     request<ChatRun>(`/api/agent-office/chat/runs/${runId}`),
+  cancelChatRun: (runId: string) =>
+    request<{ run_id: string; cancel_requested: boolean; active: boolean }>(`/api/agent-office/chat/runs/${runId}/cancel`, {
+      method: 'POST',
+    }),
   getChatStreamUrl: async (runId: string, afterSequence = 0) => {
     const base = await resolveApiBase();
     const query = afterSequence > 0 ? `?after=${afterSequence}` : '';

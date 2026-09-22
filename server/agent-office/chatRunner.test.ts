@@ -264,4 +264,36 @@ describe('ChatRunnerService', () => {
       .toThrow('CHAT_MODEL_OVERRIDE_TEAM_UNSUPPORTED');
     f.cleanup();
   });
+
+  it('cancels an active chat run and returns the agent to idle', async () => {
+    const f = fixture();
+    addProviderModelAgent(f, { providerId: 'cancel-provider', agentId: 'cancel-agent', role: 'Backend', sort: 1 });
+
+    const fetchImpl: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    });
+
+    const service = new ChatRunnerService(f.database.connection, f.secrets, f.hub, fetchImpl);
+    const prepared = service.prepare({
+      project_id: 'project-1',
+      message: 'Long request',
+      target: 'cancel-agent',
+    });
+
+    const controller = new AbortController();
+    const execution = service.execute(prepared, controller.signal);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    controller.abort();
+    await execution;
+
+    const run = new ChatRunRepository(f.database.connection).get(prepared.run.id)!;
+    expect(run.status).toBe('cancelled');
+    expect(run.error).toBeNull();
+    expect(f.hub.snapshot(prepared.run.id).some((event) => event.event === 'run.cancelled')).toBe(true);
+    const state = new AgentStateRepository(f.database.connection).listForProject('project-1')[0];
+    expect(state).toMatchObject({ state: 'idle', run_id: null });
+    f.cleanup();
+  });
+
 });

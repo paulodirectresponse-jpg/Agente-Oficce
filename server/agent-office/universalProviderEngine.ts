@@ -1,5 +1,6 @@
 import type { Database } from 'better-sqlite3';
 import type { SecretStore } from './secretStore.js';
+import { providerRequestGate } from './runtimeControls.js';
 import {
   ProviderRepositoryV2,
   type Provider,
@@ -19,6 +20,10 @@ export interface UniversalCompletionInput {
   temperature?: number;
   max_output_tokens?: number;
   metadata?: Record<string, unknown>;
+}
+
+export interface UniversalRequestOptions {
+  signal?: AbortSignal;
 }
 
 export interface UniversalUsage {
@@ -113,6 +118,26 @@ function stripTrailingSlash(value: string): string {
 function normalizePath(value: string): string {
   if (!value) return '/';
   return value.startsWith('/') ? value : `/${value}`;
+}
+
+function sanitizeProviderError(value: string, secret: string | null): string {
+  if (!secret) return value;
+  return value.split(secret).join('***');
+}
+
+function validateBaseUrl(baseUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new UniversalProviderError('PROVIDER_BASE_URL_INVALID', 'Provider base URL is invalid.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new UniversalProviderError('PROVIDER_BASE_URL_INVALID', 'Provider base URL must use http or https.');
+  }
+  if (parsed.username || parsed.password) {
+    throw new UniversalProviderError('PROVIDER_BASE_URL_CREDENTIALS_FORBIDDEN', 'Put credentials in the authentication fields, not in the base URL.');
+  }
 }
 
 function joinUrl(baseUrl: string, path: string): string {
@@ -817,6 +842,7 @@ class HttpTransport {
     url: string;
     init: RequestInit;
   } {
+    validateBaseUrl(provider.base_url);
     const auth = authHeadersAndQuery(provider, secret);
     const url = new URL(joinUrl(provider.base_url, request.path));
     for (const [key, value] of Object.entries(provider.query)) url.searchParams.set(key, value);
@@ -843,42 +869,111 @@ class HttpTransport {
     return { url: url.toString(), init };
   }
 
-  async request(provider: Provider, request: PreparedRequest, secret: string | null): Promise<Response> {
+  private async delay(ms: number, signal?: AbortSignal): Promise<void> {
+    if (ms <= 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(new UniversalProviderError('PROVIDER_CANCELLED', 'Provider request was cancelled.'));
+      };
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  async request(
+    provider: Provider,
+    request: PreparedRequest,
+    secret: string | null,
+    options: UniversalRequestOptions = {},
+  ): Promise<Response> {
     const { url, init } = this.prepare(provider, request, secret);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.max(1, provider.timeout_ms));
-    try {
-      const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
-      if (!response.ok) {
+    const configuredRetries = configNumber(provider, 'retry_attempts');
+    const maxRetries = Math.max(0, Math.min(5, configuredRetries ?? (request.method === 'GET' ? 2 : 0)));
+    const baseBackoffMs = Math.max(100, configNumber(provider, 'retry_backoff_ms') ?? 500);
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      if (options.signal?.aborted) {
+        throw new UniversalProviderError('PROVIDER_CANCELLED', 'Provider request was cancelled.');
+      }
+
+      const controller = new AbortController();
+      let timedOut = false;
+      const onExternalAbort = () => controller.abort();
+      options.signal?.addEventListener('abort', onExternalAbort, { once: true });
+      const timeout = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, Math.max(1, provider.timeout_ms));
+
+      try {
+        const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
+        if (response.ok) return response;
+
+        const retryable = [408, 429, 500, 502, 503, 504].includes(response.status);
         let detail = '';
         try {
-          detail = (await response.text()).slice(0, 1000);
+          detail = sanitizeProviderError((await response.text()).slice(0, 1000), secret);
         } catch {
           detail = '';
         }
+
+        if (!retryable || attempt >= maxRetries) {
+          throw new UniversalProviderError(
+            'PROVIDER_HTTP_ERROR',
+            `Provider request failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`,
+            response.status,
+          );
+        }
+
+        const retryAfter = Number(response.headers.get('retry-after'));
+        const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : Math.min(10_000, baseBackoffMs * (2 ** attempt));
+        await this.delay(delayMs, options.signal);
+      } catch (error) {
+        if (error instanceof UniversalProviderError) throw error;
+        if (options.signal?.aborted) {
+          throw new UniversalProviderError('PROVIDER_CANCELLED', 'Provider request was cancelled.');
+        }
+        if (error instanceof Error && error.name === 'AbortError') {
+          if (timedOut) {
+            if (attempt < maxRetries && request.method === 'GET') {
+              await this.delay(Math.min(10_000, baseBackoffMs * (2 ** attempt)), options.signal);
+              continue;
+            }
+            throw new UniversalProviderError('PROVIDER_TIMEOUT', 'Provider request timed out.');
+          }
+          throw new UniversalProviderError('PROVIDER_CANCELLED', 'Provider request was cancelled.');
+        }
+        if (attempt < maxRetries && request.method === 'GET') {
+          await this.delay(Math.min(10_000, baseBackoffMs * (2 ** attempt)), options.signal);
+          continue;
+        }
         throw new UniversalProviderError(
-          'PROVIDER_HTTP_ERROR',
-          `Provider request failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`,
-          response.status,
+          'PROVIDER_NETWORK_ERROR',
+          error instanceof Error ? sanitizeProviderError(error.message, secret) : 'Provider request failed.',
         );
+      } finally {
+        clearTimeout(timeout);
+        options.signal?.removeEventListener('abort', onExternalAbort);
       }
-      return response;
-    } catch (error) {
-      if (error instanceof UniversalProviderError) throw error;
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new UniversalProviderError('PROVIDER_TIMEOUT', 'Provider request timed out.');
-      }
-      throw new UniversalProviderError(
-        'PROVIDER_NETWORK_ERROR',
-        error instanceof Error ? error.message : 'Provider request failed.',
-      );
-    } finally {
-      clearTimeout(timeout);
     }
+
+    throw new UniversalProviderError('PROVIDER_NETWORK_ERROR', 'Provider request failed.');
   }
 
-  async json(provider: Provider, request: PreparedRequest, secret: string | null): Promise<unknown> {
-    const response = await this.request(provider, request, secret);
+  async json(
+    provider: Provider,
+    request: PreparedRequest,
+    secret: string | null,
+    options: UniversalRequestOptions = {},
+  ): Promise<unknown> {
+    const response = await this.request(provider, request, secret, options);
     try {
       return await response.json();
     } catch {
@@ -915,20 +1010,45 @@ export class UniversalProviderEngine {
     return secret;
   }
 
-  async complete(providerId: string, input: UniversalCompletionInput): Promise<UniversalCompletionResult> {
-    const provider = this.provider(providerId);
-    const driver = createProtocolDriver(provider.protocol_driver);
-    const secret = await this.secret(provider);
-    const payload = await this.transport.json(provider, driver.prepareCompletion(provider, input, false), secret);
-    return driver.parseCompletion(provider, payload);
+  private gateOptions(provider: Provider): { maxConcurrent: number; minIntervalMs: number } {
+    return {
+      maxConcurrent: Math.max(1, Math.min(20, configNumber(provider, 'max_concurrent_requests') ?? 2)),
+      minIntervalMs: Math.max(0, configNumber(provider, 'min_request_interval_ms') ?? 0),
+    };
   }
 
-  async *stream(providerId: string, input: UniversalCompletionInput): AsyncIterable<UniversalStreamEvent> {
+  async complete(
+    providerId: string,
+    input: UniversalCompletionInput,
+    options: UniversalRequestOptions = {},
+  ): Promise<UniversalCompletionResult> {
     const provider = this.provider(providerId);
-    const driver = createProtocolDriver(provider.protocol_driver);
-    const secret = await this.secret(provider);
-    const response = await this.transport.request(provider, driver.prepareCompletion(provider, input, true), secret);
-    yield* driver.stream(provider, response);
+    const release = await providerRequestGate.acquire(provider.id, { ...this.gateOptions(provider), signal: options.signal });
+    try {
+      const driver = createProtocolDriver(provider.protocol_driver);
+      const secret = await this.secret(provider);
+      const payload = await this.transport.json(provider, driver.prepareCompletion(provider, input, false), secret, options);
+      return driver.parseCompletion(provider, payload);
+    } finally {
+      release();
+    }
+  }
+
+  async *stream(
+    providerId: string,
+    input: UniversalCompletionInput,
+    options: UniversalRequestOptions = {},
+  ): AsyncIterable<UniversalStreamEvent> {
+    const provider = this.provider(providerId);
+    const release = await providerRequestGate.acquire(provider.id, { ...this.gateOptions(provider), signal: options.signal });
+    try {
+      const driver = createProtocolDriver(provider.protocol_driver);
+      const secret = await this.secret(provider);
+      const response = await this.transport.request(provider, driver.prepareCompletion(provider, input, true), secret, options);
+      yield* driver.stream(provider, response);
+    } finally {
+      release();
+    }
   }
 
   async discoverModels(providerId: string, persist = true): Promise<DiscoveredModel[]> {
