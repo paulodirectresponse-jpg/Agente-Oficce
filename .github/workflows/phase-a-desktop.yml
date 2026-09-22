@@ -4,12 +4,16 @@ on:
   push:
     branches:
       - feat/experience-v2-universal-api
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   windows-desktop:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+
     steps:
       - uses: actions/checkout@v4
 
@@ -34,3 +38,18 @@ jobs:
 
       - name: Tauri desktop build
         run: npm run tauri:build
+
+      - name: Verify MSI exists
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "MSI was not generated" }
+          if ($msi.Length -le 0) { throw "MSI is empty" }
+          Write-Host "MSI: $($msi.FullName) ($($msi.Length) bytes)"
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-office-phase-a-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
