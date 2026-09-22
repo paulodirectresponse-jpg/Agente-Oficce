@@ -342,6 +342,16 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         );
     `,
   },
+  {
+    version: 5,
+    sql: `
+      ALTER TABLE providers ADD COLUMN auth_config_json TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE providers ADD COLUMN protocol_config_json TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE providers ADD COLUMN timeout_ms INTEGER NOT NULL DEFAULT 60000;
+      ALTER TABLE providers ADD COLUMN last_health_at TEXT;
+      ALTER TABLE providers ADD COLUMN last_health_error TEXT;
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {

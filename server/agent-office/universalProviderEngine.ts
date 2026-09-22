@@ -1,0 +1,1009 @@
+import type { Database } from 'better-sqlite3';
+import type { SecretStore } from './secretStore.js';
+import {
+  ProviderRepositoryV2,
+  type Provider,
+  type ProviderModel,
+} from './v2DataModel.js';
+
+export type UniversalMessageRole = 'system' | 'user' | 'assistant';
+
+export interface UniversalMessage {
+  role: UniversalMessageRole;
+  content: string;
+}
+
+export interface UniversalCompletionInput {
+  model: string;
+  messages: UniversalMessage[];
+  temperature?: number;
+  max_output_tokens?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UniversalUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+}
+
+export interface UniversalCompletionResult {
+  text: string;
+  finish_reason?: string;
+  usage?: UniversalUsage;
+  raw?: unknown;
+}
+
+export type UniversalStreamEvent =
+  | { type: 'text_delta'; text: string }
+  | { type: 'usage'; usage: UniversalUsage }
+  | { type: 'completed'; finish_reason?: string }
+  | { type: 'error'; message: string };
+
+export interface DiscoveredModel {
+  model_id: string;
+  display_name: string;
+  capabilities: Record<string, unknown>;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ProviderHealthResult {
+  provider_id: string;
+  status: 'healthy' | 'unavailable';
+  latency_ms: number;
+  models_discoverable: boolean;
+  error?: string;
+}
+
+interface PreparedRequest {
+  method: 'GET' | 'POST';
+  path: string;
+  headers?: Record<string, string>;
+  query?: Record<string, string>;
+  body?: unknown;
+}
+
+interface ProtocolDriver {
+  readonly id: string;
+  prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest;
+  parseCompletion(provider: Provider, payload: unknown): UniversalCompletionResult;
+  stream(provider: Provider, response: Response): AsyncIterable<UniversalStreamEvent>;
+  prepareModelList(provider: Provider): PreparedRequest | null;
+  parseModels(provider: Provider, payload: unknown): DiscoveredModel[];
+  prepareHealth(provider: Provider): PreparedRequest | null;
+}
+
+type FetchLike = typeof fetch;
+
+export class UniversalProviderError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+function asObject(value: unknown): Record<string, any> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, any>
+    : {};
+}
+
+function getString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function configString(provider: Provider, key: string, fallback: string): string {
+  const value = provider.protocol_config[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function configNumber(provider: Provider, key: string): number | undefined {
+  const value = provider.protocol_config[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function normalizePath(value: string): string {
+  if (!value) return '/';
+  return value.startsWith('/') ? value : `/${value}`;
+}
+
+function joinUrl(baseUrl: string, path: string): string {
+  const base = stripTrailingSlash(baseUrl);
+  if (!base) throw new UniversalProviderError('PROVIDER_BASE_URL_REQUIRED', 'Provider base URL is required.');
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${base}${normalizePath(path)}`;
+}
+
+function getByPath(value: unknown, path: string | undefined): unknown {
+  if (!path) return value;
+  let current: unknown = value;
+  for (const segment of path.split('.').filter(Boolean)) {
+    if (Array.isArray(current) && /^\d+$/.test(segment)) {
+      current = current[Number(segment)];
+      continue;
+    }
+    if (!current || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function extractTextValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (typeof item === 'string') return item;
+      const object = asObject(item);
+      if (typeof object.text === 'string') return object.text;
+      if (typeof object.content === 'string') return object.content;
+      return '';
+    }).join('');
+  }
+  const object = asObject(value);
+  if (typeof object.text === 'string') return object.text;
+  if (typeof object.content === 'string') return object.content;
+  return '';
+}
+
+function systemAndConversation(messages: UniversalMessage[]): {
+  system: string;
+  conversation: UniversalMessage[];
+} {
+  const system = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n');
+  return {
+    system,
+    conversation: messages.filter((message) => message.role !== 'system'),
+  };
+}
+
+function applyTemplate(value: unknown, context: Record<string, unknown>): unknown {
+  if (typeof value === 'string') {
+    const exact = /^\{\{([a-zA-Z0-9_]+)\}\}$/.exec(value);
+    if (exact) return context[exact[1]];
+    return value.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_match, key: string) => {
+      const replacement = context[key];
+      if (replacement == null) return '';
+      if (typeof replacement === 'string' || typeof replacement === 'number' || typeof replacement === 'boolean') {
+        return String(replacement);
+      }
+      return JSON.stringify(replacement);
+    });
+  }
+  if (Array.isArray(value)) return value.map((item) => applyTemplate(item, context));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, applyTemplate(item, context)]),
+    );
+  }
+  return value;
+}
+
+function genericContext(input: UniversalCompletionInput, stream: boolean): Record<string, unknown> {
+  const { system, conversation } = systemAndConversation(input.messages);
+  const lastUser = [...conversation].reverse().find((message) => message.role === 'user')?.content ?? '';
+  return {
+    model: input.model,
+    messages: input.messages,
+    conversation,
+    system,
+    prompt: lastUser,
+    last_user: lastUser,
+    stream,
+    temperature: input.temperature,
+    max_output_tokens: input.max_output_tokens,
+  };
+}
+
+function toUsage(input: unknown, output: unknown): UniversalUsage | undefined {
+  const inputNumber = typeof input === 'number' ? input : undefined;
+  const outputNumber = typeof output === 'number' ? output : undefined;
+  return inputNumber !== undefined || outputNumber !== undefined
+    ? { input_tokens: inputNumber, output_tokens: outputNumber }
+    : undefined;
+}
+
+async function* decodedLines(response: Response): AsyncIterable<string> {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let index = buffer.indexOf('\n');
+      while (index >= 0) {
+        const line = buffer.slice(0, index).replace(/\r$/, '');
+        buffer = buffer.slice(index + 1);
+        yield line;
+        index = buffer.indexOf('\n');
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer) yield buffer.replace(/\r$/, '');
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function* sseJsonPayloads(response: Response): AsyncIterable<Record<string, any>> {
+  let dataLines: string[] = [];
+  for await (const line of decodedLines(response)) {
+    if (!line) {
+      if (dataLines.length) {
+        const raw = dataLines.join('\n');
+        dataLines = [];
+        if (raw === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') yield parsed;
+        } catch {
+          // Ignore malformed provider chunks and wait for the next complete event.
+        }
+      }
+      continue;
+    }
+    if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+  }
+  if (dataLines.length) {
+    const raw = dataLines.join('\n');
+    if (raw !== '[DONE]') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') yield parsed;
+      } catch {
+        // Ignore a trailing malformed chunk.
+      }
+    }
+  }
+}
+
+async function* ndjsonPayloads(response: Response): AsyncIterable<Record<string, any>> {
+  for await (const line of decodedLines(response)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') yield parsed;
+    } catch {
+      // Ignore malformed provider lines.
+    }
+  }
+}
+
+class OpenAiChatDriver implements ProtocolDriver {
+  readonly id: string = 'openai_chat';
+
+  prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
+    const body: Record<string, unknown> = {
+      model: input.model,
+      messages: input.messages,
+      stream,
+    };
+    if (stream) body.stream_options = { include_usage: true };
+    if (input.temperature !== undefined) body.temperature = input.temperature;
+    if (input.max_output_tokens !== undefined) {
+      body[configString(provider, 'max_output_field', 'max_tokens')] = input.max_output_tokens;
+    }
+    return {
+      method: 'POST',
+      path: configString(provider, 'completion_path', '/v1/chat/completions'),
+      body,
+    };
+  }
+
+  parseCompletion(_provider: Provider, payload: unknown): UniversalCompletionResult {
+    const root = asObject(payload);
+    if (root.error) throw new UniversalProviderError('PROVIDER_RESPONSE_ERROR', getString(asObject(root.error).message, 'Provider returned an error.'));
+    const choice = asObject(Array.isArray(root.choices) ? root.choices[0] : undefined);
+    const message = asObject(choice.message);
+    const usageRoot = asObject(root.usage);
+    return {
+      text: extractTextValue(message.content),
+      finish_reason: getString(choice.finish_reason) || undefined,
+      usage: toUsage(usageRoot.prompt_tokens ?? usageRoot.input_tokens, usageRoot.completion_tokens ?? usageRoot.output_tokens),
+      raw: payload,
+    };
+  }
+
+  async *stream(_provider: Provider, response: Response): AsyncIterable<UniversalStreamEvent> {
+    for await (const payload of sseJsonPayloads(response)) {
+      if (payload.error) {
+        yield { type: 'error', message: getString(asObject(payload.error).message, 'Provider stream error.') };
+        continue;
+      }
+      const choice = asObject(Array.isArray(payload.choices) ? payload.choices[0] : undefined);
+      const delta = asObject(choice.delta);
+      const text = extractTextValue(delta.content);
+      if (text) yield { type: 'text_delta', text };
+      const usage = asObject(payload.usage);
+      const normalized = toUsage(usage.prompt_tokens ?? usage.input_tokens, usage.completion_tokens ?? usage.output_tokens);
+      if (normalized) yield { type: 'usage', usage: normalized };
+      if (choice.finish_reason) yield { type: 'completed', finish_reason: String(choice.finish_reason) };
+    }
+  }
+
+  prepareModelList(provider: Provider): PreparedRequest {
+    return { method: 'GET', path: configString(provider, 'models_path', '/v1/models') };
+  }
+
+  parseModels(provider: Provider, payload: unknown): DiscoveredModel[] {
+    if (configString(provider, 'models_format', '') === 'ollama') {
+      const models = asObject(payload).models;
+      return Array.isArray(models)
+        ? models.flatMap((model) => {
+          const object = asObject(model);
+          const name = getString(object.name) || getString(object.model);
+          return name ? [{
+            model_id: name,
+            display_name: name,
+            capabilities: { text: true, streaming: true },
+            context_window: null,
+            max_output_tokens: null,
+            metadata: object,
+          }] : [];
+        })
+        : [];
+    }
+    const data = asObject(payload).data;
+    return Array.isArray(data)
+      ? data.flatMap((model) => {
+        const object = asObject(model);
+        const modelId = getString(object.id);
+        return modelId ? [{
+          model_id: modelId,
+          display_name: getString(object.display_name) || modelId,
+          capabilities: { text: true, streaming: true },
+          context_window: typeof object.context_window === 'number' ? object.context_window : null,
+          max_output_tokens: typeof object.max_output_tokens === 'number' ? object.max_output_tokens : null,
+          metadata: object,
+        }] : [];
+      })
+      : [];
+  }
+
+  prepareHealth(provider: Provider): PreparedRequest {
+    const healthPath = getString(provider.protocol_config.health_path);
+    return healthPath
+      ? { method: getString(provider.protocol_config.health_method, 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET', path: healthPath }
+      : this.prepareModelList(provider);
+  }
+}
+
+class OpenAiResponsesDriver extends OpenAiChatDriver {
+  readonly id = 'openai_responses';
+
+  prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
+    const { system, conversation } = systemAndConversation(input.messages);
+    const body: Record<string, unknown> = {
+      model: input.model,
+      input: conversation.map((message) => ({ role: message.role, content: message.content })),
+      stream,
+    };
+    if (system) body.instructions = system;
+    if (input.temperature !== undefined) body.temperature = input.temperature;
+    if (input.max_output_tokens !== undefined) body.max_output_tokens = input.max_output_tokens;
+    return {
+      method: 'POST',
+      path: configString(provider, 'completion_path', '/v1/responses'),
+      body,
+    };
+  }
+
+  parseCompletion(_provider: Provider, payload: unknown): UniversalCompletionResult {
+    const root = asObject(payload);
+    if (root.error) throw new UniversalProviderError('PROVIDER_RESPONSE_ERROR', getString(asObject(root.error).message, 'Provider returned an error.'));
+    let text = getString(root.output_text);
+    if (!text && Array.isArray(root.output)) {
+      text = root.output.map((item) => {
+        const object = asObject(item);
+        return extractTextValue(object.content);
+      }).join('');
+    }
+    const usage = asObject(root.usage);
+    return {
+      text,
+      finish_reason: getString(root.status) || undefined,
+      usage: toUsage(usage.input_tokens, usage.output_tokens),
+      raw: payload,
+    };
+  }
+
+  async *stream(_provider: Provider, response: Response): AsyncIterable<UniversalStreamEvent> {
+    for await (const payload of sseJsonPayloads(response)) {
+      const eventType = getString(payload.type);
+      if (eventType === 'response.output_text.delta' && typeof payload.delta === 'string') {
+        yield { type: 'text_delta', text: payload.delta };
+      } else if (eventType === 'response.completed') {
+        const responseObject = asObject(payload.response);
+        const usage = asObject(responseObject.usage);
+        const normalized = toUsage(usage.input_tokens, usage.output_tokens);
+        if (normalized) yield { type: 'usage', usage: normalized };
+        yield { type: 'completed', finish_reason: getString(responseObject.status, 'completed') };
+      } else if (eventType === 'response.failed' || eventType === 'error') {
+        const error = asObject(payload.error ?? asObject(payload.response).error);
+        yield { type: 'error', message: getString(error.message, 'Provider stream error.') };
+      }
+    }
+  }
+}
+
+class AnthropicMessagesDriver implements ProtocolDriver {
+  readonly id = 'anthropic_messages';
+
+  prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
+    const { system, conversation } = systemAndConversation(input.messages);
+    const body: Record<string, unknown> = {
+      model: input.model,
+      max_tokens: input.max_output_tokens ?? configNumber(provider, 'default_max_output_tokens') ?? 8192,
+      messages: conversation.map((message) => ({
+        role: message.role === 'assistant' ? 'assistant' : 'user',
+        content: message.content,
+      })),
+      stream,
+    };
+    if (system) body.system = system;
+    if (input.temperature !== undefined) body.temperature = input.temperature;
+    return {
+      method: 'POST',
+      path: configString(provider, 'completion_path', '/v1/messages'),
+      headers: {
+        'anthropic-version': configString(provider, 'anthropic_version', '2023-06-01'),
+      },
+      body,
+    };
+  }
+
+  parseCompletion(_provider: Provider, payload: unknown): UniversalCompletionResult {
+    const root = asObject(payload);
+    if (root.error) throw new UniversalProviderError('PROVIDER_RESPONSE_ERROR', getString(asObject(root.error).message, 'Provider returned an error.'));
+    const content = Array.isArray(root.content) ? root.content : [];
+    const usage = asObject(root.usage);
+    return {
+      text: content.map(extractTextValue).join(''),
+      finish_reason: getString(root.stop_reason) || undefined,
+      usage: toUsage(usage.input_tokens, usage.output_tokens),
+      raw: payload,
+    };
+  }
+
+  async *stream(_provider: Provider, response: Response): AsyncIterable<UniversalStreamEvent> {
+    let inputTokens: number | undefined;
+    let outputTokens: number | undefined;
+    let stopReason: string | undefined;
+    for await (const payload of sseJsonPayloads(response)) {
+      const type = getString(payload.type);
+      if (type === 'message_start') {
+        const usage = asObject(asObject(payload.message).usage);
+        if (typeof usage.input_tokens === 'number') inputTokens = usage.input_tokens;
+        if (typeof usage.output_tokens === 'number') outputTokens = usage.output_tokens;
+      } else if (type === 'content_block_delta') {
+        const delta = asObject(payload.delta);
+        if (delta.type === 'text_delta' && typeof delta.text === 'string') {
+          yield { type: 'text_delta', text: delta.text };
+        }
+      } else if (type === 'message_delta') {
+        const delta = asObject(payload.delta);
+        if (typeof delta.stop_reason === 'string') stopReason = delta.stop_reason;
+        const usage = asObject(payload.usage);
+        if (typeof usage.output_tokens === 'number') outputTokens = usage.output_tokens;
+      } else if (type === 'message_stop') {
+        const usage = toUsage(inputTokens, outputTokens);
+        if (usage) yield { type: 'usage', usage };
+        yield { type: 'completed', finish_reason: stopReason ?? 'end_turn' };
+      } else if (type === 'error') {
+        yield { type: 'error', message: getString(asObject(payload.error).message, 'Provider stream error.') };
+      }
+    }
+  }
+
+  prepareModelList(provider: Provider): PreparedRequest {
+    return {
+      method: 'GET',
+      path: configString(provider, 'models_path', '/v1/models'),
+      headers: {
+        'anthropic-version': configString(provider, 'anthropic_version', '2023-06-01'),
+      },
+    };
+  }
+
+  parseModels(_provider: Provider, payload: unknown): DiscoveredModel[] {
+    const data = asObject(payload).data;
+    return Array.isArray(data)
+      ? data.flatMap((model) => {
+        const object = asObject(model);
+        const modelId = getString(object.id);
+        return modelId ? [{
+          model_id: modelId,
+          display_name: getString(object.display_name) || modelId,
+          capabilities: { text: true, streaming: true },
+          context_window: typeof object.context_window === 'number' ? object.context_window : null,
+          max_output_tokens: typeof object.max_output_tokens === 'number' ? object.max_output_tokens : null,
+          metadata: object,
+        }] : [];
+      })
+      : [];
+  }
+
+  prepareHealth(provider: Provider): PreparedRequest {
+    const healthPath = getString(provider.protocol_config.health_path);
+    return healthPath
+      ? {
+        method: getString(provider.protocol_config.health_method, 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET',
+        path: healthPath,
+        headers: { 'anthropic-version': configString(provider, 'anthropic_version', '2023-06-01') },
+      }
+      : this.prepareModelList(provider);
+  }
+}
+
+class GoogleGeminiDriver implements ProtocolDriver {
+  readonly id = 'google_gemini';
+
+  private apiVersion(provider: Provider): string {
+    return configString(provider, 'api_version', 'v1beta');
+  }
+
+  private cleanModel(model: string): string {
+    return model.replace(/^models\//, '');
+  }
+
+  prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
+    const { system, conversation } = systemAndConversation(input.messages);
+    const model = this.cleanModel(input.model);
+    const version = this.apiVersion(provider);
+    const suffix = stream ? 'streamGenerateContent' : 'generateContent';
+    const body: Record<string, unknown> = {
+      contents: conversation.map((message) => ({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content }],
+      })),
+    };
+    if (system) body.systemInstruction = { parts: [{ text: system }] };
+    const generationConfig: Record<string, unknown> = {};
+    if (input.temperature !== undefined) generationConfig.temperature = input.temperature;
+    if (input.max_output_tokens !== undefined) generationConfig.maxOutputTokens = input.max_output_tokens;
+    if (Object.keys(generationConfig).length) body.generationConfig = generationConfig;
+    return {
+      method: 'POST',
+      path: `/${version}/models/${encodeURIComponent(model)}:${suffix}`,
+      query: stream ? { alt: 'sse' } : undefined,
+      body,
+    };
+  }
+
+  parseCompletion(_provider: Provider, payload: unknown): UniversalCompletionResult {
+    const root = asObject(payload);
+    if (root.error) throw new UniversalProviderError('PROVIDER_RESPONSE_ERROR', getString(asObject(root.error).message, 'Provider returned an error.'));
+    const candidate = asObject(Array.isArray(root.candidates) ? root.candidates[0] : undefined);
+    const content = asObject(candidate.content);
+    const parts = Array.isArray(content.parts) ? content.parts : [];
+    const usage = asObject(root.usageMetadata);
+    return {
+      text: parts.map(extractTextValue).join(''),
+      finish_reason: getString(candidate.finishReason) || undefined,
+      usage: toUsage(usage.promptTokenCount, usage.candidatesTokenCount),
+      raw: payload,
+    };
+  }
+
+  async *stream(_provider: Provider, response: Response): AsyncIterable<UniversalStreamEvent> {
+    for await (const payload of sseJsonPayloads(response)) {
+      if (payload.error) {
+        yield { type: 'error', message: getString(asObject(payload.error).message, 'Provider stream error.') };
+        continue;
+      }
+      const candidate = asObject(Array.isArray(payload.candidates) ? payload.candidates[0] : undefined);
+      const content = asObject(candidate.content);
+      const parts = Array.isArray(content.parts) ? content.parts : [];
+      const text = parts.map(extractTextValue).join('');
+      if (text) yield { type: 'text_delta', text };
+      const usage = asObject(payload.usageMetadata);
+      const normalized = toUsage(usage.promptTokenCount, usage.candidatesTokenCount);
+      if (normalized) yield { type: 'usage', usage: normalized };
+      if (candidate.finishReason) yield { type: 'completed', finish_reason: String(candidate.finishReason) };
+    }
+  }
+
+  prepareModelList(provider: Provider): PreparedRequest {
+    return {
+      method: 'GET',
+      path: configString(provider, 'models_path', `/${this.apiVersion(provider)}/models`),
+    };
+  }
+
+  parseModels(_provider: Provider, payload: unknown): DiscoveredModel[] {
+    const models = asObject(payload).models;
+    return Array.isArray(models)
+      ? models.flatMap((model) => {
+        const object = asObject(model);
+        const name = getString(object.name);
+        const modelId = name.replace(/^models\//, '');
+        if (!modelId) return [];
+        const methods = Array.isArray(object.supportedGenerationMethods) ? object.supportedGenerationMethods : [];
+        return [{
+          model_id: modelId,
+          display_name: getString(object.displayName) || modelId,
+          capabilities: {
+            text: methods.includes('generateContent') || methods.includes('streamGenerateContent'),
+            streaming: methods.includes('streamGenerateContent'),
+          },
+          context_window: typeof object.inputTokenLimit === 'number' ? object.inputTokenLimit : null,
+          max_output_tokens: typeof object.outputTokenLimit === 'number' ? object.outputTokenLimit : null,
+          metadata: object,
+        }];
+      })
+      : [];
+  }
+
+  prepareHealth(provider: Provider): PreparedRequest {
+    const healthPath = getString(provider.protocol_config.health_path);
+    return healthPath
+      ? { method: getString(provider.protocol_config.health_method, 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET', path: healthPath }
+      : this.prepareModelList(provider);
+  }
+}
+
+class GenericDriver implements ProtocolDriver {
+  constructor(
+    readonly id: 'generic_json' | 'generic_sse' | 'generic_ndjson',
+  ) {}
+
+  prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
+    const method = configString(provider, 'method', 'POST').toUpperCase() === 'GET' ? 'GET' : 'POST';
+    const template = provider.protocol_config.request_template;
+    const body = template == null
+      ? genericContext(input, stream)
+      : applyTemplate(template, genericContext(input, stream));
+    return {
+      method,
+      path: configString(provider, stream ? 'stream_path' : 'completion_path', configString(provider, 'completion_path', '/')),
+      body: method === 'POST' ? body : undefined,
+    };
+  }
+
+  parseCompletion(provider: Provider, payload: unknown): UniversalCompletionResult {
+    const errorPath = getString(provider.protocol_config.error_path);
+    const errorValue = errorPath ? getByPath(payload, errorPath) : undefined;
+    if (errorValue) throw new UniversalProviderError('PROVIDER_RESPONSE_ERROR', extractTextValue(errorValue) || 'Provider returned an error.');
+    const textPath = configString(provider, 'response_text_path', 'text');
+    const inputTokensPath = getString(provider.protocol_config.input_tokens_path);
+    const outputTokensPath = getString(provider.protocol_config.output_tokens_path);
+    const finishPath = getString(provider.protocol_config.finish_reason_path);
+    return {
+      text: extractTextValue(getByPath(payload, textPath)),
+      finish_reason: finishPath ? extractTextValue(getByPath(payload, finishPath)) || undefined : undefined,
+      usage: toUsage(
+        inputTokensPath ? getByPath(payload, inputTokensPath) : undefined,
+        outputTokensPath ? getByPath(payload, outputTokensPath) : undefined,
+      ),
+      raw: payload,
+    };
+  }
+
+  async *stream(provider: Provider, response: Response): AsyncIterable<UniversalStreamEvent> {
+    if (this.id === 'generic_json') {
+      const payload = await response.json();
+      const result = this.parseCompletion(provider, payload);
+      if (result.text) yield { type: 'text_delta', text: result.text };
+      if (result.usage) yield { type: 'usage', usage: result.usage };
+      yield { type: 'completed', finish_reason: result.finish_reason };
+      return;
+    }
+
+    const textPath = configString(provider, 'stream_text_path', configString(provider, 'response_text_path', 'text'));
+    const inputTokensPath = getString(provider.protocol_config.input_tokens_path);
+    const outputTokensPath = getString(provider.protocol_config.output_tokens_path);
+    const donePath = getString(provider.protocol_config.stream_done_path);
+    const errorPath = getString(provider.protocol_config.error_path);
+    const payloads = this.id === 'generic_sse' ? sseJsonPayloads(response) : ndjsonPayloads(response);
+
+    for await (const payload of payloads) {
+      const errorValue = errorPath ? getByPath(payload, errorPath) : undefined;
+      if (errorValue) {
+        yield { type: 'error', message: extractTextValue(errorValue) || 'Provider stream error.' };
+        continue;
+      }
+      const text = extractTextValue(getByPath(payload, textPath));
+      if (text) yield { type: 'text_delta', text };
+      const usage = toUsage(
+        inputTokensPath ? getByPath(payload, inputTokensPath) : undefined,
+        outputTokensPath ? getByPath(payload, outputTokensPath) : undefined,
+      );
+      if (usage) yield { type: 'usage', usage };
+      if (donePath && Boolean(getByPath(payload, donePath))) {
+        yield { type: 'completed' };
+      }
+    }
+  }
+
+  prepareModelList(provider: Provider): PreparedRequest | null {
+    const path = getString(provider.protocol_config.models_path);
+    return path ? { method: 'GET', path } : null;
+  }
+
+  parseModels(provider: Provider, payload: unknown): DiscoveredModel[] {
+    const listPath = configString(provider, 'models_list_path', 'data');
+    const idPath = configString(provider, 'model_id_path', 'id');
+    const namePath = configString(provider, 'model_display_name_path', idPath);
+    const list = getByPath(payload, listPath);
+    if (!Array.isArray(list)) return [];
+    return list.flatMap((item) => {
+      const modelId = extractTextValue(getByPath(item, idPath));
+      if (!modelId) return [];
+      return [{
+        model_id: modelId,
+        display_name: extractTextValue(getByPath(item, namePath)) || modelId,
+        capabilities: { text: true, streaming: this.id !== 'generic_json' },
+        context_window: null,
+        max_output_tokens: null,
+        metadata: asObject(item),
+      }];
+    });
+  }
+
+  prepareHealth(provider: Provider): PreparedRequest | null {
+    const path = getString(provider.protocol_config.health_path);
+    if (path) {
+      return {
+        method: getString(provider.protocol_config.health_method, 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET',
+        path,
+      };
+    }
+    return this.prepareModelList(provider);
+  }
+}
+
+function createProtocolDriver(id: string): ProtocolDriver {
+  if (id === 'openai_chat' || id === 'openai_compatible') return new OpenAiChatDriver();
+  if (id === 'openai_responses') return new OpenAiResponsesDriver();
+  if (id === 'anthropic_messages') return new AnthropicMessagesDriver();
+  if (id === 'google_gemini') return new GoogleGeminiDriver();
+  if (id === 'generic_json') return new GenericDriver('generic_json');
+  if (id === 'generic_sse') return new GenericDriver('generic_sse');
+  if (id === 'generic_ndjson') return new GenericDriver('generic_ndjson');
+  throw new UniversalProviderError('PROTOCOL_DRIVER_UNSUPPORTED', `Unsupported protocol driver: ${id}`);
+}
+
+function authHeadersAndQuery(
+  provider: Provider,
+  secret: string | null,
+): { headers: Record<string, string>; query: Record<string, string> } {
+  const headers: Record<string, string> = {};
+  const query: Record<string, string> = {};
+  const driver = provider.auth_driver.trim().toLowerCase();
+
+  if (driver === 'none' || !driver) return { headers, query };
+  if (!secret) throw new UniversalProviderError('PROVIDER_SECRET_MISSING', 'Provider secret is not configured.');
+
+  if (driver === 'bearer') {
+    headers.Authorization = `Bearer ${secret}`;
+  } else if (driver === 'x-api-key' || driver === 'x_api_key') {
+    headers['x-api-key'] = secret;
+  } else if (driver === 'custom_header') {
+    const name = getString(provider.auth_config.header_name);
+    if (!name) throw new UniversalProviderError('AUTH_HEADER_NAME_REQUIRED', 'Custom header authentication requires header_name.');
+    const prefix = getString(provider.auth_config.prefix);
+    headers[name] = prefix ? `${prefix}${secret}` : secret;
+  } else if (driver === 'query_param') {
+    const name = getString(provider.auth_config.param_name, 'key');
+    const prefix = getString(provider.auth_config.prefix);
+    query[name] = prefix ? `${prefix}${secret}` : secret;
+  } else if (driver === 'basic') {
+    headers.Authorization = `Basic ${Buffer.from(secret).toString('base64')}`;
+  } else {
+    throw new UniversalProviderError('AUTH_DRIVER_UNSUPPORTED', `Unsupported auth driver: ${provider.auth_driver}`);
+  }
+
+  return { headers, query };
+}
+
+class HttpTransport {
+  constructor(private readonly fetchImpl: FetchLike) {}
+
+  private prepare(provider: Provider, request: PreparedRequest, secret: string | null): {
+    url: string;
+    init: RequestInit;
+  } {
+    const auth = authHeadersAndQuery(provider, secret);
+    const url = new URL(joinUrl(provider.base_url, request.path));
+    for (const [key, value] of Object.entries(provider.query)) url.searchParams.set(key, value);
+    for (const [key, value] of Object.entries(request.query ?? {})) url.searchParams.set(key, value);
+    for (const [key, value] of Object.entries(auth.query)) url.searchParams.set(key, value);
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...provider.headers,
+      ...(request.headers ?? {}),
+      ...auth.headers,
+    };
+
+    const init: RequestInit = {
+      method: request.method,
+      headers,
+    };
+
+    if (request.body !== undefined) {
+      headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+      init.body = JSON.stringify(request.body);
+    }
+
+    return { url: url.toString(), init };
+  }
+
+  async request(provider: Provider, request: PreparedRequest, secret: string | null): Promise<Response> {
+    const { url, init } = this.prepare(provider, request, secret);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Math.max(1, provider.timeout_ms));
+    try {
+      const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
+      if (!response.ok) {
+        let detail = '';
+        try {
+          detail = (await response.text()).slice(0, 1000);
+        } catch {
+          detail = '';
+        }
+        throw new UniversalProviderError(
+          'PROVIDER_HTTP_ERROR',
+          `Provider request failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`,
+          response.status,
+        );
+      }
+      return response;
+    } catch (error) {
+      if (error instanceof UniversalProviderError) throw error;
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new UniversalProviderError('PROVIDER_TIMEOUT', 'Provider request timed out.');
+      }
+      throw new UniversalProviderError(
+        'PROVIDER_NETWORK_ERROR',
+        error instanceof Error ? error.message : 'Provider request failed.',
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async json(provider: Provider, request: PreparedRequest, secret: string | null): Promise<unknown> {
+    const response = await this.request(provider, request, secret);
+    try {
+      return await response.json();
+    } catch {
+      throw new UniversalProviderError('PROVIDER_JSON_INVALID', 'Provider returned invalid JSON.');
+    }
+  }
+}
+
+export class UniversalProviderEngine {
+  private readonly providers: ProviderRepositoryV2;
+  private readonly transport: HttpTransport;
+
+  constructor(
+    private readonly database: Database,
+    private readonly secrets: SecretStore,
+    fetchImpl: FetchLike = fetch,
+  ) {
+    this.providers = new ProviderRepositoryV2(database);
+    this.transport = new HttpTransport(fetchImpl);
+  }
+
+  private provider(providerId: string): Provider {
+    const provider = this.providers.get(providerId);
+    if (!provider) throw new UniversalProviderError('PROVIDER_NOT_FOUND', 'Provider not found.');
+    if (!provider.enabled) throw new UniversalProviderError('PROVIDER_DISABLED', 'Provider is disabled.');
+    return provider;
+  }
+
+  private async secret(provider: Provider): Promise<string | null> {
+    if (provider.auth_driver === 'none' || !provider.auth_driver) return null;
+    if (!provider.secret_ref) throw new UniversalProviderError('PROVIDER_SECRET_MISSING', 'Provider secret is not configured.');
+    const secret = await this.secrets.get(provider.secret_ref);
+    if (!secret) throw new UniversalProviderError('PROVIDER_SECRET_MISSING', 'Provider secret is not available.');
+    return secret;
+  }
+
+  async complete(providerId: string, input: UniversalCompletionInput): Promise<UniversalCompletionResult> {
+    const provider = this.provider(providerId);
+    const driver = createProtocolDriver(provider.protocol_driver);
+    const secret = await this.secret(provider);
+    const payload = await this.transport.json(provider, driver.prepareCompletion(provider, input, false), secret);
+    return driver.parseCompletion(provider, payload);
+  }
+
+  async *stream(providerId: string, input: UniversalCompletionInput): AsyncIterable<UniversalStreamEvent> {
+    const provider = this.provider(providerId);
+    const driver = createProtocolDriver(provider.protocol_driver);
+    const secret = await this.secret(provider);
+    const response = await this.transport.request(provider, driver.prepareCompletion(provider, input, true), secret);
+    yield* driver.stream(provider, response);
+  }
+
+  async discoverModels(providerId: string, persist = true): Promise<DiscoveredModel[]> {
+    const provider = this.provider(providerId);
+    const driver = createProtocolDriver(provider.protocol_driver);
+    const request = driver.prepareModelList(provider);
+    if (!request) throw new UniversalProviderError('MODEL_DISCOVERY_UNSUPPORTED', 'This provider has no model-list endpoint configured.');
+    const secret = await this.secret(provider);
+    const payload = await this.transport.json(provider, request, secret);
+    const models = driver.parseModels(provider, payload);
+    if (persist) {
+      for (const model of models) {
+        this.providers.upsertDiscoveredModel(provider.id, model);
+      }
+    }
+    return models;
+  }
+
+  async testConnection(providerId: string): Promise<ProviderHealthResult> {
+    const provider = this.provider(providerId);
+    const driver = createProtocolDriver(provider.protocol_driver);
+    const request = driver.prepareHealth(provider);
+    if (!request) {
+      throw new UniversalProviderError(
+        'PROVIDER_HEALTH_UNSUPPORTED',
+        'Configure health_path or models_path to test this provider.',
+      );
+    }
+
+    const started = Date.now();
+    try {
+      const secret = await this.secret(provider);
+      await this.transport.request(provider, request, secret);
+      const latency = Date.now() - started;
+      this.providers.update(provider.id, {
+        health_status: 'healthy',
+        last_health_at: new Date().toISOString(),
+        last_health_error: null,
+      });
+      return {
+        provider_id: provider.id,
+        status: 'healthy',
+        latency_ms: latency,
+        models_discoverable: driver.prepareModelList(provider) !== null,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Provider connection failed.';
+      this.providers.update(provider.id, {
+        health_status: 'unavailable',
+        last_health_at: new Date().toISOString(),
+        last_health_error: message.slice(0, 1000),
+      });
+      return {
+        provider_id: provider.id,
+        status: 'unavailable',
+        latency_ms: Date.now() - started,
+        models_discoverable: driver.prepareModelList(provider) !== null,
+        error: message,
+      };
+    }
+  }
+}
+
+export function supportedProtocolDrivers(): string[] {
+  return [
+    'openai_chat',
+    'openai_responses',
+    'anthropic_messages',
+    'google_gemini',
+    'generic_json',
+    'generic_sse',
+    'generic_ndjson',
+  ];
+}
+
+export function supportedAuthDrivers(): string[] {
+  return ['bearer', 'x-api-key', 'custom_header', 'query_param', 'basic', 'none'];
+}

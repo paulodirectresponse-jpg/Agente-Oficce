@@ -78,8 +78,13 @@ export interface UniversalProvider {
   secret_ref: string | null;
   headers: Record<string, string>;
   query: Record<string, string>;
+  auth_config: Record<string, unknown>;
+  protocol_config: Record<string, unknown>;
+  timeout_ms: number;
   enabled: boolean;
   health_status: string;
+  last_health_at: string | null;
+  last_health_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -159,4 +164,40 @@ export interface AgentState {
   activity: string;
   progress: number | null;
   updated_at: string;
+}
+
+
+export interface ProviderPreset {
+  id: string;
+  name: string;
+  protocol_driver: string;
+  base_url: string;
+  auth_driver: string;
+  auth_config?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  query?: Record<string, string>;
+  protocol_config?: Record<string, unknown>;
+}
+
+export interface ProviderEngineCapabilities {
+  protocol_drivers: string[];
+  auth_drivers: string[];
+  presets: ProviderPreset[];
+}
+
+export interface ProviderHealthResult {
+  provider_id: string;
+  status: 'healthy' | 'unavailable';
+  latency_ms: number;
+  models_discoverable: boolean;
+  error?: string;
+}
+
+export interface DiscoveredModel {
+  model_id: string;
+  display_name: string;
+  capabilities: Record<string, unknown>;
+  context_window: number | null;
+  max_output_tokens: number | null;
+  metadata: Record<string, unknown>;
 }
