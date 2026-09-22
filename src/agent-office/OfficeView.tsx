@@ -149,7 +149,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [target, setTarget] = useState('auto');
   const [sending, setSending] = useState(false);
   const [currentRun, setCurrentRun] = useState<ChatRunReceipt | null>(null);
-  const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
+  const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'completed' | 'failed' | 'cancelled'>('idle');
   const [streamingByAgent, setStreamingByAgent] = useState<Record<string, string>>({});
   const [liveStates, setLiveStates] = useState<Record<string, { state: string; activity: string; updated_at: string }>>({});
   const [liveEvents, setLiveEvents] = useState<ChatStreamEnvelope[]>([]);
@@ -330,7 +330,13 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       }
 
       if (envelope.event === 'run.completed' || envelope.event === 'run.failed' || envelope.event === 'run.cancelled') {
-        setRunStatus(envelope.event === 'run.completed' ? 'completed' : 'failed');
+        setRunStatus(
+          envelope.event === 'run.completed'
+            ? 'completed'
+            : envelope.event === 'run.cancelled'
+              ? 'cancelled'
+              : 'failed',
+        );
         setSending(false);
         source.close();
         if (eventSourceRef.current === source) eventSourceRef.current = null;
@@ -351,6 +357,16 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       setError('A conexão ao stream foi interrompida. O histórico continuará sendo sincronizado.');
     };
   }, [loadSnapshot, project]);
+
+  const cancelCurrentRun = async () => {
+    if (!currentRun || runStatus !== 'running') return;
+    setError(null);
+    try {
+      await api.cancelChatRun(currentRun.run_id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao cancelar a execução.');
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -419,8 +435,19 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           <div className="office-topbar-actions">
             <span className={`run-pill ${runStatus}`}>
               <span className="status-dot" />
-              {runStatus === 'running' ? 'Em execução' : runStatus === 'completed' ? 'Concluído' : runStatus === 'failed' ? 'Falhou' : 'Pronto'}
+              {runStatus === 'running'
+                ? 'Em execução'
+                : runStatus === 'completed'
+                  ? 'Concluído'
+                  : runStatus === 'cancelled'
+                    ? 'Cancelado'
+                    : runStatus === 'failed'
+                      ? 'Falhou'
+                      : 'Pronto'}
             </span>
+            {runStatus === 'running' && currentRun && (
+              <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>Cancelar</button>
+            )}
             <span className="api-only-pill">API only</span>
             <span className="agent-count-pill">{activeCount}/{visibleAgents.length || 0} ativos</span>
           </div>
@@ -681,7 +708,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         <div className="activity-status-card">
           <div className="status-card-row">
             <span>Execução</span>
-            <strong>{runStatus === 'running' ? 'Em andamento' : runStatus === 'completed' ? 'Concluída' : runStatus === 'failed' ? 'Falhou' : 'Aguardando'}</strong>
+            <strong>{runStatus === 'running' ? 'Em andamento' : runStatus === 'completed' ? 'Concluída' : runStatus === 'cancelled' ? 'Cancelada' : runStatus === 'failed' ? 'Falhou' : 'Aguardando'}</strong>
           </div>
           <div className="status-card-row">
             <span>Modo</span>
