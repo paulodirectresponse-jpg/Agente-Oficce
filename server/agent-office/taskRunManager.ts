@@ -105,15 +105,6 @@ export class TaskRunManager {
     const task = this.getTask(taskId);
     if (!task) throw new Error('TASK_NOT_FOUND');
 
-    const activeProjectRun = this.options.database.prepare(`
-      SELECT runs.id
-      FROM runs
-      INNER JOIN tasks ON tasks.id = runs.task_id
-      WHERE tasks.project_id = ? AND runs.status IN ('started', 'running')
-      LIMIT 1
-    `).get(task.project_id) as { id: string } | undefined;
-    if (activeProjectRun) throw new Error('WRITER_LOCK_ACTIVE');
-
     const adapter = this.options.adapterRegistry.get(agentId);
     if (!adapter) throw new Error('ADAPTER_NOT_FOUND');
 
@@ -136,6 +127,14 @@ export class TaskRunManager {
       error_json: null,
     };
     const begin = this.options.database.transaction(() => {
+      try {
+        this.options.database.prepare(
+          'INSERT INTO project_run_locks (project_id, run_id, acquired_at) VALUES (?, ?, ?)',
+        ).run(task.project_id, runId, timestamp);
+      } catch (error: any) {
+        if (String(error?.code ?? '').includes('CONSTRAINT')) throw new Error('WRITER_LOCK_ACTIVE');
+        throw error;
+      }
       this.options.database.prepare(`INSERT INTO runs (id, task_id, agent_id, provider_session_id, status, started_at, ended_at, input_summary, output_summary, usage_json, error_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         run.id, run.task_id, run.agent_id, run.provider_session_id, run.status, run.started_at, run.ended_at, run.input_summary, run.output_summary, run.usage_json, run.error_json,
       );
@@ -158,6 +157,7 @@ export class TaskRunManager {
     const timestamp = now();
     this.options.database.prepare('UPDATE runs SET status = ?, ended_at = ? WHERE id = ?').run('cancelled', timestamp, runId);
     this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ? WHERE id = ?').run('cancelled', timestamp, run.task_id);
+    this.options.database.prepare('DELETE FROM project_run_locks WHERE run_id = ?').run(runId);
     if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
   }
 
@@ -171,6 +171,7 @@ export class TaskRunManager {
       this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ?, completed_at = ? WHERE id = ?').run(
         success ? 'completed' : 'failed', timestamp, success ? timestamp : null, run.task_id,
       );
+      this.options.database.prepare('DELETE FROM project_run_locks WHERE run_id = ?').run(runId);
     }
     if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
   }
@@ -193,6 +194,7 @@ export class TaskRunManager {
         'cancelled', timestamp, JSON.stringify({ reason: 'approval_required', detail: reason }), runId,
       );
       this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ? WHERE id = ?').run('waiting_approval', timestamp, taskId);
+      this.options.database.prepare('DELETE FROM project_run_locks WHERE run_id = ?').run(runId);
       if (this.activeRuns.has(runId)) this.activeRuns.delete(runId);
     }
   }
@@ -224,6 +226,7 @@ export class TaskRunManager {
       if (task) {
         this.options.database.prepare('UPDATE runs SET status = ?, ended_at = ?, error_json = ? WHERE id = ?').run('failed', now(), JSON.stringify({ recovered_from_crash: true }), run.id);
         this.options.database.prepare('UPDATE tasks SET status = ?, writer_lock = NULL, updated_at = ? WHERE id = ?').run('blocked', now(), task.id);
+        this.options.database.prepare('DELETE FROM project_run_locks WHERE run_id = ?').run(run.id);
         const updatedTask = this.getTask(task.id);
         if (updatedTask) recoveredTasks.push(updatedTask);
       }

@@ -427,9 +427,35 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         WHERE audit_id IS NOT NULL;
     `,
   },
+  {
+    version: 8,
+    sql: `
+      CREATE TABLE IF NOT EXISTS project_run_locks (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL UNIQUE,
+        acquired_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_run_locks_run ON project_run_locks(run_id);
+    `,
+  },
 ];
 
+function assertMigrationPlan(): void {
+  const versions = agentOfficeMigrations.map(migration => migration.version);
+  for (let index = 0; index < versions.length; index += 1) {
+    if (versions[index] !== index + 1) throw new Error('DATABASE_MIGRATION_PLAN_INVALID');
+  }
+}
+
+function assertDatabaseIntegrity(database: Database.Database): void {
+  const quick = database.prepare('PRAGMA quick_check').get() as { quick_check?: string } | undefined;
+  if (quick?.quick_check !== 'ok') throw new Error('DATABASE_INTEGRITY_CHECK_FAILED');
+  const foreignKeyViolations = database.prepare('PRAGMA foreign_key_check').all();
+  if (foreignKeyViolations.length) throw new Error('DATABASE_FOREIGN_KEY_CHECK_FAILED');
+}
+
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {
+  assertMigrationPlan();
   ensureAgentOfficeDataDir(config);
   const database = new Database(config.databasePath);
   database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
@@ -447,6 +473,12 @@ export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentO
       database.close();
       throw error;
     }
+  }
+  try {
+    assertDatabaseIntegrity(database);
+  } catch (error) {
+    database.close();
+    throw error;
   }
   return { connection: database, path: path.resolve(config.databasePath) };
 }
