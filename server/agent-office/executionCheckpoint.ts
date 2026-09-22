@@ -1,0 +1,17 @@
+import crypto from 'node:crypto';
+import type { Database } from 'better-sqlite3';
+const now=()=>new Date().toISOString();
+export function createExecutionCheckpoint(db:Database,planId:string,reason:string){
+ const plan=db.prepare('SELECT id,project_id,version,status,replan_count FROM execution_plans WHERE id=?').get(planId) as any;
+ if(!plan)throw new Error('EXECUTION_PLAN_NOT_FOUND');
+ const steps=db.prepare('SELECT id,key,status,resume_state FROM execution_steps WHERE plan_id=? ORDER BY key').all(planId) as any[];
+ const attempts=db.prepare(`SELECT a.id,a.step_id,a.attempt_number,a.status FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id WHERE s.plan_id=? ORDER BY a.step_id,a.attempt_number`).all(planId) as any[];
+ const approvals=db.prepare(`SELECT id,status,execution_step_id,tool_invocation_id FROM tool_approvals WHERE execution_plan_id=? AND status IN ('pending','approved') ORDER BY created_at`).all(planId) as any[];
+ const locks=db.prepare(`SELECT id,resource_key,mode,owner_step_id,status FROM resource_locks WHERE project_id=? AND status='active' ORDER BY resource_key`).all(plan.project_id) as any[];
+ const artifacts=db.prepare('SELECT id,step_id,type,uri FROM execution_artifacts WHERE plan_id=? ORDER BY created_at').all(planId) as any[];
+ const usageRows=db.prepare(`SELECT a.usage_json FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id WHERE s.plan_id=?`).all(planId) as any[];
+ const consumed=usageRows.reduce((a,r)=>{let u:any={};try{u=JSON.parse(r.usage_json||'{}')}catch{}a.cost_usd+=Number(u.cost_usd||0);a.tokens+=Number(u.tokens||0);a.tool_calls+=Number(u.tool_calls||0);return a},{cost_usd:0,tokens:0,tool_calls:0});
+ const snapshot={plan:{id:plan.id,version:plan.version,status:plan.status,replan_count:plan.replan_count},steps,attempts,pending_approvals:approvals,locks,consumed_budgets:consumed,artifact_refs:artifacts,last_event_sequence:null};
+ const tx=db.transaction(()=>{const row=db.prepare('SELECT COALESCE(MAX(sequence),0)+1 next FROM execution_checkpoints WHERE plan_id=?').get(planId) as any;const checkpointId=crypto.randomUUID();db.prepare('INSERT INTO execution_checkpoints(id,plan_id,sequence,reason,snapshot_json,created_at)VALUES(?,?,?,?,?,?)').run(checkpointId,planId,row.next,reason,JSON.stringify(snapshot),now());return{checkpoint_id:checkpointId,sequence:Number(row.next),snapshot}});
+ return tx.immediate();
+}
