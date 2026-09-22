@@ -15,6 +15,7 @@ import { v2DataRouter } from './v2DataRoutes.js';
 import { chatRouter } from './chatRoutes.js';
 import { v3CapabilityRouter } from './v3CapabilityRoutes.js';
 import { v3OrchestratorRouter } from './v3OrchestratorRoutes.js';
+import { v3GapAnalysisRouter } from './v3GapAnalysisRoutes.js';
 
 export const agentOfficeRouter = Router();
 
@@ -22,6 +23,7 @@ export const agentOfficeRouter = Router();
 agentOfficeRouter.use('/agent-office/v2', v2DataRouter);
 agentOfficeRouter.use('/agent-office/v3', v3CapabilityRouter);
 agentOfficeRouter.use('/agent-office/v3/orchestrator', v3OrchestratorRouter);
+agentOfficeRouter.use('/agent-office/v3/orchestration', v3GapAnalysisRouter);
 agentOfficeRouter.use('/agent-office/chat', chatRouter);
 
 // Health check - validates local SQLite foundation
