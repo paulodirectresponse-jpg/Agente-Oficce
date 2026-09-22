@@ -34,6 +34,20 @@ export function recoverInterruptedChatRuns(database: Database): RecoveryResult {
           recovered_at: recoveredAt,
         },
       });
+      const staleApprovals = database.prepare(`
+        UPDATE tool_approvals
+        SET status = 'denied', resolved_at = ?
+        WHERE run_id = ? AND status IN ('pending', 'approved')
+      `).run(recoveredAt, run.id);
+
+      database.prepare(`
+        UPDATE tool_audit_events
+        SET status = 'failed',
+            result_json = '{"ok":false,"error":"RUN_INTERRUPTED_BY_RESTART"}',
+            ended_at = ?
+        WHERE run_id = ? AND status IN ('running', 'waiting_approval')
+      `).run(recoveredAt, run.id);
+
       activity.append({
         project_id: run.project_id,
         conversation_id: run.conversation_id,
@@ -43,7 +57,7 @@ export function recoverInterruptedChatRuns(database: Database): RecoveryResult {
         severity: 'warning',
         title: 'Execução recuperada após reinício',
         detail: 'A execução anterior foi encerrada como falha porque o runtime reiniciou.',
-        payload: { recovered_at: recoveredAt },
+        payload: { recovered_at: recoveredAt, invalidated_tool_approvals: staleApprovals.changes },
       });
     }
 

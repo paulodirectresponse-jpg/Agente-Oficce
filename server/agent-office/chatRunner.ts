@@ -788,6 +788,7 @@ export class ChatRunnerService {
           run_id: childRun.id,
           agent_id: binding.agent.id,
           signal,
+          idempotency_key: call.id,
         };
         let toolResult = await toolRegistry.execute(
           call.name,
