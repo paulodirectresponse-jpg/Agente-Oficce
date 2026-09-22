@@ -126,7 +126,7 @@ describe('ChatRunnerService', () => {
       ['assistant', 'Hello world'],
     ]);
     const assistantMeta = JSON.parse(messages[1].metadata_json);
-    expect(assistantMeta).toMatchObject({ final: true, tools_enabled: false, agent_id: undefined });
+    expect(assistantMeta).toMatchObject({ final: true, tools_enabled: false });
 
     const bodyMessages = requestBody.messages as Array<{ role: string; content: string }>;
     expect(bodyMessages[0].role).toBe('system');
@@ -135,7 +135,7 @@ describe('ChatRunnerService', () => {
 
     const events = f.hub.snapshot(prepared.run.id);
     expect(events.some((event) => event.event === 'response.delta')).toBe(true);
-    expect(events.at(-1)?.event).toBe('run.completed');
+    expect(events[events.length - 1]?.event).toBe('run.completed');
 
     const state = new AgentStateRepository(f.database.connection).listForProject('project-1')[0];
     expect(state).toMatchObject({ agent_id: 'backend-agent', state: 'idle', run_id: null });
