@@ -1,19 +1,14 @@
 import type { Conversation, Project, ProviderConfig, Task, TaskEvent, UsageEntry } from './types.js';
 
-declare global {
-  interface Window {
-    __TAURI_INTERNALS__?: unknown;
-  }
-}
-
 let apiBasePromise: Promise<string> | null = null;
 
 async function resolveApiBase(): Promise<string> {
-  if (import.meta.env.DEV || !window.__TAURI_INTERNALS__) return '';
+  if (import.meta.env.DEV) return '';
 
   if (!apiBasePromise) {
     apiBasePromise = import('@tauri-apps/api/core')
-      .then(({ invoke }) => invoke<string>('backend_url'));
+      .then(({ invoke }) => invoke<string>('backend_url'))
+      .catch(() => '');
   }
 
   return apiBasePromise;
