@@ -55,6 +55,10 @@ describe('Phase 14 dogfooding - controlled E2E (no external providers)', () => {
     dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ao-dog-data-'));
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'ao-dog-root-'));
     await fs.writeFile(path.join(root, 'counter.js'), 'module.exports = 0;');
+    await fs.writeFile(
+      path.join(root, 'dog-write.mjs'),
+      'import fs from "node:fs"; fs.writeFileSync("out.txt", "ran");',
+    );
     database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
     database.connection.prepare(`INSERT INTO projects (id, name, root_path, git_enabled, created_at, updated_at) VALUES ('p1', 'Dog', ?, 0, 't', 't')`).run(root);
     database.connection.prepare(`INSERT INTO conversations (id, project_id, title, created_at, updated_at) VALUES ('c1', 'p1', 'C', 't', 't')`).run();
@@ -63,7 +67,7 @@ describe('Phase 14 dogfooding - controlled E2E (no external providers)', () => {
       turn === 0
         ? { tools: [
             { name: 'write_file', input: { path: 'solution.txt', content: 'kimi implementation' } },
-            { name: 'run_command', input: { command: ['node', '-e', 'require("fs").writeFileSync("out.txt","ran")'], } },
+            { name: 'node_script', input: { path: 'dog-write.mjs' } },
           ] }
         : { text: 'Kimi implemented and verified' },
     );

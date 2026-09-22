@@ -128,15 +128,51 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
+    name: 'npm_test',
+    description: 'Run the project test suite without a shell.',
+    risk: 'execute',
+    default_enabled: true,
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'npm_build',
+    description: 'Run the project build script without a shell.',
+    risk: 'execute',
+    default_enabled: true,
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'npm_install',
+    description: 'Install project dependencies. This changes the dependency tree and always requires approval.',
+    risk: 'execute',
+    default_enabled: false,
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'node_script',
+    description: 'Run an existing JavaScript entrypoint inside the project root. Inline evaluation is forbidden.',
+    risk: 'execute',
+    default_enabled: false,
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Existing .js/.mjs/.cjs file relative to project root.' },
+        args: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'run_tests',
-    description: 'Run the project test command with bounded output and timeout.',
+    description: 'Legacy alias for npm_test.',
     risk: 'execute',
     default_enabled: true,
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'run_command',
-    description: 'Run an allowlisted git/npm/node command inside the active project. Destructive commands are always denied.',
+    description: 'Legacy restricted compatibility tool. Only Git status/diff and npm test/build are accepted; generic Node execution is denied.',
     risk: 'execute',
     default_enabled: false,
     input_schema: {
@@ -270,7 +306,7 @@ function auditResult(toolName: string, result: LocalToolResult): Record<string, 
       content_bytes: typeof data.content === 'string' ? Buffer.byteLength(data.content) : 0,
     };
   }
-  if (toolName === 'git_diff' || toolName === 'git_status' || toolName === 'run_command' || toolName === 'run_tests') {
+  if (toolName === 'git_diff' || toolName === 'git_status' || toolName === 'run_command' || toolName === 'run_tests' || toolName === 'npm_test' || toolName === 'npm_build' || toolName === 'npm_install' || toolName === 'node_script') {
     const stdout = typeof data.stdout === 'string' ? data.stdout : '';
     const stderr = typeof data.stderr === 'string' ? data.stderr : '';
     return {
@@ -297,9 +333,10 @@ export class ToolRegistry {
 
   private needsApproval(tool: ToolDefinition, policy: AgentToolPolicy): boolean {
     if (tool.risk === 'destructive' || tool.risk === 'external') return true;
+    if (tool.name === 'npm_install' || tool.name === 'node_script' || tool.name === 'run_command') return true;
     if (policy.approval_mode === 'manual') return tool.risk !== 'read';
     if (policy.approval_mode === 'auto') return false;
-    return tool.name === 'run_command';
+    return false;
   }
 
   async execute(
