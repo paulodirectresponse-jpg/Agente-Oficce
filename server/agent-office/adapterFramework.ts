@@ -1,4 +1,4 @@
-export type AgentId = 'kimi' | 'claude' | 'codex';
+export type AgentId = string;
 
 export interface AgentCapabilities {
   streaming: boolean;
