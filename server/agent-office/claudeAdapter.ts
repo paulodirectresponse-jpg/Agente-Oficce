@@ -98,15 +98,42 @@ export const LOCAL_TOOL_SCHEMAS: ToolDefinition[] = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'npm_test',
+    description: 'Run the project test suite without a shell.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'npm_build',
+    description: 'Run the project build script without a shell.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'npm_install',
+    description: 'Install project dependencies. This is high risk and may require approval.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'node_script',
+    description: 'Run an existing JavaScript entrypoint inside the project root. Inline evaluation is forbidden.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Existing .js/.mjs/.cjs path relative to project root.' },
+        args: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['path'],
+    },
+  },
+  {
     name: 'run_command',
-    description: 'Run an allowlisted executable (git, npm, node) without a shell. Destructive commands are denied.',
+    description: 'Legacy restricted compatibility tool. Only git status/diff and npm test/build are accepted.',
     input_schema: {
       type: 'object',
       properties: {
         command: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Command as an array: executable followed by arguments, e.g. ["git", "status", "--short"]',
+          description: 'Restricted legacy command array. Generic Node execution is denied.',
         },
       },
       required: ['command'],
@@ -114,7 +141,7 @@ export const LOCAL_TOOL_SCHEMAS: ToolDefinition[] = [
   },
   {
     name: 'run_tests',
-    description: 'Run the project test command (npm test).',
+    description: 'Legacy alias for npm_test.',
     input_schema: { type: 'object', properties: {} },
   },
 ];
