@@ -39,7 +39,8 @@ function messageOf(error: unknown, fallback: string): string {
 function statusFor(code: string): number {
   if (code.endsWith('_NOT_FOUND')) return 404;
   if (code.includes('MISMATCH') || code.includes('REQUIRES')) return 400;
-  if (code.includes('CONSTRAINT') || code.includes('UNIQUE')) return 409;
+  if (code.includes('CONSTRAINT') || code.includes('UNIQUE') || code.includes('RELATION_CYCLE') || code.includes('RELATION_DUPLICATE')) return 409;
+  if (code.includes('RELATION_')) return 400;
   return 500;
 }
 
@@ -676,7 +677,7 @@ v2DataRouter.put('/agents/:agentId/subagents', (request, response) => {
       return;
     }
     const children = Array.isArray(request.body?.child_agent_ids)
-      ? request.body.child_agent_ids.map(String).filter((id: string) => id !== agent.id)
+      ? request.body.child_agent_ids.map(String)
       : [];
     const relationRepository = new AgentRelationRepository(database.connection);
     relationRepository.replaceChildren(agent.id, children);
