@@ -518,6 +518,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         goal TEXT NOT NULL,
         required_capabilities_json TEXT NOT NULL DEFAULT '[]',
         required_tools_json TEXT NOT NULL DEFAULT '[]',
+        resource_locks_json TEXT NOT NULL DEFAULT '[]',
         assigned_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
         assigned_team_id TEXT,
         status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','ready','running','blocked','completed','failed','cancelled')),
@@ -548,6 +549,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         ended_at TEXT,
         error_json TEXT,
         result_summary TEXT NOT NULL DEFAULT '',
+        usage_json TEXT NOT NULL DEFAULT '{}',
         provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL,
         model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL,
         UNIQUE(step_id,attempt_number)
