@@ -328,6 +328,8 @@ export const fullAccessToolDefinitions: FullAccessToolDefinition[] = [
   { name: 'computer_hotkey', description: 'Send a Windows Forms SendKeys hotkey sequence, e.g. ^l or %{F4}.', risk: 'execute', default_enabled: true, input_schema: { type: 'object', properties: { keys: { type: 'string' } }, required: ['keys'], additionalProperties: false } },
   { name: 'computer_scroll', description: 'Scroll the Windows mouse wheel by a delta.', risk: 'execute', default_enabled: true, input_schema: { type: 'object', properties: { delta: { type: 'number' } }, required: ['delta'], additionalProperties: false } },
   { name: 'deploy_command', description: 'Run a deployment CLI (Railway, Vercel, Netlify, Fly.io or custom) with arbitrary arguments.', risk: 'external', default_enabled: true, input_schema: { type: 'object', properties: { provider: { type: 'string' }, args: { type: 'array', items: { type: 'string' } }, cwd: { type: 'string' } }, required: ['provider','args'], additionalProperties: false } },
+  { name: 'http_request', description: 'Call an HTTP API using arbitrary method, headers and optional body.', risk: 'external', default_enabled: true, input_schema: { type: 'object', properties: { url: { type: 'string' }, method: { type: 'string' }, headers: { type: 'object' }, body: { type: 'string' } }, required: ['url'], additionalProperties: false } },
+  { name: 'browser_screenshot', description: 'Capture the active managed browser viewport to a PNG file.', risk: 'read', default_enabled: true, input_schema: { type: 'object', properties: { path: { type: 'string' } }, additionalProperties: false } },
   { name: 'runtime_health', description: 'Test availability of the main Agent Office runtime tool families.', risk: 'read', default_enabled: true, input_schema: { type: 'object', properties: {}, additionalProperties: false } },
 ];
 
@@ -403,12 +405,19 @@ export async function executeFullAccessTool(
       return cdpCall('Runtime.evaluate', { expression: js, returnByValue: true }, context);
     }
     if (name === 'browser_upload') {
+      const filePath = absolutePath(context.projectRoot, String(input.path));
+      if (!fsSync.existsSync(filePath)) return { ok: false, error: 'UPLOAD_FILE_NOT_FOUND' };
       const selector = JSON.stringify(String(input.selector ?? ''));
-      const filePath = JSON.stringify(absolutePath(context.projectRoot, String(input.path)));
-      const js = "(()=>{const e=document.querySelector(" + selector + ");if(!e)throw new Error('ELEMENT_NOT_FOUND');return {selector:" + selector + ",path:" + filePath + ",requiresNativeChooser:true}})()";
-      const inspected = await cdpCall('Runtime.evaluate', { expression: js, returnByValue: true }, context);
-      if (!inspected.ok) return inspected;
-      return { ok: false, error: 'BROWSER_UPLOAD_USE_COMPUTER_FILE_CHOOSER', data: { selector: String(input.selector), path: absolutePath(context.projectRoot, String(input.path)) } };
+      const clicked = await cdpCall('Runtime.evaluate', {
+        expression: "(()=>{const e=document.querySelector(" + selector + ");if(!e)throw new Error('ELEMENT_NOT_FOUND');e.click();return true})()",
+        returnByValue: true,
+      }, context);
+      if (!clicked.ok) return clicked;
+      await new Promise(resolve => setTimeout(resolve, 350));
+      const encoded = Buffer.from(filePath, 'utf8').toString('base64');
+      const script = "Add-Type -AssemblyName System.Windows.Forms;$t=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(" + psQuote(encoded) + "));Set-Clipboard -Value $t;[System.Windows.Forms.SendKeys]::SendWait('^v');Start-Sleep -Milliseconds 100;[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')";
+      const selected = await powershell(script, context);
+      return selected.ok ? { ok: true, data: { selector: String(input.selector), path: filePath } } : selected;
     }
     if (name === 'browser_download') {
       const target = absolutePath(context.projectRoot, String(input.path));
@@ -445,6 +454,35 @@ export async function executeFullAccessTool(
       const executable = executables[provider] || String(input.provider ?? '');
       if (!executable) return { ok: false, error: 'DEPLOY_PROVIDER_REQUIRED' };
       return runExecutable(executable, Array.isArray(input.args) ? input.args.map(String) : [], context, cwd);
+    }
+    if (name === 'http_request') {
+      const headers = input.headers && typeof input.headers === 'object' ? input.headers as Record<string, string> : {};
+      const response = await fetch(String(input.url), {
+        method: String(input.method || 'GET').toUpperCase(),
+        headers,
+        body: input.body == null ? undefined : String(input.body),
+        signal: context.signal,
+      });
+      const body = await response.text();
+      return {
+        ok: response.ok,
+        data: {
+          status: response.status,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: bounded(body),
+        },
+        ...(response.ok ? {} : { error: 'HTTP_' + response.status }),
+      };
+    }
+    if (name === 'browser_screenshot') {
+      const target = absolutePath(context.projectRoot, String(input.path || path.join('.agent-office', 'screenshots', 'browser.png')));
+      const captured = await cdpCall('Page.captureScreenshot', { format: 'png', fromSurface: true }, context);
+      if (!captured.ok) return captured;
+      const nested = captured.data?.result as { data?: string } | undefined;
+      if (!nested?.data) return { ok: false, error: 'BROWSER_SCREENSHOT_EMPTY' };
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, Buffer.from(nested.data, 'base64'));
+      return { ok: true, data: { path: target } };
     }
     if (name === 'runtime_health') return { ok: true, data: { tools: await getFullAccessToolHealth(context.projectRoot) } };
     return { ok: false, error: 'FULL_ACCESS_TOOL_NOT_FOUND' };
