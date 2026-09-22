@@ -22,6 +22,10 @@ function fixture() {
     INSERT INTO projects (id, name, root_path, git_enabled, git_branch, created_at, updated_at)
     VALUES ('project-1', 'Project', ?, 0, NULL, ?, ?)
   `).run(projectRoot, now, now);
+  database.connection.prepare(`
+    INSERT INTO conversations (id, project_id, title, created_at, updated_at)
+    VALUES ('conversation-1', 'project-1', 'Conversation', ?, ?)
+  `).run(now, now);
 
   const providers = new ProviderRepositoryV2(database.connection);
   providers.create({
@@ -39,6 +43,12 @@ function fixture() {
     provider_id: 'provider',
     model_id: model.id,
   });
+  database.connection.prepare(`
+    INSERT INTO chat_runs (
+      id, conversation_id, project_id, agent_id, provider_id, model_id,
+      status, mode, parent_run_id, started_at, metadata_json
+    ) VALUES ('run-1', 'conversation-1', 'project-1', ?, 'provider', ?, 'running', 'single', NULL, ?, '{}')
+  `).run(agent.id, model.id, now);
 
   return {
     dataDir,
@@ -90,7 +100,7 @@ describe('Phase H tool registry', () => {
       database: f.database.connection,
       project_id: 'project-1',
       project_root: f.projectRoot,
-      run_id: 'run-not-persisted',
+      run_id: 'run-1',
       agent_id: f.agent.id,
     });
     expect(read.ok).toBe(true);
@@ -100,7 +110,7 @@ describe('Phase H tool registry', () => {
       database: f.database.connection,
       project_id: 'project-1',
       project_root: f.projectRoot,
-      run_id: 'run-not-persisted',
+      run_id: 'run-1',
       agent_id: f.agent.id,
     });
     expect(write.ok).toBe(true);
@@ -128,7 +138,7 @@ describe('Phase H tool registry', () => {
       database: f.database.connection,
       project_id: 'project-1',
       project_root: f.projectRoot,
-      run_id: 'run-not-persisted',
+      run_id: 'run-1',
       agent_id: f.agent.id,
     });
     expect(result).toMatchObject({ ok: false, approval_required: true, error: 'TOOL_APPROVAL_REQUIRED' });
