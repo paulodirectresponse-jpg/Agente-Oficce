@@ -7,6 +7,7 @@ import type {
   ChatStreamEnvelope,
   Conversation,
   Project,
+  ToolApproval,
   UniversalProvider,
 } from './types.js';
 import { api } from './api.js';
@@ -166,6 +167,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [liveStates, setLiveStates] = useState<Record<string, { state: string; activity: string; updated_at: string }>>({});
   const [liveEvents, setLiveEvents] = useState<ChatStreamEnvelope[]>([]);
   const [lastHandoff, setLastHandoff] = useState<{ from: string; to: string } | null>(null);
+  const [approvals, setApprovals] = useState<ToolApproval[]>([]);
+  const [resolvingApproval, setResolvingApproval] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -173,18 +176,20 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const loadSnapshot = useCallback(async () => {
     if (!project) return;
     try {
-      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity] = await Promise.all([
+      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity, nextApprovals] = await Promise.all([
         api.listAgentsV2(),
         api.listProvidersV2(),
         api.listAgentStatesV2(project.id),
         api.getConversation(project.id),
         api.listActivityV2(project.id),
+        api.listToolApprovalsV2(project.id),
       ]);
       setAgents(nextAgents.filter((agent) => agent.enabled).sort((a, b) => a.sort_order - b.sort_order));
       setProviders(nextProviders);
       setStates(nextStates);
       setConversation(nextConversation);
       setActivity(nextActivity);
+      setApprovals(nextApprovals);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar o escritório.');
@@ -198,6 +203,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     setLiveStates({});
     setLiveEvents([]);
     setLastHandoff(null);
+    setApprovals([]);
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
     void loadSnapshot();
@@ -208,6 +214,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         api.listAgentStatesV2(project.id).then(setStates),
         api.listActivityV2(project.id).then(setActivity),
         api.getConversation(project.id).then(setConversation),
+        api.listToolApprovalsV2(project.id).then(setApprovals),
       ]).catch(() => undefined);
     }, 3500);
 
@@ -423,6 +430,19 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       await api.cancelChatRun(currentRun.run_id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao cancelar a execução.');
+    }
+  };
+
+  const resolveApproval = async (approvalId: string, status: 'approved' | 'denied') => {
+    setResolvingApproval(approvalId);
+    setError(null);
+    try {
+      await api.resolveToolApprovalV2(approvalId, status);
+      if (project) setApprovals(await api.listToolApprovalsV2(project.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao resolver aprovação.');
+    } finally {
+      setResolvingApproval(null);
     }
   };
 
@@ -733,6 +753,41 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           </div>
           <span className="live-pill"><span />Live</span>
         </div>
+
+        {approvals.some((item) => item.status === 'pending') && (
+          <div className="approval-stack">
+            {approvals.filter((item) => item.status === 'pending').slice(0, 3).map((approval) => {
+              const agent = approval.agent_id ? agents.find((candidate) => candidate.id === approval.agent_id) : null;
+              return (
+                <div key={approval.id} className="approval-card">
+                  <div>
+                    <span className="office-kicker">Aprovação necessária</span>
+                    <strong>{agent?.name || 'Agente'} quer usar {approval.tool_name}</strong>
+                    <small>{approval.reason || 'Esta ação exige sua confirmação.'}</small>
+                  </div>
+                  <div className="approval-actions">
+                    <button
+                      type="button"
+                      className="approval-deny"
+                      disabled={resolvingApproval === approval.id}
+                      onClick={() => void resolveApproval(approval.id, 'denied')}
+                    >
+                      Negar
+                    </button>
+                    <button
+                      type="button"
+                      className="approval-allow"
+                      disabled={resolvingApproval === approval.id}
+                      onClick={() => void resolveApproval(approval.id, 'approved')}
+                    >
+                      Aprovar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div className="activity-list">
           {latestActivities.length ? latestActivities.map((item) => {
