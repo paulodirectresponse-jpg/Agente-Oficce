@@ -39,6 +39,39 @@ jobs:
       - name: Tauri desktop build
         run: npm run tauri:build
 
+      - name: Smoke packaged runtime lifecycle
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "src-tauri/target/release/agent-office.exe"
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 6
+
+          $app.Refresh()
+          if ($app.HasExited) {
+            throw "Packaged Agent Office exited during startup (code $($app.ExitCode))"
+          }
+
+          $backend = Get-CimInstance Win32_Process |
+            Where-Object { $_.ParentProcessId -eq $app.Id -and $_.Name -eq "node-runtime.exe" } |
+            Select-Object -First 1
+
+          if (-not $backend) {
+            Get-CimInstance Win32_Process |
+              Where-Object { $_.ParentProcessId -eq $app.Id } |
+              Format-Table ProcessId, ParentProcessId, Name, CommandLine
+            Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
+            throw "Bundled backend process did not start"
+          }
+
+          Write-Host "Desktop process: $($app.Id); backend process: $($backend.ProcessId)"
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep -Seconds 3
+
+          if (Get-Process -Id $backend.ProcessId -ErrorAction SilentlyContinue) {
+            Stop-Process -Id $backend.ProcessId -Force -ErrorAction SilentlyContinue
+            throw "Bundled backend remained orphaned after desktop exit"
+          }
+
       - name: Verify MSI exists
         shell: pwsh
         run: |
