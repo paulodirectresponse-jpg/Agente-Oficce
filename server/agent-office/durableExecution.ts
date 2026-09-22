@@ -17,16 +17,18 @@ export class DurableExecutionService{
    this.db.prepare(`UPDATE resource_locks SET status='expired' WHERE status='active'`).run();
    this.db.prepare(`UPDATE tool_approvals SET status='denied',resolved_at=?,actor='system:expiry' WHERE status='pending' AND expires_at IS NOT NULL AND expires_at<=?`).run(recoveredAt,recoveredAt);
    for(const plan of plans){
+    let planManualReview=0;
+    new ActivityRepository(this.db).append({project_id:plan.project_id,type:'run.recovering',severity:'warning',title:'Recuperando execução V3',detail:'Reconciliando attempts, approvals e locks após reinício.',payload:{plan_id:plan.id,recovered_at:recoveredAt}});
     const running=this.db.prepare(`SELECT a.id attempt_id,a.step_id,s.required_tools_json,s.resource_locks_json,s.resume_state FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id WHERE s.plan_id=? AND a.status='running'`).all(plan.id) as any[];
     for(const row of running){
      let tools:string[]=[],locks:any[]=[];try{tools=JSON.parse(row.required_tools_json||'[]')}catch{}try{locks=JSON.parse(row.resource_locks_json||'[]')}catch{}
      const uncertain=tools.some(t=>UNSAFE_TOOLS.has(t))||locks.some(l=>l?.mode==='write'||l?.mode==='exclusive')||row.resume_state==='running_tool_side_effect';
      this.db.prepare(`UPDATE step_attempts SET status='failed',ended_at=?,error_json=? WHERE id=?`).run(recoveredAt,json({code:uncertain?'DURABLE_SIDE_EFFECT_UNCERTAIN':'RUN_INTERRUPTED_RETRYABLE'}),row.attempt_id);
-     if(uncertain){this.db.prepare(`UPDATE execution_steps SET status='blocked',resume_state='blocked_manual_review',updated_at=? WHERE id=?`).run(recoveredAt,row.step_id);manualReview++}
+     if(uncertain){this.db.prepare(`UPDATE execution_steps SET status='blocked',resume_state='blocked_manual_review',updated_at=? WHERE id=?`).run(recoveredAt,row.step_id);manualReview++;planManualReview++;new ActivityRepository(this.db).append({project_id:plan.project_id,type:'run.blocked_manual_review',severity:'warning',title:'Revisão manual necessária',detail:'Um side effect estava em estado incerto no reinício e não será repetido automaticamente.',payload:{plan_id:plan.id,step_id:row.step_id}})}
      else{this.db.prepare(`UPDATE execution_steps SET status='queued',resume_state='queued',updated_at=? WHERE id=?`).run(recoveredAt,row.step_id);retryable++}
     }
     createExecutionCheckpoint(this.db,plan.id,'runtime_recovery');
-    new ActivityRepository(this.db).append({project_id:plan.project_id,type:'run.recovered',severity:'warning',title:'Execução V3 recuperada após reinício',detail:manualReview?'Side effects incertos foram bloqueados para revisão manual.':'Steps interrompidos e seguros foram recolocados na fila.',payload:{plan_id:plan.id,recovered_at:recoveredAt}});
+    new ActivityRepository(this.db).append({project_id:plan.project_id,type:'run.recovered',severity:'warning',title:'Execução V3 recuperada após reinício',detail:planManualReview?'Side effects incertos foram bloqueados para revisão manual.':'Steps interrompidos e seguros foram recolocados na fila.',payload:{plan_id:plan.id,recovered_at:recoveredAt}});
     recovered++;
    }
   });
@@ -41,10 +43,15 @@ export class DurableExecutionService{
   const plan=this.db.prepare('SELECT budget_json,replan_count,status FROM execution_plans WHERE id=?').get(planId) as any;if(!plan)throw new Error('EXECUTION_PLAN_NOT_FOUND');if(['completed','cancelled','superseded'].includes(plan.status))throw new Error('REPLAN_PLAN_TERMINAL');
   let budget:any={};try{budget=JSON.parse(plan.budget_json||'{}')}catch{}const max=Math.max(0,Number(budget.max_replans??3));if(Number(plan.replan_count)>=max)throw new Error('REPLAN_LIMIT_EXCEEDED');
   const normalized=reason.trim().toLowerCase().replace(/\s+/g,' '),fingerprint=crypto.createHash('sha256').update(`${triggerType}:${normalized}`).digest('hex');
-  const repeats=(this.db.prepare(`SELECT COUNT(*) n FROM replan_requests WHERE plan_id=? AND fingerprint=? AND status IN ('committed','blocked')`).get(planId,fingerprint) as any).n;
+  const repeats=(this.db.prepare(`WITH RECURSIVE lineage(id,parent_plan_id) AS (
+    SELECT id,parent_plan_id FROM execution_plans WHERE id=?
+    UNION ALL
+    SELECT p.id,p.parent_plan_id FROM execution_plans p JOIN lineage l ON p.id=l.parent_plan_id
+  )
+  SELECT COUNT(*) n FROM replan_requests WHERE plan_id IN (SELECT id FROM lineage) AND fingerprint=? AND status IN ('committed','blocked')`).get(planId,fingerprint) as any).n;
   const status=repeats>=2?'blocked':'pending',requestId=id();this.db.prepare('INSERT INTO replan_requests(id,plan_id,fingerprint,reason,trigger_type,status,created_at)VALUES(?,?,?,?,?,?,?)').run(requestId,planId,fingerprint,reason,triggerType,status,now());
-  if(status==='blocked')return{request_id:requestId,status,reason:'repeated_reason'};
-  createExecutionCheckpoint(this.db,planId,'replan_requested');return{request_id:requestId,status};
+  if(status==='blocked'){new ActivityRepository(this.db).append({project_id:(this.db.prepare('SELECT project_id FROM execution_plans WHERE id=?').get(planId) as any).project_id,type:'replan.requested',severity:'warning',title:'Replanejamento bloqueado',detail:'O mesmo motivo de replan se repetiu além do limite seguro.',payload:{plan_id:planId,request_id:requestId,fingerprint}});return{request_id:requestId,status,reason:'repeated_reason'};}
+  createExecutionCheckpoint(this.db,planId,'replan_requested');new ActivityRepository(this.db).append({project_id:(this.db.prepare('SELECT project_id FROM execution_plans WHERE id=?').get(planId) as any).project_id,type:'replan.requested',title:'Replanejamento solicitado',detail:reason,payload:{plan_id:planId,request_id:requestId,trigger_type:triggerType}});return{request_id:requestId,status};
  }
  commitReplan(requestId:string,draft:PlanDraft){
   const req=this.db.prepare(`SELECT r.*,p.project_id,p.version,p.replan_count,p.orchestration_run_id FROM replan_requests r JOIN execution_plans p ON p.id=r.plan_id WHERE r.id=?`).get(requestId) as any;
@@ -65,7 +72,7 @@ export class DurableExecutionService{
  }
  markWaitingProvider(stepId:string){
   const row=this.db.prepare('SELECT plan_id FROM execution_steps WHERE id=?').get(stepId) as any;if(!row)throw new Error('EXECUTION_STEP_NOT_FOUND');
-  this.db.prepare(`UPDATE execution_steps SET status='blocked',resume_state='waiting_provider',updated_at=? WHERE id=?`).run(now(),stepId);createExecutionCheckpoint(this.db,row.plan_id,'provider_waiting');
+  this.db.prepare(`UPDATE execution_steps SET status='blocked',resume_state='waiting_provider',updated_at=? WHERE id=?`).run(now(),stepId);createExecutionCheckpoint(this.db,row.plan_id,'provider_waiting');const plan=this.db.prepare('SELECT project_id FROM execution_plans WHERE id=?').get(row.plan_id) as any;new ActivityRepository(this.db).append({project_id:plan.project_id,type:'provider.waiting',severity:'warning',title:'Aguardando provider',detail:'O step foi pausado até o provider/modelo voltar a ficar disponível.',payload:{plan_id:row.plan_id,step_id:stepId}});
  }
  resumeProvider(stepId:string){
   const row=this.db.prepare(`SELECT s.plan_id,a.enabled agent_enabled,p.enabled provider_enabled,m.enabled model_enabled FROM execution_steps s LEFT JOIN agents a ON a.id=s.assigned_agent_id LEFT JOIN providers p ON p.id=a.provider_id LEFT JOIN provider_models m ON m.id=a.model_id WHERE s.id=?`).get(stepId) as any;if(!row)throw new Error('EXECUTION_STEP_NOT_FOUND');if(!row.agent_enabled||!row.provider_enabled||!row.model_enabled)return false;
