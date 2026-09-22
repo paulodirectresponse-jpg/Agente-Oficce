@@ -1,6 +1,6 @@
 # V3.5 — Durable Runs + Replanning
 
-**Status:** PLANNED  
+**Status:** DONE  
 **Depende de:** V3.0 + V3.4.  
 **Bloqueia:** operações longas confiáveis, Teams avançados e release V3.
 

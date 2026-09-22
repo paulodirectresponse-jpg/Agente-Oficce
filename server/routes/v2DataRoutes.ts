@@ -618,7 +618,8 @@ v2DataRouter.get('/projects/:projectId/tool-approvals', (request, response) => {
   try {
     const rows = database.connection.prepare(`
       SELECT id, project_id, run_id, agent_id, tool_name, input_json, reason,
-             status, created_at, resolved_at
+             status, created_at, resolved_at, execution_plan_id, execution_step_id,
+             expires_at, actor, tool_invocation_id
       FROM tool_approvals
       WHERE project_id = ?
       ORDER BY created_at DESC
@@ -646,14 +647,22 @@ v2DataRouter.post('/tool-approvals/:approvalId/resolve', (request, response) => 
     }
     const result = database.connection.prepare(`
       UPDATE tool_approvals
-      SET status = ?, resolved_at = ?
+      SET status = ?, resolved_at = ?, actor = ?
       WHERE id = ? AND status = 'pending'
-        AND EXISTS (
-          SELECT 1 FROM chat_runs
-          WHERE chat_runs.id = tool_approvals.run_id
-            AND chat_runs.status IN ('created', 'running')
+        AND (expires_at IS NULL OR expires_at > ?)
+        AND (
+          EXISTS (
+            SELECT 1 FROM chat_runs
+            WHERE chat_runs.id = tool_approvals.run_id
+              AND chat_runs.status IN ('created', 'running')
+          )
+          OR EXISTS (
+            SELECT 1 FROM execution_plans
+            WHERE execution_plans.id = tool_approvals.execution_plan_id
+              AND execution_plans.status IN ('validated', 'running')
+          )
         )
-    `).run(status, new Date().toISOString(), request.params.approvalId);
+    `).run(status, new Date().toISOString(), typeof request.body?.actor === 'string' ? request.body.actor : 'user', request.params.approvalId, new Date().toISOString());
     if (!result.changes) {
       response.status(404).json({ ok: false, error: { code: 'TOOL_APPROVAL_NOT_FOUND', message: 'Pending approval not found.' } });
       return;

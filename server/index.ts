@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import { agentOfficeRouter } from './routes/agentOfficeRoutes.js';
 import { openAgentOfficeDatabase } from './agent-office/database.js';
 import { recoverInterruptedChatRuns } from './agent-office/runtimeRecovery.js';
+import { DurableExecutionService } from './agent-office/durableExecution.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,8 +28,9 @@ try {
   const database = openAgentOfficeDatabase();
   try {
     const recovered = recoverInterruptedChatRuns(database.connection);
-    if (recovered.recovered_runs || recovered.recovered_agents) {
-      console.log(`♻️ Recovered ${recovered.recovered_runs} interrupted chat run(s) and ${recovered.recovered_agents} agent state(s)`);
+    const durable = new DurableExecutionService(database.connection).recoverAll();
+    if (recovered.recovered_runs || recovered.recovered_agents || durable.recovered_plans) {
+      console.log(`♻️ Recovery: ${recovered.recovered_runs} chat run(s), ${durable.recovered_plans} durable plan(s), ${durable.manual_review_steps} manual-review step(s)`);
     }
   } finally {
     database.connection.close();
