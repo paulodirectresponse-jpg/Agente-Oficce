@@ -9,8 +9,10 @@ describe('Agent Office local database', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-'));
     const database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
     expect(database.connection.prepare('PRAGMA journal_mode').get()).toMatchObject({ journal_mode: 'wal' });
-    expect(database.connection.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }, { version: 9 }, { version: 10 }, { version: 11 }, { version: 12 }]);
+    expect(database.connection.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }, { version: 9 }, { version: 10 }, { version: 11 }, { version: 12 }, { version: 13 }]);
     expect(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projects'").get()).toEqual({ name: 'projects' });
+    expect(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'teams'").get()).toEqual({ name: 'teams' });
+    expect(database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     closeAgentOfficeDatabase(database);
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
