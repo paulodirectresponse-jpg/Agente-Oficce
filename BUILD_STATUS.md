@@ -22,7 +22,7 @@
 | 10 | Usage | DONE | UsageTracker persists run usage to usage_snapshots, per-agent 30-day aggregation, GET /agent-office/usage; no fabricated values when empty. 3 usage tests pass. |
 | 11 | UI Final | DONE | SPA with workspace, tasks (run + live events polling), usage, provider settings, pt-BR, dark desktop theme, empty/loading/error states. |
 | 12 | Office View | DONE | CSS-only 2D office: 3 desks (Kimi/Claude/Codex) with idle/working/blocked states derived from tasks; click desk sets manual agent override. |
-| 13 | Release Gate | IN_PROGRESS | 83/83 tests, lint, client+server builds pass; src-tauri scaffold (Tauri v2 config, Cargo.toml, main.rs) committed; USER README written; Rust 1.98.1 installed; first tauri build in progress (icons still needed for bundle). |
+| 13 | Release Gate | DONE | 83/83 tests, lint, client+server builds pass; Tauri v2 MSI built: `src-tauri/target/release/bundle/msi/Agent Office_0.1.0_x64_en-US.msi`; user README (README-USUARIO.md) written; provider setup via Settings view. |
 | 14 | Dogfooding | BLOCKED_REAL_VALIDATION | Requires real provider credentials (Claude Gateway key, KIMI_API_KEY) and Codex CLI login; blocked until user supplies them. |
 
 ## Verified local checks
