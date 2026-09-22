@@ -14,4 +14,21 @@ describe('Agent Office local database', () => {
     closeAgentOfficeDatabase(database);
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
+
+
+  it('fails closed when persisted foreign-key corruption is detected', () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-integrity-'));
+    const config = { dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' as const };
+    const database = openAgentOfficeDatabase(config);
+    database.connection.pragma('foreign_keys = OFF');
+    const now = new Date().toISOString();
+    database.connection.prepare(`
+      INSERT INTO conversations (id, project_id, title, created_at, updated_at)
+      VALUES ('broken-conversation', 'missing-project', 'Broken', ?, ?)
+    `).run(now, now);
+    database.connection.close();
+
+    expect(() => openAgentOfficeDatabase(config)).toThrow('DATABASE_FOREIGN_KEY_CHECK_FAILED');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
 });
