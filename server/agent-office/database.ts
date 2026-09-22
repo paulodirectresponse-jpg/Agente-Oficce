@@ -638,6 +638,130 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_execution_commands_plan_status ON execution_commands(plan_id,status,created_at);
     `,
   }
+
+  {
+    version: 13,
+    sql: `
+      CREATE TABLE IF NOT EXISTS teams (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        purpose TEXT NOT NULL DEFAULT '',
+        type TEXT NOT NULL CHECK(type IN ('permanent','system')),
+        lead_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        max_parallelism INTEGER NOT NULL DEFAULT 3 CHECK(max_parallelism > 0),
+        max_delegation_depth INTEGER NOT NULL DEFAULT 2 CHECK(max_delegation_depth >= 0),
+        allow_external_borrowing INTEGER NOT NULL DEFAULT 0 CHECK(allow_external_borrowing IN (0,1)),
+        proposal_policy TEXT NOT NULL DEFAULT 'manual' CHECK(proposal_policy IN ('manual','approval_required','disabled')),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        current_version INTEGER NOT NULL DEFAULT 1 CHECK(current_version > 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS team_members (
+        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        role_name TEXT NOT NULL DEFAULT '',
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(team_id,agent_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS team_policies (
+        team_id TEXT PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+        allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+        permissions_json TEXT NOT NULL DEFAULT '[]',
+        delegation_permissions_json TEXT NOT NULL DEFAULT '[]',
+        approval_mode TEXT NOT NULL DEFAULT 'safe' CHECK(approval_mode IN ('safe','manual','auto')),
+        budget_defaults_json TEXT NOT NULL DEFAULT '{}',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS team_versions (
+        id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL CHECK(version > 0),
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(team_id,version)
+      );
+
+      CREATE TABLE IF NOT EXISTS dynamic_team_instances (
+        id TEXT PRIMARY KEY,
+        orchestration_run_id TEXT REFERENCES orchestration_runs(id) ON DELETE SET NULL,
+        execution_plan_id TEXT REFERENCES execution_plans(id) ON DELETE CASCADE,
+        purpose TEXT NOT NULL DEFAULT '',
+        lead_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        max_parallelism INTEGER NOT NULL DEFAULT 3 CHECK(max_parallelism > 0),
+        max_delegation_depth INTEGER NOT NULL DEFAULT 2 CHECK(max_delegation_depth >= 0),
+        allow_external_borrowing INTEGER NOT NULL DEFAULT 0 CHECK(allow_external_borrowing IN (0,1)),
+        policy_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed','cancelled')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS dynamic_team_members (
+        dynamic_team_id TEXT NOT NULL REFERENCES dynamic_team_instances(id) ON DELETE CASCADE,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        role_name TEXT NOT NULL DEFAULT '',
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(dynamic_team_id,agent_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS execution_team_snapshots (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        step_id TEXT NOT NULL REFERENCES execution_steps(id) ON DELETE CASCADE,
+        team_kind TEXT NOT NULL CHECK(team_kind IN ('permanent','dynamic')),
+        team_id TEXT NOT NULL,
+        team_version_id TEXT REFERENCES team_versions(id) ON DELETE SET NULL,
+        snapshot_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(step_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS runtime_delegations (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        step_id TEXT REFERENCES execution_steps(id) ON DELETE CASCADE,
+        team_kind TEXT CHECK(team_kind IN ('permanent','dynamic')),
+        team_id TEXT,
+        parent_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        child_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE RESTRICT,
+        ancestor_chain_json TEXT NOT NULL DEFAULT '[]',
+        depth INTEGER NOT NULL CHECK(depth >= 0),
+        delegation_scope_json TEXT NOT NULL DEFAULT '[]',
+        required_capabilities_json TEXT NOT NULL DEFAULT '[]',
+        required_tools_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','returned','blocked','cancelled')),
+        budget_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        returned_at TEXT
+      );
+
+      ALTER TABLE execution_steps ADD COLUMN assigned_team_version_id TEXT REFERENCES team_versions(id) ON DELETE SET NULL;
+      ALTER TABLE execution_steps ADD COLUMN assigned_dynamic_team_id TEXT REFERENCES dynamic_team_instances(id) ON DELETE SET NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_team_members_agent ON team_members(agent_id,enabled,team_id);
+      CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id,enabled,priority);
+      CREATE INDEX IF NOT EXISTS idx_team_versions_team ON team_versions(team_id,version DESC);
+      CREATE INDEX IF NOT EXISTS idx_dynamic_team_plan ON dynamic_team_instances(execution_plan_id,status);
+      CREATE INDEX IF NOT EXISTS idx_dynamic_team_orchestration ON dynamic_team_instances(orchestration_run_id,status);
+      CREATE INDEX IF NOT EXISTS idx_runtime_delegations_plan ON runtime_delegations(plan_id,status,depth);
+      CREATE INDEX IF NOT EXISTS idx_runtime_delegations_child ON runtime_delegations(child_agent_id,status);
+      CREATE INDEX IF NOT EXISTS idx_execution_team_snapshot_plan ON execution_team_snapshots(plan_id,team_kind,team_id);
+    `,
+  },
 ];
 
 function assertMigrationPlan(): void {
