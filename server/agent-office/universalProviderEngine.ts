@@ -7,11 +7,26 @@ import {
   type ProviderModel,
 } from './v2DataModel.js';
 
-export type UniversalMessageRole = 'system' | 'user' | 'assistant';
+export type UniversalMessageRole = 'system' | 'user' | 'assistant' | 'tool';
+
+export interface UniversalToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
 
 export interface UniversalMessage {
   role: UniversalMessageRole;
   content: string;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: UniversalToolCall[];
+}
+
+export interface UniversalToolDefinition {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
 }
 
 export interface UniversalCompletionInput {
@@ -20,6 +35,7 @@ export interface UniversalCompletionInput {
   temperature?: number;
   max_output_tokens?: number;
   metadata?: Record<string, unknown>;
+  tools?: UniversalToolDefinition[];
 }
 
 export interface UniversalRequestOptions {
@@ -35,6 +51,7 @@ export interface UniversalCompletionResult {
   text: string;
   finish_reason?: string;
   usage?: UniversalUsage;
+  tool_calls?: UniversalToolCall[];
   raw?: unknown;
 }
 
@@ -312,11 +329,41 @@ class OpenAiChatDriver implements ProtocolDriver {
   readonly id: string = 'openai_chat';
 
   prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
+    const messages = input.messages.map((message) => {
+      const base: Record<string, unknown> = {
+        role: message.role,
+        content: message.content,
+      };
+      if (message.name) base.name = message.name;
+      if (message.tool_call_id) base.tool_call_id = message.tool_call_id;
+      if (message.tool_calls?.length) {
+        base.tool_calls = message.tool_calls.map((call) => ({
+          id: call.id,
+          type: 'function',
+          function: {
+            name: call.name,
+            arguments: JSON.stringify(call.arguments),
+          },
+        }));
+      }
+      return base;
+    });
     const body: Record<string, unknown> = {
       model: input.model,
-      messages: input.messages,
+      messages,
       stream,
     };
+    if (input.tools?.length) {
+      body.tools = input.tools.map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.input_schema,
+        },
+      }));
+      body.tool_choice = 'auto';
+    }
     if (stream) body.stream_options = { include_usage: true };
     if (input.temperature !== undefined) body.temperature = input.temperature;
     if (input.max_output_tokens !== undefined) {
@@ -335,10 +382,35 @@ class OpenAiChatDriver implements ProtocolDriver {
     const choice = asObject(Array.isArray(root.choices) ? root.choices[0] : undefined);
     const message = asObject(choice.message);
     const usageRoot = asObject(root.usage);
+    const rawCalls = Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    const toolCalls: UniversalToolCall[] = rawCalls.flatMap((value: unknown, index: number) => {
+      const call = asObject(value);
+      const fn = asObject(call.function);
+      const name = getString(fn.name);
+      if (!name) return [];
+      let args: Record<string, unknown> = {};
+      const rawArguments = fn.arguments;
+      if (typeof rawArguments === 'string' && rawArguments.trim()) {
+        try {
+          const parsed = JSON.parse(rawArguments);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+        } catch {
+          args = { __raw_arguments: rawArguments };
+        }
+      } else if (rawArguments && typeof rawArguments === 'object' && !Array.isArray(rawArguments)) {
+        args = rawArguments as Record<string, unknown>;
+      }
+      return [{
+        id: getString(call.id) || `tool-call-${index + 1}`,
+        name,
+        arguments: args,
+      }];
+    });
     return {
       text: extractTextValue(message.content),
       finish_reason: getString(choice.finish_reason) || undefined,
       usage: toUsage(usageRoot.prompt_tokens ?? usageRoot.input_tokens, usageRoot.completion_tokens ?? usageRoot.output_tokens),
+      tool_calls: toolCalls.length ? toolCalls : undefined,
       raw: payload,
     };
   }
