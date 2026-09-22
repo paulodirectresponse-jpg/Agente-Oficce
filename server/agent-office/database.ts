@@ -410,6 +410,19 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_agent_relations_child ON agent_relations(child_agent_id, enabled);
     `,
   },
+  {
+    version: 7,
+    sql: `
+      ALTER TABLE tool_audit_events ADD COLUMN idempotency_key TEXT;
+      ALTER TABLE tool_approvals ADD COLUMN input_fingerprint TEXT;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_audit_idempotency
+        ON tool_audit_events(run_id, agent_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_tool_approvals_fingerprint
+        ON tool_approvals(run_id, agent_id, tool_name, input_fingerprint, status);
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {
