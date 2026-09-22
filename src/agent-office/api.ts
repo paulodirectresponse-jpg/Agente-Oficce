@@ -1,6 +1,23 @@
 import type { Conversation, Project, ProviderConfig, Task, TaskEvent, UsageEntry } from './types.js';
 
-const API_BASE = import.meta.env.DEV ? '' : 'http://127.0.0.1:3001';
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
+let apiBasePromise: Promise<string> | null = null;
+
+async function resolveApiBase(): Promise<string> {
+  if (import.meta.env.DEV || !window.__TAURI_INTERNALS__) return '';
+
+  if (!apiBasePromise) {
+    apiBasePromise = import('@tauri-apps/api/core')
+      .then(({ invoke }) => invoke<string>('backend_url'));
+  }
+
+  return apiBasePromise;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms));
@@ -8,12 +25,13 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchWithStartupRetry(path: string, init?: RequestInit): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
-  const attempts = method === 'GET' ? 6 : 1;
+  const attempts = method === 'GET' ? 8 : 1;
+  const apiBase = await resolveApiBase();
   let lastError: unknown;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await fetch(`${API_BASE}${path}`, {
+      return await fetch(`${apiBase}${path}`, {
         headers: { 'Content-Type': 'application/json' },
         ...init,
       });
