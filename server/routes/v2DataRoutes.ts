@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import { openAgentOfficeDatabase } from '../agent-office/database.js';
 import { ConversationRepository } from '../agent-office/conversationRepository.js';
+import { getAgentOfficeConfig } from '../agent-office/config.js';
+import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
+import { PROVIDER_PRESETS, getProviderPreset } from '../agent-office/providerPresets.js';
+import {
+  UniversalProviderEngine,
+  supportedAuthDrivers,
+  supportedProtocolDrivers,
+} from '../agent-office/universalProviderEngine.js';
 import {
   ActivityRepository,
   AgentRepositoryV2,
@@ -13,6 +21,13 @@ import {
 export const v2DataRouter = Router();
 
 function codeOf(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string') {
+    return (error as { code: string }).code;
+  }
+  return error instanceof Error && /^[A-Z0-9_]+$/.test(error.message) ? error.message : fallback;
+}
+
+function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
@@ -50,6 +65,9 @@ v2DataRouter.post('/providers', (request, response) => {
       secret_ref: typeof body.secret_ref === 'string' ? body.secret_ref : null,
       headers: body.headers && typeof body.headers === 'object' ? body.headers : {},
       query: body.query && typeof body.query === 'object' ? body.query : {},
+      auth_config: body.auth_config && typeof body.auth_config === 'object' ? body.auth_config : {},
+      protocol_config: body.protocol_config && typeof body.protocol_config === 'object' ? body.protocol_config : {},
+      timeout_ms: Number(body.timeout_ms) > 0 ? Number(body.timeout_ms) : 60000,
       enabled: body.enabled !== false,
       health_status: body.health_status,
     });
@@ -81,7 +99,11 @@ v2DataRouter.patch('/providers/:providerId', (request, response) => {
   try {
     const body = request.body ?? {};
     const patch: Record<string, unknown> = {};
-    for (const key of ['name', 'protocol_driver', 'base_url', 'auth_driver', 'secret_ref', 'headers', 'query', 'enabled', 'health_status']) {
+    for (const key of [
+      'name', 'protocol_driver', 'base_url', 'auth_driver', 'secret_ref',
+      'headers', 'query', 'auth_config', 'protocol_config', 'timeout_ms',
+      'enabled', 'health_status', 'last_health_at', 'last_health_error',
+    ]) {
       if (Object.prototype.hasOwnProperty.call(body, key)) patch[key] = body[key];
     }
     const updated = new ProviderRepositoryV2(database.connection).update(request.params.providerId, patch);
@@ -103,6 +125,139 @@ v2DataRouter.delete('/providers/:providerId', (request, response) => {
       return;
     }
     response.status(204).end();
+  } finally {
+    database.connection.close();
+  }
+});
+
+// Universal provider engine
+v2DataRouter.get('/provider-engine/capabilities', (_request, response) => {
+  response.json({
+    ok: true,
+    data: {
+      protocol_drivers: supportedProtocolDrivers(),
+      auth_drivers: supportedAuthDrivers(),
+      presets: PROVIDER_PRESETS,
+    },
+  });
+});
+
+v2DataRouter.post('/providers/from-preset', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const presetId = String(request.body?.preset_id || '');
+    const preset = getProviderPreset(presetId);
+    if (!preset) {
+      response.status(404).json({ ok: false, error: { code: 'PROVIDER_PRESET_NOT_FOUND', message: 'Provider preset not found.' } });
+      return;
+    }
+    const body = request.body ?? {};
+    const providerId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : preset.id;
+    const created = new ProviderRepositoryV2(database.connection).create({
+      id: providerId,
+      name: typeof body.name === 'string' && body.name.trim() ? body.name.trim() : preset.name,
+      protocol_driver: preset.protocol_driver,
+      base_url: typeof body.base_url === 'string' ? body.base_url : preset.base_url,
+      auth_driver: typeof body.auth_driver === 'string' ? body.auth_driver : preset.auth_driver,
+      headers: { ...(preset.headers ?? {}), ...(body.headers && typeof body.headers === 'object' ? body.headers : {}) },
+      query: { ...(preset.query ?? {}), ...(body.query && typeof body.query === 'object' ? body.query : {}) },
+      auth_config: { ...(preset.auth_config ?? {}), ...(body.auth_config && typeof body.auth_config === 'object' ? body.auth_config : {}) },
+      protocol_config: { ...(preset.protocol_config ?? {}), ...(body.protocol_config && typeof body.protocol_config === 'object' ? body.protocol_config : {}) },
+      timeout_ms: Number(body.timeout_ms) > 0 ? Number(body.timeout_ms) : 60000,
+      enabled: body.enabled !== false,
+    });
+    response.status(201).json({ ok: true, data: safeProvider(created) });
+  } catch (error) {
+    const code = codeOf(error, 'PROVIDER_PRESET_CREATE_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.post('/providers/:providerId/secret', async (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const providers = new ProviderRepositoryV2(database.connection);
+    const provider = providers.get(request.params.providerId);
+    if (!provider) {
+      response.status(404).json({ ok: false, error: { code: 'PROVIDER_NOT_FOUND', message: 'Provider not found.' } });
+      return;
+    }
+    const secret = typeof request.body?.secret === 'string'
+      ? request.body.secret.trim()
+      : typeof request.body?.api_key === 'string'
+        ? request.body.api_key.trim()
+        : '';
+    if (!secret) {
+      response.status(400).json({ ok: false, error: { code: 'PROVIDER_SECRET_REQUIRED', message: 'Provider secret is required.' } });
+      return;
+    }
+    const reference = `provider-${provider.id}-secret`;
+    const secrets = new DevelopmentSecretStore(getAgentOfficeConfig().dataDir);
+    await secrets.set(reference, secret);
+    const updated = providers.update(provider.id, { secret_ref: reference });
+    response.json({ ok: true, data: safeProvider(updated) });
+  } catch (error) {
+    const code = codeOf(error, 'PROVIDER_SECRET_SAVE_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.delete('/providers/:providerId/secret', async (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const providers = new ProviderRepositoryV2(database.connection);
+    const provider = providers.get(request.params.providerId);
+    if (!provider) {
+      response.status(404).json({ ok: false, error: { code: 'PROVIDER_NOT_FOUND', message: 'Provider not found.' } });
+      return;
+    }
+    if (provider.secret_ref) {
+      const secrets = new DevelopmentSecretStore(getAgentOfficeConfig().dataDir);
+      await secrets.delete(provider.secret_ref);
+    }
+    providers.update(provider.id, { secret_ref: null });
+    response.status(204).end();
+  } catch (error) {
+    const code = codeOf(error, 'PROVIDER_SECRET_DELETE_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.post('/providers/:providerId/test', async (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const engine = new UniversalProviderEngine(
+      database.connection,
+      new DevelopmentSecretStore(getAgentOfficeConfig().dataDir),
+    );
+    const result = await engine.testConnection(request.params.providerId);
+    response.status(result.status === 'healthy' ? 200 : 503).json({ ok: result.status === 'healthy', data: result });
+  } catch (error) {
+    const code = codeOf(error, 'PROVIDER_TEST_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.post('/providers/:providerId/discover-models', async (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const engine = new UniversalProviderEngine(
+      database.connection,
+      new DevelopmentSecretStore(getAgentOfficeConfig().dataDir),
+    );
+    const models = await engine.discoverModels(request.params.providerId, request.body?.persist !== false);
+    response.json({ ok: true, data: models });
+  } catch (error) {
+    const code = codeOf(error, 'MODEL_DISCOVERY_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
   } finally {
     database.connection.close();
   }
