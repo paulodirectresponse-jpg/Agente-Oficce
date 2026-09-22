@@ -61,6 +61,16 @@ export function recoverInterruptedChatRuns(database: Database): RecoveryResult {
       });
     }
 
+    database.prepare(`
+      DELETE FROM project_run_locks
+      WHERE run_id IN (
+        SELECT id FROM chat_runs WHERE status NOT IN ('created', 'running')
+      )
+      OR NOT EXISTS (
+        SELECT 1 FROM runs WHERE runs.id = project_run_locks.run_id AND runs.status IN ('started', 'running')
+      )
+    `).run();
+
     const activeStates = database.prepare(
       "SELECT agent_id, project_id FROM agent_states WHERE run_id IS NOT NULL OR state NOT IN ('idle', 'offline', 'resting')",
     ).all() as Array<{ agent_id: string; project_id: string | null }>;
