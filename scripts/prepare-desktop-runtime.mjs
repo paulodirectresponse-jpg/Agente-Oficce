@@ -45,4 +45,11 @@ execFileSync(
   },
 );
 
+// Bundle the exact Node runtime used during packaging. Native modules such as
+// better-sqlite3 are therefore loaded by the same Node ABI after installation,
+// and the MSI does not depend on Node being installed on the user's machine.
+const runtimeExecutable = process.platform === 'win32' ? 'node-runtime.exe' : 'node-runtime';
+cpSync(process.execPath, resolve(runtimeDir, runtimeExecutable));
+
 console.log(`Desktop runtime prepared at ${runtimeDir}`);
+console.log(`Bundled Node runtime: ${runtimeExecutable} (${process.version})`);
