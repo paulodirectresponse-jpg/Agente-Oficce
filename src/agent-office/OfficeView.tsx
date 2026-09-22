@@ -217,8 +217,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         const aConfigured = a.provider_id && a.model_id ? 1 : 0;
         const bConfigured = b.provider_id && b.model_id ? 1 : 0;
         return bConfigured - aConfigured || a.sort_order - b.sort_order;
-      })
-      .slice(0, 3),
+      }),
     [agents],
   );
   const stateByAgent = useMemo(
@@ -430,7 +429,9 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           <div>
             <div className="office-kicker">Projeto ativo</div>
             <h1>{project.name}</h1>
-            <p>Uma conversa. Vários agentes. Mesmo contexto.</p>
+            <p>{focus === 'chat'
+              ? 'Conversa completa com a equipe e respostas em tempo real.'
+              : 'Veja todos os agentes ativos trabalhando no mesmo projeto.'}</p>
           </div>
           <div className="office-topbar-actions">
             <span className={`run-pill ${runStatus}`}>
@@ -468,7 +469,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
             <div className="office-plant plant-b">✦</div>
             <div className="office-plant plant-c">✦</div>
 
-            <div className="agent-stations">
+            <div className={`agent-stations agent-count-${Math.min(visibleAgents.length, 10)}`}>
               {visibleAgents.map((agent, index) => {
                 const persisted = stateByAgent.get(agent.id);
                 const visualState = deriveVisualState(agent, persisted, liveStates[agent.id], providers);
