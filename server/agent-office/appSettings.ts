@@ -31,8 +31,9 @@ export function getProjectRootSetting(database: Database): ProjectRootSetting {
 }
 
 export function setProjectRootSetting(database: Database, value: string): ProjectRootSetting {
-  const root = path.resolve(String(value || '').trim());
-  if (!root) throw new Error('PROJECT_ROOT_REQUIRED');
+  const raw = String(value || '').trim();
+  if (!raw) throw new Error('PROJECT_ROOT_REQUIRED');
+  const root = path.resolve(raw);
   fs.mkdirSync(root, { recursive: true });
   if (!fs.statSync(root).isDirectory()) throw new Error('PROJECT_ROOT_NOT_DIRECTORY');
 
