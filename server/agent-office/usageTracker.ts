@@ -15,6 +15,8 @@ export interface UsageSummary {
   input_tokens: number;
   output_tokens: number;
   runs: number;
+  cost_usd: number | null;
+  average_duration_ms: number | null;
   window_days: number;
   has_data: boolean;
 }
@@ -42,6 +44,10 @@ export class UsageTracker {
     let inputTokens = 0;
     let outputTokens = 0;
     let runs = 0;
+    let costUsd = 0;
+    let hasCost = false;
+    let durationMs = 0;
+    let durationCount = 0;
     let hasData = false;
     for (const row of rows) {
       try {
@@ -49,12 +55,29 @@ export class UsageTracker {
         if (Object.keys(usage).length) hasData = true;
         inputTokens += usage.input_tokens ?? 0;
         outputTokens += usage.output_tokens ?? 0;
-        if (usage.request_count !== undefined || usage.duration_ms !== undefined) runs += 1;
+        if (usage.request_count !== undefined || usage.duration_ms !== undefined) runs += usage.request_count ?? 1;
+        if (usage.cost_usd !== undefined) {
+          costUsd += usage.cost_usd;
+          hasCost = true;
+        }
+        if (usage.duration_ms !== undefined) {
+          durationMs += usage.duration_ms;
+          durationCount += 1;
+        }
       } catch {
         continue;
       }
     }
-    return { agent_id: agentId, input_tokens: inputTokens, output_tokens: outputTokens, runs, window_days: windowDays, has_data: hasData };
+    return {
+      agent_id: agentId,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      runs,
+      cost_usd: hasCost ? costUsd : null,
+      average_duration_ms: durationCount ? Math.round(durationMs / durationCount) : null,
+      window_days: windowDays,
+      has_data: hasData,
+    };
   }
 
   summarizeAll(windowDays = 30): UsageSummary[] {
