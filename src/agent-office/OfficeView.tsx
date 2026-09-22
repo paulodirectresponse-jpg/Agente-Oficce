@@ -195,6 +195,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       void Promise.all([
         api.listAgentStatesV2(project.id).then(setStates),
         api.listActivityV2(project.id).then(setActivity),
+        api.getConversation(project.id).then(setConversation),
       ]).catch(() => undefined);
     }, 3500);
 
@@ -209,7 +210,17 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [conversation?.messages.length, streamingByAgent]);
 
-  const visibleAgents = useMemo(() => agents.slice(0, 3), [agents]);
+  const visibleAgents = useMemo(
+    () => agents
+      .slice()
+      .sort((a, b) => {
+        const aConfigured = a.provider_id && a.model_id ? 1 : 0;
+        const bConfigured = b.provider_id && b.model_id ? 1 : 0;
+        return bConfigured - aConfigured || a.sort_order - b.sort_order;
+      })
+      .slice(0, 3),
+    [agents],
+  );
   const stateByAgent = useMemo(
     () => new Map(states.map((state) => [state.agent_id, state])),
     [states],
@@ -263,7 +274,10 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         return;
       }
 
-      setLiveEvents((current) => [envelope, ...current].slice(0, 50));
+      setLiveEvents((current) => [
+        envelope,
+        ...current.filter((item) => !(item.run_id === envelope.run_id && item.sequence === envelope.sequence)),
+      ].slice(0, 50));
 
       if (envelope.event === 'agent.state') {
         const agentId = typeof envelope.data.agent_id === 'string' ? envelope.data.agent_id : '';
@@ -300,7 +314,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
 
       if (envelope.event === 'response.completed') {
         const agentId = typeof envelope.data.agent_id === 'string' ? envelope.data.agent_id : '';
-        void api.getConversation(receipt.conversation_id ? project?.id ?? '' : project?.id ?? '')
+        if (!project) return;
+        void api.getConversation(project.id)
           .then((next) => {
             setConversation(next);
             if (agentId) {
@@ -439,7 +454,10 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                     type="button"
                     className={`agent-station state-${visualState} ${selected ? 'selected' : ''}`}
                     onClick={() => setTarget(selected ? 'auto' : agent.id)}
-                    title={`Enviar a próxima mensagem diretamente para ${agent.name}`}
+                    title={visualState === 'offline'
+                      ? `${agent.name} precisa de provider/modelo disponível`
+                      : `Enviar a próxima mensagem diretamente para ${agent.name}`}
+                    disabled={visualState === 'offline'}
                   >
                     <div className="agent-floating-card">
                       <div className="agent-floating-title">
@@ -600,9 +618,15 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                 <select value={target} onChange={(event) => setTarget(event.target.value)} disabled={sending}>
                   <option value="auto">Auto</option>
                   <option value="team">Team</option>
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>{agent.name}</option>
-                  ))}
+                  {agents
+                    .filter((agent) => {
+                      if (!agent.provider_id || !agent.model_id) return false;
+                      const provider = providerById.get(agent.provider_id);
+                      return Boolean(provider?.enabled && provider.health_status !== 'unavailable');
+                    })
+                    .map((agent) => (
+                      <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    ))}
                 </select>
                 <button type="submit" className="send-button" disabled={sending || !message.trim()}>
                   {sending ? '•••' : '➤'}
