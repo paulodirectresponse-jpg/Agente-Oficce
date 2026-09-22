@@ -330,10 +330,13 @@ export class ChatRunnerService {
           stageResults.push(result);
         } catch (error) {
           if (childRun.id !== rootRun.id) {
+            const cancelled = signal?.aborted
+              || error instanceof ChatRunCancelledError
+              || (error instanceof Error && error.message === 'CHAT_RUN_CANCELLED');
             this.runs.update(childRun.id, {
-              status: 'failed',
+              status: cancelled ? 'cancelled' : 'failed',
               ended_at: new Date().toISOString(),
-              error: { message: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED' },
+              error: cancelled ? null : { message: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED' },
             });
           }
           throw error;
