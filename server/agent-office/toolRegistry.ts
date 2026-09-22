@@ -485,7 +485,7 @@ export class ToolRegistry {
     }
 
     const approval = context.database.prepare(`
-      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint, audit_id, expires_at
+      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint, audit_id, expires_at, execution_plan_id
       FROM tool_approvals
       WHERE id = ?
     `).get(approvalId) as {
@@ -497,6 +497,7 @@ export class ToolRegistry {
       input_fingerprint: string | null;
       audit_id: string | null;
       expires_at: string | null;
+      execution_plan_id: string | null;
     } | undefined;
 
     if (!approval
@@ -509,7 +510,10 @@ export class ToolRegistry {
     }
 
     const run = context.database.prepare('SELECT status FROM chat_runs WHERE id = ?').get(context.run_id) as { status: string } | undefined;
-    if (!run || !['created', 'running'].includes(run.status)) {
+    const durablePlan = approval.execution_plan_id
+      ? context.database.prepare("SELECT status FROM execution_plans WHERE id = ? AND status IN ('validated','running')").get(approval.execution_plan_id)
+      : null;
+    if ((!run || !['created', 'running'].includes(run.status)) && !durablePlan) {
       return { ok: false, error: 'TOOL_RUN_NOT_ACTIVE', audit_id: auditId, risk: definition.risk };
     }
 
