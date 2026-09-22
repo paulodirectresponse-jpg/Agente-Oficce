@@ -22,6 +22,7 @@ import {
   type UniversalUsage,
 } from './universalProviderEngine.js';
 import { chatEventHub, type ChatEventHub } from './chatEventHub.js';
+import { ChatRunCancelledError } from './runtimeControls.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -279,13 +280,14 @@ export class ChatRunnerService {
     };
   }
 
-  async execute(prepared: PreparedChatRun): Promise<void> {
+  async execute(prepared: PreparedChatRun, signal?: AbortSignal): Promise<void> {
     const rootRun = prepared.run;
     const selected = prepared.selected_agents.map((agentId) => this.requireBinding(agentId));
     const stageResults: AgentResult[] = [];
 
     try {
       for (let index = 0; index < selected.length; index += 1) {
+        if (signal?.aborted) throw new ChatRunCancelledError();
         const binding = selected[index];
         const stage = this.stageFor(prepared.mode, selected, index);
         const previous = stageResults.length ? stageResults[stageResults.length - 1].text : '';
@@ -323,6 +325,7 @@ export class ChatRunnerService {
             stage,
             previousText: previous,
             isFinal: index === selected.length - 1,
+            signal,
           });
           stageResults.push(result);
         } catch (error) {
@@ -378,23 +381,35 @@ export class ChatRunnerService {
         usage: aggregate,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'CHAT_RUN_FAILED';
+      const cancelled = signal?.aborted
+        || error instanceof ChatRunCancelledError
+        || (error instanceof Error && (error.message === 'CHAT_RUN_CANCELLED' || error.message === 'Provider request was cancelled.'));
+      const message = cancelled
+        ? 'CHAT_RUN_CANCELLED'
+        : error instanceof Error ? error.message : 'CHAT_RUN_FAILED';
+
       this.runs.update(rootRun.id, {
-        status: 'failed',
+        status: cancelled ? 'cancelled' : 'failed',
         ended_at: new Date().toISOString(),
-        error: { message },
+        error: cancelled ? null : { message },
       });
       for (const binding of selected) {
         this.states.upsert({
           agent_id: binding.agent.id,
           project_id: rootRun.project_id,
-          run_id: rootRun.id,
-          state: 'error',
-          activity: message,
+          run_id: null,
+          state: cancelled ? 'idle' : 'error',
+          activity: cancelled ? '' : message,
           progress: null,
         });
       }
-      this.emit(rootRun, 'run.failed', 'Falha na resposta', { message }, 'error');
+      this.emit(
+        rootRun,
+        cancelled ? 'run.cancelled' : 'run.failed',
+        cancelled ? 'Execução cancelada' : 'Falha na resposta',
+        { message },
+        cancelled ? 'warning' : 'error',
+      );
     }
   }
 
@@ -574,8 +589,10 @@ export class ChatRunnerService {
     stage: 'planner' | 'responder' | 'reviewer';
     previousText: string;
     isFinal: boolean;
+    signal?: AbortSignal;
   }): Promise<AgentResult> {
-    const { rootRun, childRun, binding, stage, previousText, isFinal } = input;
+    const { rootRun, childRun, binding, stage, previousText, isFinal, signal } = input;
+    if (signal?.aborted) throw new ChatRunCancelledError();
     const state = stateForStage(stage);
     this.states.upsert({
       agent_id: binding.agent.id,
@@ -641,7 +658,7 @@ export class ChatRunnerService {
     const streamingSupported = binding.model.capabilities.streaming !== false;
     if (streamingSupported) {
       try {
-        for await (const event of this.engine.stream(binding.provider.id, completionInput)) {
+        for await (const event of this.engine.stream(binding.provider.id, completionInput, { signal })) {
           if (event.type === 'text_delta') {
             text += event.text;
             deltaCount += 1;
@@ -666,7 +683,7 @@ export class ChatRunnerService {
           stage,
           reason: error instanceof Error ? error.message : 'stream_failed',
         }, 'warning');
-        const result = await this.engine.complete(binding.provider.id, completionInput);
+        const result = await this.engine.complete(binding.provider.id, completionInput, { signal });
         text = result.text;
         usage = result.usage;
         finishReason = result.finish_reason;
@@ -681,7 +698,7 @@ export class ChatRunnerService {
         }
       }
     } else {
-      const result = await this.engine.complete(binding.provider.id, completionInput);
+      const result = await this.engine.complete(binding.provider.id, completionInput, { signal });
       text = result.text;
       usage = result.usage;
       finishReason = result.finish_reason;
