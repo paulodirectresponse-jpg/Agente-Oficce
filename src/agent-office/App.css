@@ -3183,3 +3183,27 @@ textarea {
 .run-pill.cancelled {
   color: #e6b46f;
 }
+
+
+.provider-resilience-card {
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid rgba(255, 184, 92, 0.13);
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(145, 99, 35, 0.05), rgba(38, 88, 123, 0.04));
+}
+
+.provider-resilience-card > small {
+  display: block;
+  margin-top: 9px;
+  color: #6e7f91;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.secret-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
