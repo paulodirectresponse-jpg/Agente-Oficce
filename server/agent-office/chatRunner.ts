@@ -670,6 +670,33 @@ export class ChatRunnerService {
     };
   }
 
+  private async waitForToolApproval(
+    approvalId: string,
+    signal?: AbortSignal,
+    timeoutMs = 5 * 60_000,
+  ): Promise<'approved' | 'denied'> {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (signal?.aborted) throw new ChatRunCancelledError();
+      const row = this.database.prepare('SELECT status FROM tool_approvals WHERE id = ?').get(approvalId) as { status: string } | undefined;
+      if (!row) throw new Error('TOOL_APPROVAL_NOT_FOUND');
+      if (row.status === 'approved' || row.status === 'denied') return row.status;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve();
+        }, 500);
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new ChatRunCancelledError());
+        };
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener('abort', onAbort, { once: true });
+      });
+    }
+    throw new Error('TOOL_APPROVAL_TIMEOUT');
+  }
+
   private async runToolAwareCompletion(input: {
     rootRun: ChatRun;
     childRun: ChatRun;
@@ -754,27 +781,72 @@ export class ChatRunnerService {
           step: toolSteps,
         });
 
-        const toolResult = await toolRegistry.execute(
+        const toolContext = {
+          database: this.database,
+          project_id: rootRun.project_id,
+          project_root: this.projectRoot(rootRun.project_id),
+          run_id: childRun.id,
+          agent_id: binding.agent.id,
+          signal,
+        };
+        let toolResult = await toolRegistry.execute(
           call.name,
           call.arguments,
           policy,
-          {
-            database: this.database,
-            project_id: rootRun.project_id,
-            project_root: this.projectRoot(rootRun.project_id),
-            run_id: childRun.id,
-            agent_id: binding.agent.id,
-            signal,
-          },
+          toolContext,
         );
 
-        const eventType = toolResult.approval_required ? 'tool.approval_required' : 'tool.completed';
+        if (toolResult.approval_required && toolResult.approval_id) {
+          this.states.upsert({
+            agent_id: binding.agent.id,
+            project_id: rootRun.project_id,
+            run_id: rootRun.id,
+            state: 'waiting',
+            activity: `Aguardando aprovação para ${call.name}`,
+            progress: null,
+          });
+          this.emit(rootRun, 'tool.approval_required', `${call.name} precisa de aprovação`, {
+            agent_id: binding.agent.id,
+            child_run_id: childRun.id,
+            tool_name: call.name,
+            tool_call_id: call.id,
+            approval_id: toolResult.approval_id,
+            audit_id: toolResult.audit_id,
+          }, 'warning');
+
+          const approvalStatus = await this.waitForToolApproval(toolResult.approval_id, signal);
+          if (approvalStatus === 'approved') {
+            this.emit(rootRun, 'tool.approved', `${call.name} foi aprovado`, {
+              agent_id: binding.agent.id,
+              child_run_id: childRun.id,
+              tool_name: call.name,
+              approval_id: toolResult.approval_id,
+            });
+          } else {
+            this.emit(rootRun, 'tool.denied', `${call.name} foi negado`, {
+              agent_id: binding.agent.id,
+              child_run_id: childRun.id,
+              tool_name: call.name,
+              approval_id: toolResult.approval_id,
+            }, 'warning');
+          }
+
+          toolResult = await toolRegistry.executeApproved(
+            call.name,
+            call.arguments,
+            policy,
+            toolContext,
+            toolResult.approval_id,
+            toolResult.audit_id,
+          );
+        }
+
         this.emit(
           rootRun,
-          eventType,
-          toolResult.approval_required
-            ? `${call.name} precisa de aprovação`
-            : `${binding.agent.name} concluiu ${call.name}`,
+          'tool.completed',
+          toolResult.ok
+            ? `${binding.agent.name} concluiu ${call.name}`
+            : `${call.name} não foi executado`,
           {
             agent_id: binding.agent.id,
             child_run_id: childRun.id,
@@ -782,10 +854,9 @@ export class ChatRunnerService {
             tool_call_id: call.id,
             ok: toolResult.ok,
             error: toolResult.error ?? null,
-            approval_id: toolResult.approval_id ?? null,
             audit_id: toolResult.audit_id,
           },
-          toolResult.ok ? 'info' : toolResult.approval_required ? 'warning' : 'error',
+          toolResult.ok ? 'info' : 'warning',
         );
 
         messages.push({
@@ -796,8 +867,6 @@ export class ChatRunnerService {
             ok: toolResult.ok,
             data: toolResult.data ?? null,
             error: toolResult.error ?? null,
-            approval_required: toolResult.approval_required ?? false,
-            approval_id: toolResult.approval_id ?? null,
           }),
         });
       }
