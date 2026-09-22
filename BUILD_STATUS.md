@@ -23,10 +23,10 @@
 | 11 | UI Final | DONE | SPA with workspace, tasks (run + live events polling), usage, provider settings, pt-BR, dark desktop theme, empty/loading/error states. |
 | 12 | Office View | DONE | CSS-only 2D office: 3 desks (Kimi/Claude/Codex) with idle/working/blocked states derived from tasks; click desk sets manual agent override. |
 | 13 | Release Gate | DONE | 83/83 tests, lint, client+server builds pass; Tauri v2 MSI built: `src-tauri/target/release/bundle/msi/Agent Office_0.1.0_x64_en-US.msi`; user README (README-USUARIO.md) written; provider setup via Settings view. |
-| 14 | Dogfooding | BLOCKED_REAL_VALIDATION | Requires real provider credentials (Claude Gateway key, KIMI_API_KEY) and Codex CLI login; blocked until user supplies them. |
+| 14 | Dogfooding | PARTIAL | Controlled E2E (dogfooding.test.ts) proves: routing (UI→kimi, auth→codex, Protected Mode manual-only), task execution with real local tools (write_file + run_command on disk), retry with diagnosis, handoff kimi→claude injected into next context pack, SQLite persistence of tasks/runs/events/memory/usage, restart with orphan-run recovery. Real-provider validation BLOCKED_REAL_VALIDATION: no KIMI_API_KEY, no Claude Gateway credential, no codex.exe on PATH (only WindowsApps stubs; auth.json exists). |
 
 ## Verified local checks
-- `npm test`: 17 files, 83 tests passing.
+- `npm test`: 18 files, 84 tests passing.
 - `npm run lint`: TypeScript no-emit check passing.
 - `npm run build`: client and server build passing.
 - Crash recovery test: a fresh SQLite connection marks an orphan run failed, blocks the task, clears the writer lock, and permits a subsequent successful run.
