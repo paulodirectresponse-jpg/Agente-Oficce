@@ -286,3 +286,55 @@ export interface AgentRelation {
   relation_type: string;
   priority: number;
 }
+
+
+export interface TeamPolicy {
+  allowed_tools: string[];
+  permissions: string[];
+  delegation_permissions: string[];
+  approval_mode: 'safe' | 'manual' | 'auto';
+  budget_defaults: Record<string, number>;
+  metadata: Record<string, unknown>;
+}
+
+export interface TeamMember {
+  team_id: string;
+  agent_id: string;
+  role_name: string;
+  priority: number;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+  name?: string;
+  slug?: string;
+  agent_enabled?: boolean;
+  provider_enabled?: boolean;
+  model_enabled?: boolean;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+  purpose: string;
+  type: 'permanent' | 'system';
+  lead_agent_id: string | null;
+  enabled: boolean;
+  max_parallelism: number;
+  max_delegation_depth: number;
+  allow_external_borrowing: boolean;
+  proposal_policy: 'manual' | 'approval_required' | 'disabled';
+  metadata: Record<string, unknown>;
+  current_version: number;
+  policy: TeamPolicy;
+  members: TeamMember[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamVersion {
+  id: string;
+  team_id: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  created_at: string;
+}

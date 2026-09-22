@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -200,4 +200,21 @@ export const api = {
     request<ActivityEventV2[]>(`/api/agent-office/v2/projects/${projectId}/activity`),
   listAgentStatesV2: (projectId: string) =>
     request<AgentState[]>(`/api/agent-office/v2/projects/${projectId}/agent-states`),
+
+  // V3.6 Teams + Subagents
+  listTeamsV3: () => request<Team[]>('/api/agent-office/v3/teams'),
+  createTeamV3: (input: Partial<Team> & { name: string; slug: string }) =>
+    request<Team>('/api/agent-office/v3/teams', { method: 'POST', body: JSON.stringify(input) }),
+  updateTeamV3: (teamId: string, patch: Partial<Team>) =>
+    request<Team>(`/api/agent-office/v3/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  disableTeamV3: (teamId: string) =>
+    request<Team>(`/api/agent-office/v3/teams/${teamId}`, { method: 'DELETE' }),
+  listTeamMembersV3: (teamId: string) =>
+    request<TeamMember[]>(`/api/agent-office/v3/teams/${teamId}/members`),
+  replaceTeamMembersV3: (teamId: string, members: Array<Pick<TeamMember, 'agent_id' | 'role_name' | 'priority' | 'enabled'>>) =>
+    request<Team>(`/api/agent-office/v3/teams/${teamId}/members`, { method: 'PUT', body: JSON.stringify({ members }) }),
+  listAgentTeamsV3: (agentId: string) =>
+    request<Team[]>(`/api/agent-office/v3/agents/${agentId}/teams`),
+  listTeamVersionsV3: (teamId: string) =>
+    request<TeamVersion[]>(`/api/agent-office/v3/teams/${teamId}/versions`),
 };

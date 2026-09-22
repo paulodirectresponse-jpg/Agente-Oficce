@@ -10,8 +10,8 @@ Este arquivo deve ser atualizado a cada bloco para permitir continuidade por qua
 | V3.3 Gap Analysis | DONE | PR #19 | — | 35783572521 | Cobertura determinística, inactive hints, set minimization e tool/capability gaps |
 | V3.4 Execution Graph | DONE | PR #20 | 11 | 35788214610 | DAG validado, scheduler paralelo, attempts/retries/timeouts, budgets, artifacts/work packets e resource locks |
 | V3.5 Durable Runs + Replanning | DONE | PR #21 | 12 | 35790857969 | Checkpoints, recovery conservador, durable approvals/commands e replanning versionado |
-| V3.6 Teams + Subagents | NOT STARTED | — | — | — | Desbloqueado por V3.4–V3.5 |
-| V3.7 Proposal Engine + Agent Factory | BLOCKED | — | — | — | Depende de V3.3 + V3.6 |
+| V3.6 Teams + Subagents | DONE | PR #22 (`v3/part9-teams-subagents`) | 13 | 35794200717 | 34 test files / 192 tests; Teams, dynamic runtime teams, snapshots, delegation, APIs/UI e full desktop/MSI gate verdes |
+| V3.7 Proposal Engine + Agent Factory | NOT STARTED / DESBLOQUEADO | — | — | — | V3.3 + V3.6 concluídos; próximo bloco |
 | V3.8 Evaluation + Learning | BLOCKED | — | — | — | Depende de execução/proposals |
 | V3.9 Dev Chat | BLOCKED | — | — | — | Contratos V3 precisam estar estáveis |
 | V3.10 Office V3 | BLOCKED | — | — | — | Depende de Teams/Event Bus |
@@ -38,14 +38,16 @@ Após gate verde:
 
 ## Current handoff
 
-Base de implementação antes da V3:
-- `main` contém Fases A–H.
-- Fase H gate: `35762755020`.
-- 26 test files / 123 tests no gate H.
-- PR H: #11.
-- merge commit H: `039093a0df2af385512270a88628900c2d97cec9`.
+V3.6 — Teams + Subagents:
+- status: DONE;
+- branch: `v3/part9-teams-subagents`;
+- PR: #22;
+- migration: 13;
+- gate funcional validado: `35794200717`;
+- 34 test files / 192 tests;
+- Tauri build, bundled backend smoke, installed desktop lifecycle e MSI gate: PASS.
 
 Próxima ação:
-1. iniciar V3.0 em branch própria;
-2. rodar baseline de testes;
-3. implementar hardening conforme `01_FOUNDATION_HARDENING.md`.
+1. iniciar V3.7 — Proposal Engine + Agent Factory em branch própria;
+2. partir da `main` após o merge do PR #22;
+3. não reabrir o escopo de V3.6 sem regressão comprovada.
