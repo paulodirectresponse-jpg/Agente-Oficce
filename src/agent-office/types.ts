@@ -229,3 +229,9 @@ export interface ChatStreamEnvelope {
   data: Record<string, unknown>;
   timestamp: string;
 }
+
+
+export interface ProjectRootSetting {
+  path: string;
+  configured: boolean;
+}

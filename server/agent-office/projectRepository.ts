@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import type { Database } from 'better-sqlite3';
+import { getProjectRootSetting } from './appSettings.js';
 
 export interface AgentOfficeProject {
   id: string;
@@ -20,6 +21,19 @@ export interface CreateProjectInput {
 }
 
 function now(): string { return new Date().toISOString(); }
+
+function safeFolderName(name: string): string {
+  const trimmed = name.trim();
+  const cleaned = trimmed
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/[. ]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) throw new Error('PROJECT_NAME_INVALID');
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(cleaned)) throw new Error('PROJECT_NAME_INVALID');
+  return cleaned;
+}
+
 function id(): string { return crypto.randomUUID(); }
 
 function detectGit(rootPath: string): { enabled: boolean; branch: string | null } {
@@ -37,6 +51,30 @@ function normalizeProject(row: any): AgentOfficeProject {
 
 export class ProjectRepository {
   constructor(private readonly database: Database) {}
+
+  createInDefaultRoot(name: string): AgentOfficeProject {
+    const setting = getProjectRootSetting(this.database);
+    if (!setting.configured) throw new Error('PROJECT_ROOT_NOT_CONFIGURED');
+
+    const projectName = String(name || '').trim();
+    if (!projectName) throw new Error('PROJECT_NAME_REQUIRED');
+    const folderName = safeFolderName(projectName);
+    const root = path.resolve(setting.path);
+    const projectPath = path.resolve(root, folderName);
+    const relative = path.relative(root, projectPath);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error('PROJECT_NAME_INVALID');
+    }
+    if (fs.existsSync(projectPath)) throw new Error('PROJECT_FOLDER_ALREADY_EXISTS');
+
+    fs.mkdirSync(projectPath, { recursive: false });
+    try {
+      return this.create({ name: projectName, root_path: projectPath });
+    } catch (error) {
+      try { fs.rmdirSync(projectPath); } catch {}
+      throw error;
+    }
+  }
 
   create(input: CreateProjectInput): AgentOfficeProject {
     const rootPath = path.resolve(input.root_path);
