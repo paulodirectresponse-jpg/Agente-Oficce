@@ -4,7 +4,7 @@ Este arquivo deve ser atualizado a cada bloco para permitir continuidade por qua
 
 | Etapa | Status | Branch/PR | Migration | Gate | Observações |
 |---|---|---|---|---|---|
-| V3.0 Foundation Hardening | NOT STARTED | — | — | — | Próxima etapa oficial |
+| V3.0 Foundation Hardening | IN PROGRESS | `feat/v3-foundation-hardening` | — | baseline verde via `35767877525` | Branch criada após merge do handbook V3 |
 | V3.1 Capability Core | BLOCKED | — | — | — | Depende de V3.0 |
 | V3.2 Orchestrator Gateway | BLOCKED | — | — | — | Depende de V3.0–V3.1 |
 | V3.3 Gap Analysis | BLOCKED | — | — | — | Depende de V3.1–V3.2 |
@@ -46,6 +46,6 @@ Base de implementação antes da V3:
 - merge commit H: `039093a0df2af385512270a88628900c2d97cec9`.
 
 Próxima ação:
-1. iniciar V3.0 em branch própria;
-2. rodar baseline de testes;
-3. implementar hardening conforme `01_FOUNDATION_HARDENING.md`.
+1. implementar V3.0 conforme `01_FOUNDATION_HARDENING.md`;
+2. adicionar testes adversariais e migrations sem quebrar compatibilidade;
+3. executar gate completo antes de marcar DONE.
