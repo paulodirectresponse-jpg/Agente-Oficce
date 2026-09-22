@@ -4,6 +4,7 @@ import { getAgentOfficeConfig } from '../agent-office/config.js';
 import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
 import { ChatRunnerService } from '../agent-office/chatRunner.js';
 import { chatEventHub, type ChatStreamEnvelope } from '../agent-office/chatEventHub.js';
+import { chatRunControls } from '../agent-office/runtimeControls.js';
 import { ChatRunRepository } from '../agent-office/v2DataModel.js';
 
 export const chatRouter = Router();
@@ -46,9 +47,13 @@ chatRouter.post('/runs', (request, response) => {
     });
 
     const receipt = service.receipt(prepared);
-    void service.execute(prepared)
+    const signal = chatRunControls.register(prepared.run.id);
+    void service.execute(prepared, signal)
       .catch(() => undefined)
-      .finally(() => database.connection.close());
+      .finally(() => {
+        chatRunControls.finish(prepared.run.id);
+        database.connection.close();
+      });
 
     response.status(202).json({ ok: true, data: receipt });
   } catch (error) {
@@ -61,6 +66,37 @@ chatRouter.post('/runs', (request, response) => {
         message: error instanceof Error ? error.message : 'Unable to start chat run.',
       },
     });
+  }
+});
+
+chatRouter.post('/runs/:runId/cancel', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const runs = new ChatRunRepository(database.connection);
+    const run = runs.get(request.params.runId);
+    if (!run) {
+      response.status(404).json({ ok: false, error: { code: 'CHAT_RUN_NOT_FOUND', message: 'Chat run not found.' } });
+      return;
+    }
+    if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+      response.status(409).json({ ok: false, error: { code: 'CHAT_RUN_TERMINAL', message: 'Chat run is already terminal.' } });
+      return;
+    }
+
+    const active = chatRunControls.cancel(run.id);
+    if (!active) {
+      runs.update(run.id, {
+        status: 'cancelled',
+        ended_at: new Date().toISOString(),
+        error: null,
+        metadata: { ...run.metadata, cancelled_without_active_controller: true },
+      });
+      chatEventHub.publish(run.id, 'run.cancelled', { persisted: true, reason: 'cancel_requested_after_runtime_loss' });
+    }
+
+    response.json({ ok: true, data: { run_id: run.id, cancel_requested: true, active } });
+  } finally {
+    database.connection.close();
   }
 });
 
