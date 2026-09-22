@@ -513,6 +513,38 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               )}
             </div>
 
+            <div className="agent-advanced-field agent-tool-advanced">
+              <div className="manager-form-grid">
+                <div className="manager-field">
+                  <label>Política de aprovação</label>
+                  <select
+                    value={toolPolicy.approval_mode}
+                    onChange={(event) => setToolPolicy((current) => ({
+                      ...current,
+                      approval_mode: event.target.value as 'safe' | 'manual' | 'auto',
+                    }))}
+                  >
+                    <option value="safe">Seguro · comandos sensíveis pedem aprovação</option>
+                    <option value="manual">Manual · escrita/execução pedem aprovação</option>
+                    <option value="auto">Automático · tudo permitido pela lista executa</option>
+                  </select>
+                </div>
+                <div className="manager-field">
+                  <label>Máximo de passos com ferramentas</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={40}
+                    value={toolPolicy.max_tool_steps}
+                    onChange={(event) => setToolPolicy((current) => ({
+                      ...current,
+                      max_tool_steps: Math.max(1, Math.min(40, Number(event.target.value) || 12)),
+                    }))}
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="agent-advanced-field agent-hierarchy-card">
               <div className="binding-title">
                 <div>
