@@ -3,16 +3,16 @@
 ## Checkpoint atual
 - Atualizado: 2026-09-22
 - Branch estável: `main`
-- HEAD após a Fase A: `4f075470`
+- HEAD funcional após a Fase B: `a32893b`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
 ## V2 — Experience Layer + Universal API
 
 | Fase | Escopo | Status | Evidência |
 |---|---|---|---|
-| A | Stabilize Desktop | DONE | Windows gate verde: 84/84 testes, typecheck, build client+server, Tauri release, backend runtime direto, instalação MSI, startup do app instalado, SQLite, encerramento do backend e upload do MSI. |
-| B | Data Model V2 | NEXT | Providers, provider_models, agents dinâmicos, chat_runs e activity_events. |
-| C | Universal Provider Engine | PENDING | ProtocolDriver/AuthDriver/HttpTransport, presets, model discovery e APIs customizadas. |
+| A | Stabilize Desktop | DONE | Runtime desktop, MSI, backend bundled, SQLite e lifecycle validados no Windows. |
+| B | Data Model V2 | DONE | Migration 4 não destrutiva, providers dinâmicos, múltiplos modelos, agentes dinâmicos, chat_runs, activity_events e agent_states; 88/88 testes + gate Windows verde. |
+| C | Universal Provider Engine | NEXT | ProtocolDriver/AuthDriver/HttpTransport, presets, discovery de modelos e APIs customizadas. |
 | D | Chat Runner API-only | PENDING | Chat único, SSE/streaming, single/auto/team, sem ferramentas. |
 | E | Experience V2 | PENDING | Office-first, personagens 2D, estados ao vivo, chat central, activity rail e handoffs visuais. |
 | F | Provider/Agent Manager | PENDING | UI universal para APIs, vários modelos e agentes configuráveis. |
@@ -20,66 +20,182 @@
 | H | Tools | BLOCKED_BY_SCOPE | Só inicia após aprovação explícita da versão API-only. |
 
 ## Fase A — concluída
+- Vite ignora `src-tauri/target/**` e não quebra com `EBUSY`.
+- `tauri dev` sobe frontend + backend automaticamente.
+- MSI inclui runtime Node, backend e dependências.
+- App instalado inicia o backend em loopback/porta dinâmica.
+- Dados e logs ficam no app data do usuário.
+- Fechar o app encerra o backend.
+- MSI foi instalado e executado em Windows real no CI.
 
-Entregue:
-- Vite ignora `src-tauri/target/**`, eliminando o crash `EBUSY` do watcher no Windows.
-- `tauri dev` inicia o stack de desenvolvimento automaticamente via `beforeDevCommand`.
-- O servidor local usa loopback, não exposição de rede por padrão.
-- O build de servidor agora emite JavaScript de produção em `dist/server`.
-- O MSI inclui:
-  - frontend Tauri;
-  - backend compilado;
-  - dependências Node de produção;
-  - runtime Node compatível com `better-sqlite3`.
-- No app instalado, o Tauri encontra o runtime relativo ao próprio executável, escolhe uma porta loopback livre e inicia o backend automaticamente.
-- O frontend resolve dinamicamente a URL do backend pelo runtime Tauri.
-- Banco e logs ficam no diretório de dados do aplicativo do usuário, não em `Program Files`.
-- `backend.log` registra diagnóstico local de startup.
-- Ao fechar o Agent Office, o processo do backend também é encerrado.
-- Indicador de runtime local foi adicionado à interface.
-- MSI foi instalado e executado em um runner Windows real como parte do gate.
+Gate de referência da Fase A:
+- workflow run `35726810443`
+- 84/84 testes
+- artifact `10694365881`
 
-## Gate verificado no GitHub Actions
+## Fase B — concluída
+
+### Schema V2
+Migration `4` adiciona sem destruir o legado:
+- `providers`
+- `provider_models`
+- `agents`
+- `chat_runs`
+- `activity_events`
+- `agent_states`
+
+### Providers
+Provider agora é conexão, não agente.
+Suporta:
+- id/nome independentes;
+- `protocol_driver`;
+- `auth_driver`;
+- `base_url`;
+- secret por referência;
+- headers/query estruturados;
+- enabled;
+- health status.
+
+### Vários modelos por provider
+`provider_models` suporta:
+- model id externo;
+- nome amigável;
+- capabilities;
+- context window;
+- max output;
+- pricing metadata;
+- enabled;
+- modelo default;
+- múltiplos modelos por provider.
+
+Trocar o default desmarca automaticamente o default anterior.
+
+### Agentes dinâmicos
+`agents` não depende mais estruturalmente do union `kimi | claude | codex`.
+Cada agente pode ter:
+- nome;
+- slug;
+- função;
+- descrição;
+- avatar;
+- provider;
+- modelo;
+- system prompt;
+- ordem;
+- idle timeout;
+- metadata;
+- enabled.
+
+Binding provider/model é validado para impedir modelo de outro provider.
+
+Os agentes legados Kimi/Claude/Codex são preservados como seeds de compatibilidade, não como limite arquitetural.
+
+### Migração do legado
+Configs V1 existentes são migradas automaticamente:
+- `provider_configs` -> `providers`;
+- modelo legado -> `provider_models`;
+- secret continua somente como `secret_ref`;
+- projetos/conversas/tasks/memória não são apagados.
+
+Há teste que constrói um banco no schema V3, insere dados legados e abre no schema V4 para provar a migração não destrutiva.
+
+### Runs e atividade
+`chat_runs` guarda:
+- projeto/conversa;
+- agente/provider/modelo;
+- single/team/review;
+- parent run;
+- status;
+- tokens;
+- erro;
+- metadata.
+
+`activity_events` vira a base da futura timeline visual.
+
+`agent_states` guarda o estado atual por agente/projeto:
+- run;
+- state;
+- activity;
+- progress;
+- updated_at.
+
+### Repositories V2
+Criados repositories completos para:
+- providers;
+- modelos;
+- agentes;
+- chat runs;
+- activity events;
+- agent states.
+
+CRUD e regras de integridade cobertos por testes.
+
+### API V2
+Namespace:
+`/api/agent-office/v2`
+
+Já existem endpoints para:
+- providers;
+- modelos;
+- agentes;
+- chat runs;
+- activity;
+- agent states.
+
+A API V1 continua intacta durante a migração.
+
+O manual agent override legado agora aceita qualquer adapter registrado, em vez de validar apenas três nomes fixos.
+
+### Frontend foundation
+Tipos e client methods V2 já existem para:
+- providers;
+- provider models;
+- agents;
+- chat runs;
+- activity;
+- agent states.
+
+Ainda não há a UI final desses dados; isso entra nas fases E/F.
+
+## Gate verificado da Fase B
 
 Workflow: `Phase A Desktop Gate`
-Run: `35726810443`
+Run: `35730087256`
 
 Passou:
 - `npm ci`
-- `npm test` — 18 arquivos / 84 testes
+- `npm test` — 19 arquivos / 88 testes
 - `npm run lint`
 - `npm run build`
 - Rust/Tauri build
 - smoke do backend empacotado
-- instalação silenciosa do MSI
-- abertura do Agent Office instalado
-- backend bundled ativo
-- inicialização SQLite
-- encerramento do desktop + backend sem órfão
-- verificação do MSI
+- instalação MSI
+- startup do app instalado
+- SQLite
+- encerramento sem backend órfão
+- MSI validado
 - upload do artefato
 
 Artefato:
 - nome: `agent-office-phase-a-msi`
-- artifact id: `10694365881`
-- tamanho do ZIP: 48.418.773 bytes
-- SHA-256 do artefato: `2f970606b68550042e017f9f733416a5c44e4f86fdb1c44e2a7934fb198d8f2b`
+- artifact id: `10694604667`
+- tamanho ZIP: 48.431.752 bytes
+- SHA-256: `597396637f759feffe96734d7d752e625d89d72fb81dbbb6df87592854e3d318`
 
 ## V1 legado preservado
-
-A infraestrutura existente continua disponível durante a migração V2:
+Continuam disponíveis durante a migração:
 - SQLite/WAL e projetos;
 - conversa persistente;
 - memória/FTS/handoffs;
 - task orchestration/retry/cancel;
 - adapters Kimi, Claude/Gateway e Codex;
-- router e Protected Mode;
+- router/Protected Mode;
 - usage tracking;
 - local tools e testes existentes.
 
-A V2 não considera a UI antiga de Office como experiência final. Ela será substituída progressivamente nas fases B–F.
+Tools permanecem fora da experiência V2 API-only até a Fase H.
 
 ## Próximo passo
-Fase B — Data Model V2.
+Fase C — Universal Provider Engine.
 
-Objetivo imediato: remover o acoplamento estrutural a `kimi | claude | codex` e criar providers, múltiplos modelos por provider, agentes dinâmicos, chat runs e activity events com migração não destrutiva.
+Objetivo: fazer o Agent Office conversar com famílias diferentes de APIs através de drivers, permitir discovery/manual models e suportar providers novos sem acoplar o core a marcas específicas.
