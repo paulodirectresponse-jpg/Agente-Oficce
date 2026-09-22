@@ -637,8 +637,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       );
       CREATE INDEX IF NOT EXISTS idx_execution_commands_plan_status ON execution_commands(plan_id,status,created_at);
     `,
-  }
-
+  },
   {
     version: 13,
     sql: `
