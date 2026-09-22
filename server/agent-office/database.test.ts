@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { closeAgentOfficeDatabase, openAgentOfficeDatabase } from './database.js';
+import Database from 'better-sqlite3';
+import { agentOfficeMigrations, closeAgentOfficeDatabase, openAgentOfficeDatabase } from './database.js';
 
 describe('Agent Office local database', () => {
   it('creates migrations and enables WAL in a configurable directory', () => {
@@ -14,6 +15,30 @@ describe('Agent Office local database', () => {
     expect(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'teams'").get()).toEqual({ name: 'teams' });
     expect(database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     closeAgentOfficeDatabase(database);
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+
+
+  it('upgrades a migration-12 database to migration 13 without losing existing rows', () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-upgrade-'));
+    const databasePath = path.join(dataDir, 'office.sqlite');
+    const legacy = new Database(databasePath);
+    legacy.exec('PRAGMA foreign_keys = ON;');
+    legacy.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);');
+    for (const migration of agentOfficeMigrations.filter((item) => item.version <= 12)) {
+      legacy.exec(migration.sql);
+      legacy.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').run(migration.version, new Date().toISOString());
+    }
+    const now = new Date().toISOString();
+    legacy.prepare(`INSERT INTO projects(id,name,root_path,created_at,updated_at) VALUES('keep','Keep',?,?,?)`).run(dataDir, now, now);
+    legacy.close();
+
+    const upgraded = openAgentOfficeDatabase({ dataDir, databasePath, logLevel: 'silent' });
+    expect(upgraded.connection.prepare('SELECT name FROM projects WHERE id=?').get('keep')).toEqual({ name: 'Keep' });
+    expect(upgraded.connection.prepare('SELECT MAX(version) version FROM schema_migrations').get()).toEqual({ version: 13 });
+    expect(upgraded.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_delegations'").get()).toEqual({ name: 'runtime_delegations' });
+    expect(upgraded.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    upgraded.connection.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
