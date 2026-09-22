@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -171,6 +171,13 @@ export const api = {
   },
   listToolDefinitionsV2: () =>
     request<ToolDefinitionV2[]>('/api/agent-office/v2/tools/definitions'),
+  getRuntimeToolHealthV2: (projectRoot?: string) =>
+    request<RuntimeToolHealth[]>('/api/agent-office/v2/tools/health' + (projectRoot ? `?project_root=${encodeURIComponent(projectRoot)}` : '')),
+  testRuntimeToolHealthV2: (projectRoot?: string) =>
+    request<RuntimeToolHealth[]>('/api/agent-office/v2/tools/health/test', {
+      method: 'POST',
+      body: JSON.stringify(projectRoot ? { project_root: projectRoot } : {}),
+    }),
   getAgentToolPolicyV2: (agentId: string) =>
     request<AgentToolPolicy>(`/api/agent-office/v2/agents/${agentId}/tool-policy`),
   saveAgentToolPolicyV2: (agentId: string, policy: Omit<AgentToolPolicy, 'agent_id' | 'updated_at'>) =>
