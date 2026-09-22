@@ -37,7 +37,7 @@ export function recoverInterruptedChatRuns(database: Database): RecoveryResult {
       const staleApprovals = database.prepare(`
         UPDATE tool_approvals
         SET status = 'denied', resolved_at = ?
-        WHERE run_id = ? AND status IN ('pending', 'approved')
+        WHERE run_id = ? AND status IN ('pending', 'approved') AND execution_plan_id IS NULL
       `).run(recoveredAt, run.id);
 
       database.prepare(`
