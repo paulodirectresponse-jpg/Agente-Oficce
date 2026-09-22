@@ -3,7 +3,7 @@
 ## Checkpoint atual
 - Atualizado: 2026-09-22
 - Branch estável: `main`
-- HEAD funcional após a Fase D: `df5f4802`
+- HEAD funcional após a Fase E: `fc29db57`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
 ## V2 — Experience Layer + Universal API
@@ -14,8 +14,8 @@
 | B | Data Model V2 | DONE | Providers dinâmicos, múltiplos modelos, agentes dinâmicos, chat_runs, activity_events e agent_states; migração não destrutiva. |
 | C | Universal Provider Engine | DONE | OpenAI Chat/Responses, Anthropic, Gemini, Generic JSON/SSE/NDJSON, auth drivers, presets, discovery e health. |
 | D | Chat Runner API-only | DONE | Single/auto/team, contexto/memória, SSE, fallback sem streaming, handoffs, estados/activity, usage e persistência; 104/104 testes + gate Windows verde. |
-| E | Experience V2 | NEXT | Office-first, personagens 2D, estados ao vivo, chat central, activity rail e handoffs visuais. |
-| F | Provider/Agent Manager | PENDING | UI universal para APIs, vários modelos e agentes configuráveis. |
+| E | Experience V2 | DONE | Office-first baseado no visual aprovado, agentes 2D, estados ao vivo, chat compartilhado, Event Stream e handoffs visuais; desktop gate verde. |
+| F | Provider/Agent Manager | NEXT | UI universal para APIs, vários modelos e agentes configuráveis. |
 | G | Hardening | PENDING | Secrets, retries, timeout, cancelamento, rate limits, usage, recovery e release gate final. |
 | H | Tools | BLOCKED_BY_SCOPE | Só inicia após aprovação explícita da versão API-only. |
 
@@ -253,6 +253,72 @@ Artefato:
 - tamanho ZIP: 48.457.936 bytes
 - SHA-256: `bd6022080ffe18cf88168518f0c971c79d7692157c4704f03c920bdcdf949aa5`
 
+## Fase E — concluída
+
+### Experience V2
+A home do Agent Office agora é o escritório, seguindo a direção visual aprovada:
+- sidebar escura com projeto, Office, Chat, Agentes, Providers, Projetos, Uso e Configurações;
+- cena central de escritório 2D com três estações em destaque;
+- cards flutuantes de agente com estado, atividade e progresso;
+- chat compartilhado integrado ao Chat Runner da Fase D;
+- seletor Auto / Team / agente específico;
+- Event Stream lateral em tempo real;
+- handoffs visuais;
+- providers e agentes carregados dinamicamente;
+- estados offline/idle/resting/thinking/planning/responding/reviewing/waiting/blocked/error;
+- layout responsivo;
+- experiência API-only mantida, sem habilitar tools.
+
+### Comportamento ao vivo
+A interface consome os eventos SSE da Fase D e reflete:
+- run criado/concluído/falhou;
+- mudança de estado do agente;
+- texto em streaming;
+- fallback sem streaming;
+- handoff;
+- usage.
+
+O chat persiste a conversa, sincroniza o histórico e mostra a resposta parcial enquanto o modelo responde.
+
+### Navegação
+- Office é a tela padrão.
+- Chat reutiliza a mesma experiência com maior ênfase na conversa.
+- Agentes e Providers possuem visão V2 de leitura.
+- Projetos, Uso e Configurações legados seguem acessíveis dentro do novo shell.
+- A edição completa de providers/agentes fica reservada para a Fase F.
+
+### Desktop gate da Fase E
+Workflow: `Agent Office Desktop Gate`
+Run: `35744561214`
+
+Passou:
+- `npm ci`
+- `npm test` — 22 arquivos / 104 testes
+- `npm run lint`
+- `npm run build`
+- Rust/Tauri build
+- smoke direto do backend empacotado
+- instalação real do MSI
+- abertura do aplicativo instalado
+- backend instalado ativo em loopback
+- health request real contra o backend instalado
+- inicialização do SQLite
+- encerramento do desktop + backend sem órfão
+- validação e upload do MSI
+
+Observação de validação:
+- o CI valida build/runtime/lifecycle do desktop instalado; inspeção visual pixel-a-pixel continua sendo uma validação humana no seu Windows.
+
+Artefato final da Fase E:
+- nome: `agent-office-desktop-msi`
+- artifact id: `10702882653`
+- tamanho ZIP: 48.456.066 bytes
+- SHA-256: `080a0ce60b6d717c568a4d280f4426f3e9abefe31d0bcedc14c260366263468d`
+
+PR da Fase E:
+- `#5`
+- merge commit: `fc29db57dd14b0e4476a882b87a62e23a1abfc3c`
+
 ## Compatibilidade V1
 Continuam preservados durante a migração:
 - projetos;
@@ -267,6 +333,6 @@ Continuam preservados durante a migração:
 As tools legadas não são expostas pelo Chat Runner V2 e permanecem fora do escopo até a Fase H.
 
 ## Próximo passo
-Fase E — Experience V2.
+Fase F — Provider/Agent Manager.
 
-Objetivo: substituir a interface administrativa atual por uma experiência Office-first com personagens 2D, chat central real usando o Chat Runner da Fase D, estados ao vivo, timeline de activity e handoffs visuais.
+Objetivo: transformar as fundações dinâmicas das Fases B/C em uma interface completa para cadastrar providers, secrets, descobrir/ativar modelos, criar agentes, escolher modelo/provider, avatar, função, system prompt e ordem no escritório.
