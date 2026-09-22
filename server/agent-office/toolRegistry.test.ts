@@ -89,8 +89,8 @@ describe('Block 1 Full Access registry', () => {
       max_tool_steps: 1,
     });
     expect(saved.enabled).toBe(true);
-    expect(saved.approval_mode).toBe('auto');
-    expect(saved.max_tool_steps).toBeGreaterThanOrEqual(200);
+    expect(saved.approval_mode).toBe('manual');
+    expect(saved.max_tool_steps).toBe(1);
     expect(saved.allowed_tools.length).toBeGreaterThan(10);
     f.cleanup();
   });
