@@ -10,7 +10,7 @@ const MAX_OUTPUT_BYTES = 128 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type LocalToolName = 'list_files' | 'read_file' | 'search_files' | 'write_file' | 'apply_patch' | 'git_status' | 'git_diff' | 'run_command' | 'run_tests';
-export interface LocalToolContext { projectRoot: string; approvedWritePaths?: string[]; timeoutMs?: number; }
+export interface LocalToolContext { projectRoot: string; approvedWritePaths?: string[]; timeoutMs?: number; signal?: AbortSignal; }
 export interface LocalToolResult { ok: boolean; data?: Record<string, unknown>; error?: string; approval_required?: boolean; }
 
 function bounded(value: string): string { return value.length > MAX_OUTPUT_BYTES ? `${value.slice(0, MAX_OUTPUT_BYTES)}\n[output truncated]` : value; }
@@ -54,9 +54,16 @@ function commandParts(command: string | string[]): { executable: string; args: s
 async function runAllowed(context: LocalToolContext, command: string | string[]): Promise<LocalToolResult> {
   try {
     const { executable, args } = commandParts(command);
-    const result = await execFileAsync(executable, args, { cwd: canonicalRoot(context.projectRoot), timeout: context.timeoutMs ?? DEFAULT_TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true });
+    const result = await execFileAsync(executable, args, {
+      cwd: canonicalRoot(context.projectRoot),
+      timeout: context.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      maxBuffer: MAX_OUTPUT_BYTES,
+      windowsHide: true,
+      signal: context.signal,
+    });
     return { ok: true, data: { stdout: bounded(result.stdout), stderr: bounded(result.stderr), executable, args } };
   } catch (error: any) {
+    if (context.signal?.aborted || error?.name === 'AbortError') return { ok: false, error: 'TOOL_RUN_CANCELLED' };
     if (error?.killed || error?.code === 'ETIMEDOUT') return { ok: false, error: 'COMMAND_TIMEOUT' };
     return { ok: false, error: bounded(error?.stderr || error?.message || 'COMMAND_FAILED') };
   }
