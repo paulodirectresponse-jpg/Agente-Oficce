@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -51,8 +51,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   health: () => request<{ service: string; storage: string }>('/api/agent-office/health'),
   listProjects: () => request<Project[]>('/api/agent-office/projects'),
-  createProject: (input: { name: string; root_path: string }) =>
+  createProject: (input: { name: string; root_path?: string }) =>
     request<Project>('/api/agent-office/projects', { method: 'POST', body: JSON.stringify(input) }),
+  getProjectRootSetting: () =>
+    request<ProjectRootSetting>('/api/agent-office/settings/project-root'),
+  saveProjectRootSetting: (path: string) =>
+    request<ProjectRootSetting>('/api/agent-office/settings/project-root', {
+      method: 'PUT',
+      body: JSON.stringify({ path }),
+    }),
   getConversation: (projectId: string) =>
     request<Conversation>(`/api/agent-office/projects/${projectId}/conversation`),
   listTasks: (projectId: string) => request<Task[]>(`/api/agent-office/projects/${projectId}/tasks`),
