@@ -14,8 +14,13 @@ export interface Provider {
   secret_ref: string | null;
   headers: Record<string, string>;
   query: Record<string, string>;
+  auth_config: Record<string, unknown>;
+  protocol_config: Record<string, unknown>;
+  timeout_ms: number;
   enabled: boolean;
   health_status: string;
+  last_health_at: string | null;
+  last_health_error: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -128,8 +133,13 @@ function normalizeProvider(row: any): Provider {
     secret_ref: row.secret_ref ?? null,
     headers: parseJson(row.headers_json, {}),
     query: parseJson(row.query_json, {}),
+    auth_config: parseJson(row.auth_config_json, {}),
+    protocol_config: parseJson(row.protocol_config_json, {}),
+    timeout_ms: Number(row.timeout_ms ?? 60000),
     enabled: Boolean(row.enabled),
     health_status: row.health_status,
+    last_health_at: row.last_health_at ?? null,
+    last_health_error: row.last_health_error ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -234,6 +244,9 @@ export class ProviderRepositoryV2 {
     secret_ref?: string | null;
     headers?: Record<string, string>;
     query?: Record<string, string>;
+    auth_config?: Record<string, unknown>;
+    protocol_config?: Record<string, unknown>;
+    timeout_ms?: number;
     enabled?: boolean;
     health_status?: HealthStatus;
   }): Provider {
@@ -242,8 +255,9 @@ export class ProviderRepositoryV2 {
     this.database.prepare(`
       INSERT INTO providers (
         id, name, protocol_driver, base_url, auth_driver, secret_ref,
-        headers_json, query_json, enabled, health_status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        headers_json, query_json, auth_config_json, protocol_config_json, timeout_ms,
+        enabled, health_status, last_health_at, last_health_error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       providerId,
       input.name.trim(),
@@ -253,8 +267,13 @@ export class ProviderRepositoryV2 {
       input.secret_ref ?? null,
       JSON.stringify(input.headers ?? {}),
       JSON.stringify(input.query ?? {}),
+      JSON.stringify(input.auth_config ?? {}),
+      JSON.stringify(input.protocol_config ?? {}),
+      input.timeout_ms && input.timeout_ms > 0 ? input.timeout_ms : 60000,
       input.enabled === false ? 0 : 1,
       input.health_status ?? 'unknown',
+      null,
+      null,
       timestamp,
       timestamp,
     );
@@ -279,12 +298,16 @@ export class ProviderRepositoryV2 {
       ...patch,
       headers: patch.headers ?? current.headers,
       query: patch.query ?? current.query,
+      auth_config: patch.auth_config ?? current.auth_config,
+      protocol_config: patch.protocol_config ?? current.protocol_config,
       updated_at: updatedAt,
     };
     this.database.prepare(`
       UPDATE providers SET
         name = ?, protocol_driver = ?, base_url = ?, auth_driver = ?, secret_ref = ?,
-        headers_json = ?, query_json = ?, enabled = ?, health_status = ?, updated_at = ?
+        headers_json = ?, query_json = ?, auth_config_json = ?, protocol_config_json = ?,
+        timeout_ms = ?, enabled = ?, health_status = ?, last_health_at = ?,
+        last_health_error = ?, updated_at = ?
       WHERE id = ?
     `).run(
       next.name,
@@ -294,8 +317,13 @@ export class ProviderRepositoryV2 {
       next.secret_ref,
       JSON.stringify(next.headers),
       JSON.stringify(next.query),
+      JSON.stringify(next.auth_config),
+      JSON.stringify(next.protocol_config),
+      next.timeout_ms,
       next.enabled ? 1 : 0,
       next.health_status,
+      next.last_health_at,
+      next.last_health_error,
       updatedAt,
       providerId,
     );
