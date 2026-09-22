@@ -1,0 +1,3 @@
+import{Router}from'express';import{openAgentOfficeDatabase}from'../agent-office/database.js';import{GapAnalysisService}from'../agent-office/gapAnalysis.js';
+export const v3GapAnalysisRouter=Router();
+v3GapAnalysisRouter.post('/gap-analysis',(req,res)=>{const db=openAgentOfficeDatabase();try{const required=Array.isArray(req.body?.required)?req.body.required:[],tools=Array.isArray(req.body?.required_tools)?req.body.required_tools.map(String):[];const data=new GapAnalysisService(db.connection).analyze(required,tools);res.json({ok:true,data})}catch(e){const code=e instanceof Error&&/^[A-Z0-9_]+$/.test(e.message)?e.message:'GAP_ANALYSIS_FAILED';res.status(code.endsWith('NOT_FOUND')?404:400).json({ok:false,error:{code,message:code}})}finally{db.connection.close()}});
