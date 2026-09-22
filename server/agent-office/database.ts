@@ -352,6 +352,69 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       ALTER TABLE providers ADD COLUMN last_health_error TEXT;
     `,
   },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE IF NOT EXISTS tool_policies (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+        mode TEXT NOT NULL DEFAULT 'approval' CHECK(mode IN ('approval', 'trusted', 'read_only')),
+        allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+        command_allowlist_json TEXT NOT NULL DEFAULT '["git","npm","node"]',
+        max_tool_steps INTEGER NOT NULL DEFAULT 20,
+        timeout_ms INTEGER NOT NULL DEFAULT 30000,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS tool_approvals (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE CASCADE,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        tool_id TEXT NOT NULL,
+        risk TEXT NOT NULL,
+        input_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'denied', 'expired')),
+        requested_at TEXT NOT NULL,
+        resolved_at TEXT,
+        resolved_by TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS tool_audit_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE CASCADE,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        tool_id TEXT NOT NULL,
+        risk TEXT NOT NULL,
+        status TEXT NOT NULL,
+        input_json TEXT NOT NULL DEFAULT '{}',
+        result_json TEXT NOT NULL DEFAULT '{}',
+        error_text TEXT,
+        started_at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tool_approvals_project_status
+        ON tool_approvals(project_id, status, requested_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tool_approvals_run
+        ON tool_approvals(run_id, requested_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tool_audit_project_started
+        ON tool_audit_events(project_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tool_audit_run
+        ON tool_audit_events(run_id, started_at);
+
+      INSERT OR IGNORE INTO tool_policies (
+        project_id, enabled, mode, allowed_tools_json, command_allowlist_json,
+        max_tool_steps, timeout_ms, updated_at
+      )
+      SELECT id, 0, 'approval', '[]', '["git","npm","node"]', 20, 30000, CURRENT_TIMESTAMP
+      FROM projects;
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {
