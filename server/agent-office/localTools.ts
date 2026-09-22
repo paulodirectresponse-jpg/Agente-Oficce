@@ -117,10 +117,14 @@ function parseLegacyCommand(command: string | string[]): string[] {
 
 function validateGitArgs(args: string[]): void {
   const sub = args[0]?.toLowerCase();
+  const lowered = args.map(arg => arg.toLowerCase());
+  const destructive =
+    (sub === 'reset' && lowered.includes('--hard'))
+    || (sub === 'clean' && lowered.some(arg => arg === '-fd' || arg === '-df' || arg === '-fx' || arg === '-xdf'))
+    || (sub === 'push' && lowered.some(arg => arg === '--force' || arg === '-f' || arg === '--force-with-lease'))
+    || lowered.includes('--delete');
+  if (destructive) throw new Error('DESTRUCTIVE_COMMAND_DENIED');
   if (!['status', 'diff'].includes(sub)) throw new Error('COMMAND_NOT_ALLOWED');
-  if (args.some(arg => ['--force', '-f', '--hard', '--delete'].includes(arg.toLowerCase()))) {
-    throw new Error('DESTRUCTIVE_COMMAND_DENIED');
-  }
 }
 
 function validateNpmArgs(args: string[]): void {
@@ -154,8 +158,16 @@ async function runExecutable(context: LocalToolContext, executable: string, args
     });
     return { ok: true, data: { stdout: bounded(result.stdout), stderr: bounded(result.stderr), executable, args } };
   } catch (error: any) {
-    if (context.signal?.aborted || error?.name === 'AbortError') return { ok: false, error: 'TOOL_RUN_CANCELLED' };
-    if (error?.killed || error?.code === 'ETIMEDOUT') return { ok: false, error: 'COMMAND_TIMEOUT' };
+    // Windows may keep the executable/file handle for a few milliseconds after kill.
+    // Do not report completion until the child has had a chance to release it.
+    if (context.signal?.aborted || error?.name === 'AbortError') {
+      await new Promise(resolve => setTimeout(resolve, 60));
+      return { ok: false, error: 'TOOL_RUN_CANCELLED' };
+    }
+    if (error?.killed || error?.code === 'ETIMEDOUT') {
+      await new Promise(resolve => setTimeout(resolve, 60));
+      return { ok: false, error: 'COMMAND_TIMEOUT' };
+    }
     return { ok: false, error: bounded(error?.stderr || error?.message || 'COMMAND_FAILED') };
   }
 }
