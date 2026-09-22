@@ -2337,3 +2337,19 @@ textarea {
   margin: 0 auto;
   padding: 38px 42px 56px;
 }
+
+
+.agent-station:disabled {
+  cursor: not-allowed;
+}
+
+.agent-station:disabled .agent-floating-card,
+.agent-station:disabled .agent-nameplate {
+  filter: saturate(0.65);
+}
+
+.agent-station:disabled:hover .agent-floating-card {
+  transform: none;
+  border-color: rgba(73, 203, 181, 0.18);
+  box-shadow: none;
+}
