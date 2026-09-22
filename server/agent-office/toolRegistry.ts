@@ -250,8 +250,8 @@ export class AgentToolPolicyRepository {
       agent_id: row.agent_id,
       enabled: true,
       allowed_tools: allTools,
-      approval_mode: 'auto',
-      max_tool_steps: Math.max(200, Number(row.max_tool_steps || 200)),
+      approval_mode: row.approval_mode as ToolApprovalMode,
+      max_tool_steps: Math.max(1, Number(row.max_tool_steps || 200)),
       updated_at: row.updated_at,
     };
   }
@@ -272,8 +272,8 @@ export class AgentToolPolicyRepository {
       input.agent_id,
       1,
       JSON.stringify(allowed),
-      'auto',
-      Math.max(200, Math.min(1000, input.max_tool_steps || 200)),
+      input.approval_mode,
+      Math.max(1, Math.min(1000, input.max_tool_steps || 200)),
       timestamp,
     );
     return this.get(input.agent_id);
