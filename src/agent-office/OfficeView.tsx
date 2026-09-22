@@ -19,6 +19,8 @@ type VisualState =
   | 'thinking'
   | 'planning'
   | 'responding'
+  | 'coding'
+  | 'testing'
   | 'reviewing'
   | 'waiting'
   | 'blocked'
@@ -36,6 +38,8 @@ const STATE_LABELS: Record<VisualState, string> = {
   thinking: 'Pensando',
   planning: 'Planejando',
   responding: 'Respondendo',
+  coding: 'Programando',
+  testing: 'Testando',
   reviewing: 'Revisando',
   waiting: 'Aguardando',
   blocked: 'Bloqueado',
@@ -50,6 +54,9 @@ const STREAM_EVENTS = [
   'response.completed',
   'handoff.created',
   'usage.updated',
+  'tool.started',
+  'tool.completed',
+  'tool.approval_required',
   'run.completed',
   'run.failed',
   'run.cancelled',
@@ -63,6 +70,8 @@ function normalizeState(value: string): VisualState {
     value === 'thinking' ||
     value === 'planning' ||
     value === 'responding' ||
+    value === 'coding' ||
+    value === 'testing' ||
     value === 'reviewing' ||
     value === 'waiting' ||
     value === 'blocked' ||
@@ -109,6 +118,9 @@ function eventIcon(type: string): string {
   if (type === 'run.failed') return '!';
   if (type === 'agent.state') return '●';
   if (type === 'usage.updated') return '↯';
+  if (type === 'tool.started') return '⚙';
+  if (type === 'tool.completed') return '✓';
+  if (type === 'tool.approval_required') return '◇';
   return '•';
 }
 
@@ -496,7 +508,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
             {runStatus === 'running' && currentRun && (
               <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>Cancelar</button>
             )}
-            <span className="api-only-pill">API only</span>
+            <span className="api-only-pill">{currentRun?.tools_enabled ? 'Tools ativos' : 'Texto/API'}</span>
             <span className="agent-count-pill">{activeCount}/{visibleAgents.length || 0} ativos</span>
           </div>
         </header>
@@ -764,7 +776,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           </div>
           <div className="status-card-row">
             <span>Tools</span>
-            <strong>Desligadas</strong>
+            <strong>{currentRun?.tools_enabled ? 'Ativas nesta execução' : 'Não usadas'}</strong>
           </div>
         </div>
       </aside>
