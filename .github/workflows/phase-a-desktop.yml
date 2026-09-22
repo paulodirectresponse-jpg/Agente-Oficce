@@ -1,0 +1,36 @@
+name: Phase A Desktop Gate
+
+on:
+  push:
+    branches:
+      - feat/experience-v2-universal-api
+  workflow_dispatch:
+
+jobs:
+  windows-desktop:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build client and server
+        run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Tauri desktop build
+        run: npm run tauri:build
