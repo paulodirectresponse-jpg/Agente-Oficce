@@ -279,17 +279,26 @@ async function commandExists(command: string, context: FullAccessToolContext): P
   return probe.ok;
 }
 
-export async function getFullAccessToolHealth(projectRoot: string): Promise<Array<Record<string, unknown>>> {
+export async function getFullAccessToolHealth(projectRoot: string, activeTest = false): Promise<Array<Record<string, unknown>>> {
   const context: FullAccessToolContext = { projectRoot, timeoutMs: 4000 };
   const results: Array<Record<string, unknown>> = [];
   const add = (id: string, label: string, status: string, detail: string) => results.push({ id, label, status, detail });
   add('files', 'Files', 'healthy', 'Leitura e escrita local disponíveis.');
   add('shell', process.platform === 'win32' ? 'PowerShell' : 'Shell', 'healthy', process.platform === 'win32' ? 'PowerShell disponível pelo Windows.' : 'Shell POSIX disponível.');
-  add('git', 'Git', (await commandExists('git', context)) ? 'healthy' : 'unavailable', (await commandExists('git', context)) ? 'Git CLI encontrado.' : 'Git CLI não encontrado.');
-  add('github', 'GitHub', (await commandExists('gh', context)) ? 'healthy' : 'unavailable', (await commandExists('gh', context)) ? 'GitHub CLI encontrado.' : 'Instale/autentique GitHub CLI (gh).');
+  const gitAvailable = await commandExists('git', context);
+  add('git', 'Git', gitAvailable ? 'healthy' : 'unavailable', gitAvailable ? 'Git CLI encontrado.' : 'Git CLI não encontrado.');
+  const ghAvailable = await commandExists('gh', context);
+  add('github', 'GitHub', ghAvailable ? 'healthy' : 'unavailable', ghAvailable ? 'GitHub CLI encontrado; autenticação é validada no uso.' : 'Instale/autentique GitHub CLI (gh).');
   if (process.platform === 'win32') {
-    const browser = await ensureEdgeDebug(context);
-    add('browser', 'Browser', browser.ok ? 'healthy' : 'unavailable', browser.ok ? 'Microsoft Edge automation pronta.' : String(browser.error));
+    const edgeCandidates = [
+      process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)']!, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+      process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe') : '',
+    ].filter(Boolean);
+    const edgeInstalled = edgeCandidates.some(candidate => fsSync.existsSync(candidate));
+    const browser = activeTest && edgeInstalled ? await ensureEdgeDebug(context) : null;
+    const browserOk = edgeInstalled && (!activeTest || browser?.ok === true);
+    add('browser', 'Browser', browserOk ? 'healthy' : 'unavailable', browserOk ? (activeTest ? 'Microsoft Edge automation testada e pronta.' : 'Microsoft Edge encontrado; use “Testar todas” para teste ativo.') : String(browser?.error ?? 'Microsoft Edge não encontrado.'));
     add('computer', 'Computer Use', 'healthy', 'Captura de tela, mouse e teclado disponíveis no Windows.');
   } else {
     add('browser', 'Browser', 'degraded', 'Automação visual principal é direcionada ao Windows desktop.');
@@ -484,7 +493,7 @@ export async function executeFullAccessTool(
       await fs.writeFile(target, Buffer.from(nested.data, 'base64'));
       return { ok: true, data: { path: target } };
     }
-    if (name === 'runtime_health') return { ok: true, data: { tools: await getFullAccessToolHealth(context.projectRoot) } };
+    if (name === 'runtime_health') return { ok: true, data: { tools: await getFullAccessToolHealth(context.projectRoot, true) } };
     return { ok: false, error: 'FULL_ACCESS_TOOL_NOT_FOUND' };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'FULL_ACCESS_TOOL_FAILED' };
