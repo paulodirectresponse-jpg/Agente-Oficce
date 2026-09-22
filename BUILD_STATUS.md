@@ -5,6 +5,9 @@
 - Branch estável: `main`
 - HEAD funcional após a Fase H: `039093a0`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
+- Blueprint V3 aprovado: `docs/V3_IMPLEMENTATION_MASTER.md`
+- Handbook por etapa: `docs/v3/README.md`
+- Status V3: `docs/v3/IMPLEMENTATION_STATUS.md`
 
 ## V2 — Experience Layer + Universal API
 
@@ -678,6 +681,27 @@ Continuam preservados durante a migração:
 As tools legadas não são expostas pelo Chat Runner V2 e permanecem fora do escopo até a Fase H.
 
 ## Próximo passo
-Expansão pós-H — equipe inicial + integrações externas.
+Agent Office V3 — Orchestration OS.
 
-Objetivo: definir os agentes iniciais, ativar tools somente nos especialistas que realmente precisam delas e adicionar adapters externos (ex.: GitHub/browser/deploy) de forma incremental. A arquitetura de relações já prepara o caminho para subagentes e, futuramente, criação supervisionada de novos agentes.
+O plano V3 foi aprovado e documentado no próprio repositório para permitir continuidade independente da IA/desenvolvedor.
+
+Ordem oficial:
+1. V3.0 Foundation Hardening;
+2. V3.1 Capability Core;
+3. V3.2 Orchestrator Gateway;
+4. V3.3 Gap Analysis;
+5. V3.4 Execution Graph;
+6. V3.5 Durable Runs + Replanning;
+7. V3.6 Teams + Subagents;
+8. V3.7 Proposal Engine + Agent Factory;
+9. V3.8 Evaluation + Learning;
+10. V3.9 Dev Chat;
+11. V3.10 Office V3;
+12. V3.11 Integrations + Production Gate.
+
+Fonte de verdade:
+- `docs/V3_IMPLEMENTATION_MASTER.md`
+- `docs/v3/README.md`
+- `docs/v3/IMPLEMENTATION_STATUS.md`
+
+Próxima etapa a implementar: `docs/v3/01_FOUNDATION_HARDENING.md`.
