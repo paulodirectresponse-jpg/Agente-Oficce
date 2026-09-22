@@ -20,9 +20,9 @@ describe('local tool layer', () => {
   it('denies broad/destructive legacy commands and runs an explicit project node script', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-office-tools-'));
     const context = { projectRoot: root };
-    expect((await executeLocalTool('run_command', { command: ['git', 'reset', '--hard'] }, context)).error).toBe('COMMAND_NOT_ALLOWED');
-    expect((await executeLocalTool('run_command', { command: ['git', 'clean', '-fd'] }, context)).error).toBe('COMMAND_NOT_ALLOWED');
-    expect((await executeLocalTool('run_command', { command: ['git', 'push', '--force'] }, context)).error).toBe('COMMAND_NOT_ALLOWED');
+    expect((await executeLocalTool('run_command', { command: ['git', 'reset', '--hard'] }, context)).error).toBe('DESTRUCTIVE_COMMAND_DENIED');
+    expect((await executeLocalTool('run_command', { command: ['git', 'clean', '-fd'] }, context)).error).toBe('DESTRUCTIVE_COMMAND_DENIED');
+    expect((await executeLocalTool('run_command', { command: ['git', 'push', '--force'] }, context)).error).toBe('DESTRUCTIVE_COMMAND_DENIED');
     expect((await executeLocalTool('run_command', { command: ['node', '-e', 'process.stdout.write("unsafe")'] }, context)).error).toBe('COMMAND_NOT_ALLOWED');
 
     await fs.writeFile(path.join(root, 'safe-script.mjs'), 'process.stdout.write("ok")');
