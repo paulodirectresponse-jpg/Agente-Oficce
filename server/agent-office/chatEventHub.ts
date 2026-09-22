@@ -26,7 +26,7 @@ export class ChatEventHub {
   publish(runId: string, event: string, data: Record<string, unknown> = {}): ChatStreamEnvelope {
     const buffer = this.buffers.get(runId) ?? [];
     const envelope: ChatStreamEnvelope = {
-      sequence: (buffer.at(-1)?.sequence ?? 0) + 1,
+      sequence: (buffer.length ? buffer[buffer.length - 1].sequence : 0) + 1,
       run_id: runId,
       event,
       data,
