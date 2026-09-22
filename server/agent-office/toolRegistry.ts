@@ -6,6 +6,7 @@ import {
   type LocalToolName,
   type LocalToolResult,
 } from './localTools.js';
+import { redactSecrets, stableJson } from './securitySanitizer.js';
 
 export type ToolRisk = 'read' | 'write' | 'execute' | 'external' | 'destructive';
 export type ToolApprovalMode = 'safe' | 'manual' | 'auto';
@@ -34,6 +35,7 @@ export interface ToolExecutionContext {
   run_id: string;
   agent_id: string;
   signal?: AbortSignal;
+  idempotency_key?: string;
 }
 
 export interface ToolExecutionResult extends LocalToolResult {
@@ -265,15 +267,44 @@ export class AgentRelationRepository {
   }
 
   replaceChildren(parentAgentId: string, childAgentIds: string[]): void {
+    const uniqueChildren = [...new Set(childAgentIds)];
+    if (uniqueChildren.length !== childAgentIds.length) throw new Error('AGENT_RELATION_DUPLICATE');
+    if (uniqueChildren.includes(parentAgentId)) throw new Error('AGENT_RELATION_SELF_CYCLE');
+
+    const parent = this.database.prepare('SELECT id FROM agents WHERE id = ?').get(parentAgentId);
+    if (!parent) throw new Error('AGENT_NOT_FOUND');
+    for (const childId of uniqueChildren) {
+      const child = this.database.prepare('SELECT id FROM agents WHERE id = ?').get(childId);
+      if (!child) throw new Error('AGENT_RELATION_CHILD_NOT_FOUND');
+    }
+
     const timestamp = now();
     const transaction = this.database.transaction(() => {
+      const existing = this.database.prepare(`
+        SELECT parent_agent_id, child_agent_id
+        FROM agent_relations
+        WHERE enabled = 1 AND relation_type = 'supervises' AND parent_agent_id <> ?
+      `).all(parentAgentId) as Array<{ parent_agent_id: string; child_agent_id: string }>;
+      const graph = new Map<string, string[]>();
+      for (const edge of existing) graph.set(edge.parent_agent_id, [...(graph.get(edge.parent_agent_id) ?? []), edge.child_agent_id]);
+      graph.set(parentAgentId, uniqueChildren);
+
+      const visit = (node: string, path: Set<string>, depth: number): void => {
+        if (depth > 12) throw new Error('AGENT_RELATION_MAX_DEPTH');
+        if (path.has(node)) throw new Error('AGENT_RELATION_CYCLE');
+        const nextPath = new Set(path);
+        nextPath.add(node);
+        for (const child of graph.get(node) ?? []) visit(child, nextPath, depth + 1);
+      };
+      for (const node of graph.keys()) visit(node, new Set(), 0);
+
       this.database.prepare('DELETE FROM agent_relations WHERE parent_agent_id = ?').run(parentAgentId);
       const insert = this.database.prepare(`
         INSERT INTO agent_relations (
           parent_agent_id, child_agent_id, relation_type, enabled, priority, metadata_json, created_at, updated_at
         ) VALUES (?, ?, 'supervises', 1, ?, '{}', ?, ?)
       `);
-      childAgentIds.forEach((childId, index) => insert.run(parentAgentId, childId, index, timestamp, timestamp));
+      uniqueChildren.forEach((childId, index) => insert.run(parentAgentId, childId, index, timestamp, timestamp));
     });
     transaction();
   }
@@ -293,7 +324,11 @@ function auditInput(toolName: string, input: Record<string, unknown>): Record<st
       new_text_bytes: Buffer.byteLength(String(input.new_text ?? '')),
     };
   }
-  return input;
+  return redactSecrets(input) as Record<string, unknown>;
+}
+
+function fingerprintInput(input: Record<string, unknown>): string {
+  return crypto.createHash('sha256').update(stableJson(input)).digest('hex');
 }
 
 function auditResult(toolName: string, result: LocalToolResult): Record<string, unknown> {
@@ -356,16 +391,39 @@ export class ToolRegistry {
       return { ok: false, error: 'TOOL_RUN_CANCELLED', audit_id: '', risk: definition.risk };
     }
 
+    const inputFingerprint = fingerprintInput(input);
+    const idempotencyKey = context.idempotency_key?.trim() || null;
+    if (idempotencyKey) {
+      const existing = context.database.prepare(`
+        SELECT id, status, result_json FROM tool_audit_events
+        WHERE run_id = ? AND agent_id = ? AND idempotency_key = ?
+      `).get(context.run_id, context.agent_id, idempotencyKey) as { id: string; status: string; result_json: string | null } | undefined;
+      if (existing) {
+        const pending = context.database.prepare(`
+          SELECT id FROM tool_approvals
+          WHERE run_id = ? AND agent_id = ? AND tool_name = ? AND input_fingerprint = ? AND status = 'pending'
+          ORDER BY created_at DESC LIMIT 1
+        `).get(context.run_id, context.agent_id, definition.name, inputFingerprint) as { id: string } | undefined;
+        if (pending) {
+          return { ok: false, error: 'TOOL_APPROVAL_REQUIRED', approval_required: true, approval_id: pending.id, audit_id: existing.id, risk: definition.risk };
+        }
+        if (existing.status === 'completed') {
+          return { ok: true, data: { idempotent_replay: true }, audit_id: existing.id, risk: definition.risk };
+        }
+        return { ok: false, error: 'TOOL_IDEMPOTENCY_CONFLICT', audit_id: existing.id, risk: definition.risk };
+      }
+    }
+
     const auditId = crypto.randomUUID();
     const startedAt = now();
-    this.databaseInsertAudit(context, auditId, definition, auditInput(definition.name, input), startedAt);
+    this.databaseInsertAudit(context, auditId, definition, auditInput(definition.name, input), startedAt, idempotencyKey);
 
     if (this.needsApproval(definition, policy)) {
       const approvalId = crypto.randomUUID();
       context.database.prepare(`
         INSERT INTO tool_approvals (
-          id, project_id, run_id, agent_id, tool_name, input_json, reason, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+          id, project_id, run_id, agent_id, tool_name, input_json, input_fingerprint, reason, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
       `).run(
         approvalId,
         context.project_id,
@@ -373,6 +431,7 @@ export class ToolRegistry {
         context.agent_id,
         definition.name,
         JSON.stringify(auditInput(definition.name, input)),
+        inputFingerprint,
         `${definition.name} requires approval under policy ${policy.approval_mode}`,
         startedAt,
       );
@@ -418,7 +477,7 @@ export class ToolRegistry {
     }
 
     const approval = context.database.prepare(`
-      SELECT id, status, tool_name, run_id, agent_id
+      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint
       FROM tool_approvals
       WHERE id = ?
     `).get(approvalId) as {
@@ -427,13 +486,30 @@ export class ToolRegistry {
       tool_name: string;
       run_id: string | null;
       agent_id: string | null;
+      input_fingerprint: string | null;
     } | undefined;
 
     if (!approval
       || approval.tool_name !== definition.name
       || approval.run_id !== context.run_id
-      || approval.agent_id !== context.agent_id) {
+      || approval.agent_id !== context.agent_id
+      || approval.input_fingerprint !== fingerprintInput(input)) {
       return { ok: false, error: 'TOOL_APPROVAL_INVALID', audit_id: auditId, risk: definition.risk };
+    }
+
+    const run = context.database.prepare('SELECT status FROM chat_runs WHERE id = ?').get(context.run_id) as { status: string } | undefined;
+    if (!run || !['created', 'running'].includes(run.status)) {
+      return { ok: false, error: 'TOOL_RUN_NOT_ACTIVE', audit_id: auditId, risk: definition.risk };
+    }
+
+    const audit = context.database.prepare(`
+      SELECT run_id, agent_id, tool_name, status FROM tool_audit_events WHERE id = ?
+    `).get(auditId) as { run_id: string | null; agent_id: string | null; tool_name: string; status: string } | undefined;
+    if (!audit || audit.run_id !== context.run_id || audit.agent_id !== context.agent_id || audit.tool_name !== definition.name) {
+      return { ok: false, error: 'TOOL_AUDIT_INVALID', audit_id: auditId, risk: definition.risk };
+    }
+    if (audit.status === 'completed') {
+      return { ok: true, data: { idempotent_replay: true }, audit_id: auditId, risk: definition.risk };
     }
 
     if (approval.status === 'denied') {
@@ -480,11 +556,12 @@ export class ToolRegistry {
     definition: ToolDefinition,
     input: Record<string, unknown>,
     startedAt: string,
+    idempotencyKey: string | null,
   ): void {
     context.database.prepare(`
       INSERT INTO tool_audit_events (
-        id, project_id, run_id, agent_id, tool_name, risk, status, input_json, started_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)
+        id, project_id, run_id, agent_id, tool_name, risk, status, input_json, started_at, idempotency_key
+      ) VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)
     `).run(
       auditId,
       context.project_id,
@@ -492,8 +569,9 @@ export class ToolRegistry {
       context.agent_id,
       definition.name,
       definition.risk,
-      JSON.stringify(input),
+      JSON.stringify(redactSecrets(input)),
       startedAt,
+      idempotencyKey,
     );
   }
 }
