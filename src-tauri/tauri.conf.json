@@ -7,7 +7,7 @@
     "frontendDist": "../dist/client",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build && npm run desktop:prepare-runtime"
   },
   "app": {
     "windows": [{ "title": "Agent Office", "width": 1280, "height": 800, "minWidth": 960, "minHeight": 640 }],
@@ -16,6 +16,9 @@
   "bundle": {
     "active": true,
     "targets": ["msi"],
-    "icon": ["icons/icon.ico"]
+    "icon": ["icons/icon.ico"],
+    "resources": {
+      "resources/": ""
+    }
   }
 }
