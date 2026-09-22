@@ -1,6 +1,6 @@
 # V3.6 — Teams + Subagents
 
-**Status:** PLANNED  
+**Status:** DONE  
 **Depende de:** V3.1 + V3.4 + V3.5.  
 **Bloqueia:** Proposal Engine de equipes e Office por departamentos.
 
@@ -192,3 +192,34 @@ Orchestrator consegue selecionar um team existente ou montar Dynamic Team; Team 
 - Não criar Agent Factory ainda.
 - Não permitir Team Lead criar agente.
 - Não transformar todos os workflows em teams permanentes.
+
+
+## Implementação concluída — Bloco 9
+
+- Branch: `v3/part9-teams-subagents`
+- PR: #22
+- Migration: 13
+- Gate validado: workflow `35794200717`
+- Gate: 34 test files / 192 tests, typecheck, client/server build, Tauri build, bundled backend smoke, installed desktop lifecycle, MSI verification e upload.
+- Schema persistente: `teams`, `team_members`, `team_policies`, `team_versions`, `dynamic_team_instances`, `dynamic_team_members`, `execution_team_snapshots`, `runtime_delegations`.
+- Permanent Teams exigem ação explícita; Dynamic Teams permanecem orchestration/execution-scoped e nunca são promovidos automaticamente.
+- Membership continua separado de `agent_relations`.
+- Team snapshots/versioning preservam composição e policy por execução; alterações posteriores não reescrevem histórico.
+- Team Lead é opcional, recebe work packet estruturado e não recebe permissões extras.
+- Delegation valida disponibilidade de agent/provider/model, capability, tools, borrowing, budgets, depth, permission intersection e ciclos no grafo efetivo.
+- Permission effective permanece interseção fail-closed; Team Policy nunca eleva permissões.
+- Gap Analysis e Orchestrator suportam `existing_team` e materialização persistida de `dynamic_team`.
+- Execution Graph aceita team assignment validado, respeita `max_parallelism` com claim transacional e revalida disponibilidade live antes de executar.
+- Durable checkpoints persistem team snapshots e delegation state.
+- UI mínima adicionada em Teams e Agent Manager sem antecipar Office Departments.
+- Stress/property coverage inclui 50 teams, 500 agents, multi-membership, mutações/versionamento e invariantes de permission subset.
+
+### Segurança revisada
+
+Foram revisados e testados: permission escalation, delegation cycles, depth bypass, disabled agents/providers/models, stale snapshots, dynamic→permanent mutation, external borrowing, tool-policy intersection, membership/snapshot races e parallelism claims.
+
+### Próxima etapa
+
+V3.7 — Proposal Engine + Agent Factory: **NOT STARTED / DESBLOQUEADO**.
+
+Não foi implementada nenhuma parte do Agent Factory ou Proposal Engine neste bloco.
