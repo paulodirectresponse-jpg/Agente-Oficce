@@ -20,10 +20,10 @@
 | 8 | Codex | DONE | codexAdapter spawns `codex exec --json` (ChatGPT-auth CLI, no paid API), maps JSONL events, cancel/timeout/prompt guards; deadlock fixed. Registry probes `codex --version` before registering. Real validation needs the CLI on PATH (auth.json exists under ~/.codex). |
 | 9 | Router | DONE | Rule classifier (15 categories + risk heuristics), blueprint routing defaults, failure escalation (kimi→claude→codex), manual override @agent, Codex Protected Mode (25%/10% thresholds, unknown-quota state), team plans. 10 router tests pass. |
 | 10 | Usage | DONE | UsageTracker persists run usage to usage_snapshots, per-agent 30-day aggregation, GET /agent-office/usage; no fabricated values when empty. 3 usage tests pass. |
-| 11 | UI Final | IN_PROGRESS | Minimal health page and Vite entrypoint build; task/project UI is not complete. |
-| 12 | Office View | NOT_STARTED | Not implemented. |
-| 13 | Release Gate | NOT_STARTED | Tauri packaging and release evidence are not complete. |
-| 14 | Dogfooding | NOT_STARTED | No real-user validation recorded. |
+| 11 | UI Final | DONE | SPA with workspace, tasks (run + live events polling), usage, provider settings, pt-BR, dark desktop theme, empty/loading/error states. |
+| 12 | Office View | DONE | CSS-only 2D office: 3 desks (Kimi/Claude/Codex) with idle/working/blocked states derived from tasks; click desk sets manual agent override. |
+| 13 | Release Gate | IN_PROGRESS | 83/83 tests, lint, client+server builds pass; src-tauri scaffold (Tauri v2 config, Cargo.toml, main.rs) committed; USER README written; Rust 1.98.1 installed; first tauri build in progress (icons still needed for bundle). |
+| 14 | Dogfooding | BLOCKED_REAL_VALIDATION | Requires real provider credentials (Claude Gateway key, KIMI_API_KEY) and Codex CLI login; blocked until user supplies them. |
 
 ## Verified local checks
 - `npm test`: 17 files, 83 tests passing.

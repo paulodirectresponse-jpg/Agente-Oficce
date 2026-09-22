@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agent Office",
+  "version": "0.1.0",
+  "identifier": "com.agentoffice.app",
+  "build": {
+    "frontendDist": "../dist/client",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [{ "title": "Agent Office", "width": 1280, "height": 800, "minWidth": 960, "minHeight": 640 }],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi"],
+    "icon": ["icons/icon.ico"]
+  }
+}
