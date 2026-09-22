@@ -355,6 +355,7 @@ export class ToolRegistry {
     const localContext: LocalToolContext = {
       projectRoot: context.project_root,
       timeoutMs: 30_000,
+      signal: context.signal,
     };
     const result = await executeLocalTool(definition.name, input, localContext);
     context.database.prepare(`
