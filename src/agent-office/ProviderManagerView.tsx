@@ -385,7 +385,7 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
         <div>
           <span className="office-kicker">Universal API</span>
           <h1>Providers</h1>
-          <p>Cadastre APIs, credenciais e vários modelos sem alterar o core.</p>
+          <p>Escolha o serviço, informe a URL e a chave. O restante fica automático; opções técnicas ficam escondidas.</p>
         </div>
         <button type="button" className="manager-primary" onClick={startCreate}>+ Novo provider</button>
       </header>
@@ -417,7 +417,7 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
         </aside>
 
         <section className="manager-detail">
-          <div className="manager-card">
+          <div className={`manager-card ${showAdvanced ? 'show-advanced' : 'simple-mode'}`}>
             <div className="manager-card-header">
               <div>
                 <span className="office-kicker">{selected ? 'Editar conexão' : 'Nova conexão'}</span>
@@ -447,7 +447,7 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
 
             <div className="manager-form-grid">
               {!selected && (
-                <div className="manager-field">
+                <div className="manager-field provider-advanced-field">
                   <label>ID opcional</label>
                   <input value={draft.id} onChange={(event) => setDraft({ ...draft, id: event.target.value })} placeholder="minha-api" />
                 </div>
@@ -460,29 +460,29 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
                 <label>Base URL</label>
                 <input value={draft.base_url} onChange={(event) => setDraft({ ...draft, base_url: event.target.value })} placeholder="https://api.exemplo.com" />
               </div>
-              <div className="manager-field">
+              <div className="manager-field provider-advanced-field">
                 <label>Protocolo</label>
                 <select value={draft.protocol_driver} onChange={(event) => setDraft({ ...draft, protocol_driver: event.target.value })}>
                   {(capabilities?.protocol_drivers ?? [draft.protocol_driver]).map((driver) => <option key={driver} value={driver}>{driver}</option>)}
                 </select>
               </div>
-              <div className="manager-field">
+              <div className="manager-field provider-advanced-field">
                 <label>Autenticação</label>
                 <select value={draft.auth_driver} onChange={(event) => setDraft({ ...draft, auth_driver: event.target.value })}>
                   {(capabilities?.auth_drivers ?? [draft.auth_driver]).map((driver) => <option key={driver} value={driver}>{driver}</option>)}
                 </select>
               </div>
-              <div className="manager-field">
+              <div className="manager-field provider-advanced-field">
                 <label>Timeout (ms)</label>
                 <input type="number" min={1000} value={draft.timeout_ms} onChange={(event) => setDraft({ ...draft, timeout_ms: Number(event.target.value) || 60000 })} />
               </div>
-              <label className="manager-switch-row">
+              <label className="manager-switch-row provider-advanced-field">
                 <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
                 <span>Provider ativo</span>
               </label>
             </div>
 
-            <div className="provider-resilience-card">
+            <div className="provider-resilience-card provider-advanced-field">
               <div className="binding-title">
                 <div>
                   <strong>Resiliência e limites</strong>
@@ -546,7 +546,7 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
             </div>
 
             <button type="button" className="manager-advanced-toggle" onClick={() => setShowAdvanced((value) => !value)}>
-              {showAdvanced ? 'Ocultar configuração avançada' : 'Configuração avançada'}
+              {showAdvanced ? 'Ocultar opções avançadas' : 'Opções avançadas'}
             </button>
 
             {showAdvanced && (
