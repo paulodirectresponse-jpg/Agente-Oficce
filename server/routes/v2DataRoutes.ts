@@ -17,6 +17,11 @@ import {
   ProviderRepositoryV2,
   type Provider,
 } from '../agent-office/v2DataModel.js';
+import {
+  AgentRelationRepository,
+  AgentToolPolicyRepository,
+  toolRegistry,
+} from '../agent-office/toolRegistry.js';
 
 export const v2DataRouter = Router();
 
@@ -533,6 +538,152 @@ v2DataRouter.put('/projects/:projectId/agents/:agentId/state', (request, respons
   } catch (error) {
     const code = codeOf(error, 'AGENT_STATE_UPDATE_FAILED');
     response.status(statusFor(code)).json({ ok: false, error: { code, message: code } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+
+// Phase H — permissioned tools and future agent hierarchy.
+v2DataRouter.get('/tools/definitions', (_request, response) => {
+  response.json({ ok: true, data: toolRegistry.listDefinitions() });
+});
+
+v2DataRouter.get('/agents/:agentId/tool-policy', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const agent = new AgentRepositoryV2(database.connection).get(request.params.agentId);
+    if (!agent) {
+      response.status(404).json({ ok: false, error: { code: 'AGENT_NOT_FOUND', message: 'Agent not found.' } });
+      return;
+    }
+    response.json({ ok: true, data: new AgentToolPolicyRepository(database.connection).get(agent.id) });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.put('/agents/:agentId/tool-policy', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const agent = new AgentRepositoryV2(database.connection).get(request.params.agentId);
+    if (!agent) {
+      response.status(404).json({ ok: false, error: { code: 'AGENT_NOT_FOUND', message: 'Agent not found.' } });
+      return;
+    }
+    const body = request.body ?? {};
+    const policy = new AgentToolPolicyRepository(database.connection).save({
+      agent_id: agent.id,
+      enabled: body.enabled === true,
+      allowed_tools: Array.isArray(body.allowed_tools) ? body.allowed_tools.map(String) : [],
+      approval_mode: body.approval_mode === 'manual' || body.approval_mode === 'auto' ? body.approval_mode : 'safe',
+      max_tool_steps: Number.isFinite(Number(body.max_tool_steps)) ? Number(body.max_tool_steps) : 12,
+    });
+    response.json({ ok: true, data: policy });
+  } catch (error) {
+    const code = codeOf(error, 'AGENT_TOOL_POLICY_UPDATE_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.get('/projects/:projectId/tool-audit', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const rows = database.connection.prepare(`
+      SELECT id, project_id, run_id, agent_id, tool_name, risk, status,
+             input_json, result_json, started_at, ended_at
+      FROM tool_audit_events
+      WHERE project_id = ?
+      ORDER BY started_at DESC
+      LIMIT 200
+    `).all(request.params.projectId) as any[];
+    response.json({
+      ok: true,
+      data: rows.map((row) => ({
+        ...row,
+        input: JSON.parse(row.input_json || '{}'),
+        result: row.result_json ? JSON.parse(row.result_json) : null,
+      })),
+    });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.get('/projects/:projectId/tool-approvals', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const rows = database.connection.prepare(`
+      SELECT id, project_id, run_id, agent_id, tool_name, input_json, reason,
+             status, created_at, resolved_at
+      FROM tool_approvals
+      WHERE project_id = ?
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).all(request.params.projectId) as any[];
+    response.json({
+      ok: true,
+      data: rows.map((row) => ({
+        ...row,
+        input: JSON.parse(row.input_json || '{}'),
+      })),
+    });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.post('/tool-approvals/:approvalId/resolve', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const status = request.body?.status === 'approved' ? 'approved' : request.body?.status === 'denied' ? 'denied' : null;
+    if (!status) {
+      response.status(400).json({ ok: false, error: { code: 'TOOL_APPROVAL_STATUS_INVALID', message: 'Use approved or denied.' } });
+      return;
+    }
+    const result = database.connection.prepare(`
+      UPDATE tool_approvals
+      SET status = ?, resolved_at = ?
+      WHERE id = ? AND status = 'pending'
+    `).run(status, new Date().toISOString(), request.params.approvalId);
+    if (!result.changes) {
+      response.status(404).json({ ok: false, error: { code: 'TOOL_APPROVAL_NOT_FOUND', message: 'Pending approval not found.' } });
+      return;
+    }
+    response.json({ ok: true, data: { id: request.params.approvalId, status } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.get('/agents/:agentId/subagents', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    response.json({ ok: true, data: new AgentRelationRepository(database.connection).listChildren(request.params.agentId) });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.put('/agents/:agentId/subagents', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const agent = new AgentRepositoryV2(database.connection).get(request.params.agentId);
+    if (!agent) {
+      response.status(404).json({ ok: false, error: { code: 'AGENT_NOT_FOUND', message: 'Agent not found.' } });
+      return;
+    }
+    const children = Array.isArray(request.body?.child_agent_ids)
+      ? request.body.child_agent_ids.map(String).filter((id: string) => id !== agent.id)
+      : [];
+    const relationRepository = new AgentRelationRepository(database.connection);
+    relationRepository.replaceChildren(agent.id, children);
+    response.json({ ok: true, data: relationRepository.listChildren(agent.id) });
+  } catch (error) {
+    const code = codeOf(error, 'AGENT_RELATIONS_UPDATE_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
   } finally {
     database.connection.close();
   }

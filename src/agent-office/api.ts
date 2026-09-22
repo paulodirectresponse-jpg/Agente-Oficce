@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -169,6 +169,31 @@ export const api = {
     const response = await fetchWithStartupRetry(`/api/agent-office/v2/agents/${agentId}`, { method: 'DELETE' });
     if (!response.ok && response.status !== 204) throw new Error(`Request failed (${response.status})`);
   },
+  listToolDefinitionsV2: () =>
+    request<ToolDefinitionV2[]>('/api/agent-office/v2/tools/definitions'),
+  getAgentToolPolicyV2: (agentId: string) =>
+    request<AgentToolPolicy>(`/api/agent-office/v2/agents/${agentId}/tool-policy`),
+  saveAgentToolPolicyV2: (agentId: string, policy: Omit<AgentToolPolicy, 'agent_id' | 'updated_at'>) =>
+    request<AgentToolPolicy>(`/api/agent-office/v2/agents/${agentId}/tool-policy`, {
+      method: 'PUT',
+      body: JSON.stringify(policy),
+    }),
+  listToolAuditV2: (projectId: string) =>
+    request<ToolAuditEvent[]>(`/api/agent-office/v2/projects/${projectId}/tool-audit`),
+  listToolApprovalsV2: (projectId: string) =>
+    request<ToolApproval[]>(`/api/agent-office/v2/projects/${projectId}/tool-approvals`),
+  resolveToolApprovalV2: (approvalId: string, status: 'approved' | 'denied') =>
+    request<{ id: string; status: 'approved' | 'denied' }>(`/api/agent-office/v2/tool-approvals/${approvalId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
+  listSubagentsV2: (agentId: string) =>
+    request<AgentRelation[]>(`/api/agent-office/v2/agents/${agentId}/subagents`),
+  saveSubagentsV2: (agentId: string, childAgentIds: string[]) =>
+    request<AgentRelation[]>(`/api/agent-office/v2/agents/${agentId}/subagents`, {
+      method: 'PUT',
+      body: JSON.stringify({ child_agent_ids: childAgentIds }),
+    }),
   listChatRunsV2: (projectId: string) =>
     request<ChatRun[]>(`/api/agent-office/v2/projects/${projectId}/chat-runs`),
   listActivityV2: (projectId: string) =>

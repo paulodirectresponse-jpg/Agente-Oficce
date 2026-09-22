@@ -544,4 +544,63 @@ describe('UniversalProviderEngine', () => {
     fixture.cleanup();
   });
 
+
+  it('sends OpenAI-compatible function tools and parses tool calls', async () => {
+    const fixture = tempDatabase();
+    const providers = new ProviderRepositoryV2(fixture.database.connection);
+    providers.create({
+      id: 'tool-provider',
+      name: 'Tool Provider',
+      protocol_driver: 'openai_chat',
+      base_url: 'https://tools.example',
+      auth_driver: 'none',
+    });
+
+    let body: Record<string, any> = {};
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: null,
+            tool_calls: [{
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'read_file', arguments: '{"path":"README.md"}' },
+            }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+        usage: { prompt_tokens: 11, completion_tokens: 3 },
+      });
+    };
+
+    const engine = new UniversalProviderEngine(fixture.database.connection, new MemorySecretStore(), fetchImpl);
+    const result = await engine.complete('tool-provider', {
+      model: 'tool-model',
+      messages: [{ role: 'user', content: 'Read the README' }],
+      tools: [{
+        name: 'read_file',
+        description: 'Read file',
+        input_schema: {
+          type: 'object',
+          properties: { path: { type: 'string' } },
+          required: ['path'],
+        },
+      }],
+    });
+
+    expect(body.tool_choice).toBe('auto');
+    expect(body.tools[0]).toMatchObject({
+      type: 'function',
+      function: { name: 'read_file' },
+    });
+    expect(result.tool_calls).toEqual([{
+      id: 'call-1',
+      name: 'read_file',
+      arguments: { path: 'README.md' },
+    }]);
+    fixture.cleanup();
+  });
+
 });

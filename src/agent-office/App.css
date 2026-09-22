@@ -3374,3 +3374,181 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Phase H — tools and agent hierarchy */
+.agent-tool-card,
+.agent-hierarchy-card {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(65, 185, 175, 0.16);
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(34, 121, 117, 0.05), rgba(27, 76, 112, 0.04));
+}
+
+.compact-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #8ca3b9;
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.compact-switch input {
+  accent-color: #46d6b9;
+}
+
+.tool-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tool-chip {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  border: 1px solid rgba(91, 132, 171, 0.12);
+  border-radius: 7px;
+  background: rgba(255,255,255,0.012);
+  cursor: pointer;
+}
+
+.tool-chip.selected {
+  border-color: rgba(62, 210, 190, 0.27);
+  background: rgba(46, 158, 142, 0.07);
+}
+
+.tool-chip input,
+.subagent-chip input {
+  accent-color: #45d1ba;
+}
+
+.tool-chip > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-chip strong {
+  color: #b8cadb;
+  font-size: 8px;
+}
+
+.tool-chip small {
+  color: #5f768c;
+  font-size: 7px;
+  text-transform: uppercase;
+}
+
+.tool-chip.risk-write.selected { border-color: rgba(255, 184, 92, 0.22); }
+.tool-chip.risk-execute.selected { border-color: rgba(164, 118, 255, 0.24); }
+
+.tool-safety-note {
+  margin: 9px 0 0;
+  color: #647b90;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.subagent-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.subagent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 1px solid rgba(91, 132, 171, 0.13);
+  border-radius: 999px;
+  color: #768da3;
+  background: rgba(255,255,255,0.012);
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.subagent-chip.selected {
+  color: #a9dacf;
+  border-color: rgba(64, 207, 184, 0.23);
+  background: rgba(53, 157, 142, 0.07);
+}
+
+.state-coding .agent-progress-track span {
+  background: linear-gradient(90deg, #24c3a7, #58e2cf);
+}
+
+.state-testing .agent-progress-track span {
+  background: linear-gradient(90deg, #6c83ff, #9b73ff);
+}
+
+
+.approval-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 8px 0 4px;
+}
+
+.approval-card {
+  padding: 10px;
+  border: 1px solid rgba(255, 184, 92, 0.24);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(116, 78, 27, 0.14), rgba(35, 46, 58, 0.34));
+}
+
+.approval-card > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.approval-card strong {
+  color: #f0d0a0;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.approval-card small {
+  color: #806f61;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.approval-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.approval-actions button {
+  min-height: 27px;
+  border-radius: 6px;
+  padding: 0 9px;
+  cursor: pointer;
+  font-size: 8px;
+}
+
+.approval-deny {
+  border: 1px solid rgba(255, 109, 130, 0.2);
+  color: #ff9aaa;
+  background: rgba(123, 35, 50, 0.08);
+}
+
+.approval-allow {
+  border: 1px solid rgba(77, 231, 157, 0.23);
+  color: #84e9b7;
+  background: rgba(42, 140, 94, 0.10);
+}
+
+.approval-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

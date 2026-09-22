@@ -352,6 +352,64 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       ALTER TABLE providers ADD COLUMN last_health_error TEXT;
     `,
   },
+  {
+    version: 6,
+    sql: `
+      CREATE TABLE IF NOT EXISTS agent_tool_policies (
+        agent_id TEXT PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+        allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+        approval_mode TEXT NOT NULL DEFAULT 'safe' CHECK(approval_mode IN ('safe', 'manual', 'auto')),
+        max_tool_steps INTEGER NOT NULL DEFAULT 12,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS tool_audit_events (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        tool_name TEXT NOT NULL,
+        risk TEXT NOT NULL,
+        status TEXT NOT NULL,
+        input_json TEXT NOT NULL DEFAULT '{}',
+        result_json TEXT,
+        started_at TEXT NOT NULL,
+        ended_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS tool_approvals (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE CASCADE,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        tool_name TEXT NOT NULL,
+        input_json TEXT NOT NULL DEFAULT '{}',
+        reason TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'denied')),
+        created_at TEXT NOT NULL,
+        resolved_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_relations (
+        parent_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        child_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        relation_type TEXT NOT NULL DEFAULT 'supervises',
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+        priority INTEGER NOT NULL DEFAULT 0,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(parent_agent_id, child_agent_id, relation_type),
+        CHECK(parent_agent_id <> child_agent_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tool_audit_run ON tool_audit_events(run_id, started_at);
+      CREATE INDEX IF NOT EXISTS idx_tool_approvals_run_status ON tool_approvals(run_id, status);
+      CREATE INDEX IF NOT EXISTS idx_agent_relations_parent ON agent_relations(parent_agent_id, enabled, priority);
+      CREATE INDEX IF NOT EXISTS idx_agent_relations_child ON agent_relations(child_agent_id, enabled);
+    `,
+  },
 ];
 
 export function openAgentOfficeDatabase(config = getAgentOfficeConfig()): AgentOfficeDatabase {

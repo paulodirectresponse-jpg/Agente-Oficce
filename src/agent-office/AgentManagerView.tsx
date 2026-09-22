@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentProfile, ProviderModel, UniversalProvider } from './types.js';
+import type { AgentProfile, AgentToolPolicy, ProviderModel, ToolDefinitionV2, UniversalProvider } from './types.js';
 import { api } from './api.js';
 
 interface AgentManagerViewProps {
@@ -66,12 +66,34 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
   const [draft, setDraft] = useState<AgentDraft>(EMPTY_DRAFT);
   const [models, setModels] = useState<ProviderModel[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [toolDefinitions, setToolDefinitions] = useState<ToolDefinitionV2[]>([]);
+  const [toolPolicy, setToolPolicy] = useState<Omit<AgentToolPolicy, 'agent_id' | 'updated_at'>>({
+    enabled: false,
+    allowed_tools: [],
+    approval_mode: 'safe',
+    max_tool_steps: 12,
+  });
+  const [subagentIds, setSubagentIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const selected = isCreating ? null : (agents.find((agent) => agent.id === selectedId) ?? null);
   const providerById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers]);
+
+  useEffect(() => {
+    void api.listToolDefinitionsV2()
+      .then((definitions) => {
+        setToolDefinitions(definitions);
+        setToolPolicy((current) => ({
+          ...current,
+          allowed_tools: current.allowed_tools.length
+            ? current.allowed_tools
+            : definitions.filter((tool) => tool.default_enabled).map((tool) => tool.name),
+        }));
+      })
+      .catch(() => setToolDefinitions([]));
+  }, []);
 
   useEffect(() => {
     if (isCreating) return;
@@ -99,6 +121,23 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
       sort_order: selected.sort_order,
       idle_after_seconds: selected.idle_after_seconds,
     });
+    void Promise.all([
+      api.getAgentToolPolicyV2(selected.id),
+      api.listSubagentsV2(selected.id),
+    ])
+      .then(([policy, relations]) => {
+        setToolPolicy({
+          enabled: policy.enabled,
+          allowed_tools: policy.allowed_tools,
+          approval_mode: policy.approval_mode,
+          max_tool_steps: policy.max_tool_steps,
+        });
+        setSubagentIds(relations.map((relation) => relation.child_agent_id));
+      })
+      .catch(() => {
+        setToolPolicy((current) => ({ ...current, enabled: false }));
+        setSubagentIds([]);
+      });
     setNotice(null);
     setError(null);
   }, [selected?.id]);
@@ -134,6 +173,13 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
       sort_order: (agents.reduce((max, agent) => Math.max(max, agent.sort_order), 0) || 0) + 10,
     });
     setShowAdvanced(false);
+    setToolPolicy({
+      enabled: false,
+      allowed_tools: toolDefinitions.filter((tool) => tool.default_enabled).map((tool) => tool.name),
+      approval_mode: 'safe',
+      max_tool_steps: 12,
+    });
+    setSubagentIds([]);
     setNotice(null);
     setError(null);
   };
@@ -188,6 +234,9 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
       const saved = selected
         ? await api.updateAgentV2(selected.id, payload)
         : await api.createAgentV2(payload);
+
+      await api.saveAgentToolPolicyV2(saved.id, toolPolicy);
+      await api.saveSubagentsV2(saved.id, subagentIds.filter((id) => id !== saved.id));
 
       setIsCreating(false);
       setSelectedId(saved.id);
@@ -406,13 +455,122 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               </div>
             </div>
 
-            <label className="manager-switch-row agent-enabled-row agent-advanced-field">
+            <label className="manager-switch-row agent-enabled-row">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
               <span>
                 <strong>Agente ativo</strong>
                 <small>Agentes desativados não são selecionados pelo Auto/Team.</small>
               </span>
             </label>
+
+            <div className="agent-tool-card">
+              <div className="binding-title">
+                <div>
+                  <strong>Ferramentas do agente</strong>
+                  <span>Quando ativadas, o agente pode agir dentro da pasta do projeto.</span>
+                </div>
+                <label className="compact-switch">
+                  <input
+                    type="checkbox"
+                    checked={toolPolicy.enabled}
+                    onChange={(event) => setToolPolicy((current) => ({ ...current, enabled: event.target.checked }))}
+                  />
+                  <span>{toolPolicy.enabled ? 'Ativas' : 'Desligadas'}</span>
+                </label>
+              </div>
+
+              {toolPolicy.enabled && (
+                <>
+                  <div className="tool-chip-grid">
+                    {toolDefinitions.map((tool) => {
+                      const checked = toolPolicy.allowed_tools.includes(tool.name);
+                      return (
+                        <label key={tool.name} className={`tool-chip risk-${tool.risk} ${checked ? 'selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(event) => {
+                              setToolPolicy((current) => ({
+                                ...current,
+                                allowed_tools: event.target.checked
+                                  ? [...new Set([...current.allowed_tools, tool.name])]
+                                  : current.allowed_tools.filter((name) => name !== tool.name),
+                              }));
+                            }}
+                          />
+                          <span>
+                            <strong>{tool.name}</strong>
+                            <small>{tool.risk}</small>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="tool-safety-note">
+                    O modo seguro mantém operações destrutivas bloqueadas e exige aprovação para comandos mais sensíveis.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="agent-advanced-field agent-tool-advanced">
+              <div className="manager-form-grid">
+                <div className="manager-field">
+                  <label>Política de aprovação</label>
+                  <select
+                    value={toolPolicy.approval_mode}
+                    onChange={(event) => setToolPolicy((current) => ({
+                      ...current,
+                      approval_mode: event.target.value as 'safe' | 'manual' | 'auto',
+                    }))}
+                  >
+                    <option value="safe">Seguro · comandos sensíveis pedem aprovação</option>
+                    <option value="manual">Manual · escrita/execução pedem aprovação</option>
+                    <option value="auto">Automático · tudo permitido pela lista executa</option>
+                  </select>
+                </div>
+                <div className="manager-field">
+                  <label>Máximo de passos com ferramentas</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={40}
+                    value={toolPolicy.max_tool_steps}
+                    onChange={(event) => setToolPolicy((current) => ({
+                      ...current,
+                      max_tool_steps: Math.max(1, Math.min(40, Number(event.target.value) || 12)),
+                    }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="agent-advanced-field agent-hierarchy-card">
+              <div className="binding-title">
+                <div>
+                  <strong>Equipe / subagentes</strong>
+                  <span>Fundação hierárquica: este agente pode supervisionar outros agentes no futuro.</span>
+                </div>
+              </div>
+              <div className="subagent-grid">
+                {agents
+                  .filter((agent) => agent.id !== selected?.id)
+                  .map((agent) => (
+                    <label key={agent.id} className={`subagent-chip ${subagentIds.includes(agent.id) ? 'selected' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={subagentIds.includes(agent.id)}
+                        onChange={(event) => {
+                          setSubagentIds((current) => event.target.checked
+                            ? [...new Set([...current, agent.id])]
+                            : current.filter((id) => id !== agent.id));
+                        }}
+                      />
+                      <span>{agent.name}</span>
+                    </label>
+                  ))}
+              </div>
+            </div>
 
             <button type="button" className="manager-advanced-toggle" onClick={() => setShowAdvanced((value) => !value)}>
               {showAdvanced ? 'Ocultar opções avançadas' : 'Opções avançadas'}

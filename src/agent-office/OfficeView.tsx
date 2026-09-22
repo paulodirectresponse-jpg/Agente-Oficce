@@ -7,6 +7,7 @@ import type {
   ChatStreamEnvelope,
   Conversation,
   Project,
+  ToolApproval,
   UniversalProvider,
 } from './types.js';
 import { api } from './api.js';
@@ -19,6 +20,8 @@ type VisualState =
   | 'thinking'
   | 'planning'
   | 'responding'
+  | 'coding'
+  | 'testing'
   | 'reviewing'
   | 'waiting'
   | 'blocked'
@@ -36,6 +39,8 @@ const STATE_LABELS: Record<VisualState, string> = {
   thinking: 'Pensando',
   planning: 'Planejando',
   responding: 'Respondendo',
+  coding: 'Programando',
+  testing: 'Testando',
   reviewing: 'Revisando',
   waiting: 'Aguardando',
   blocked: 'Bloqueado',
@@ -50,6 +55,9 @@ const STREAM_EVENTS = [
   'response.completed',
   'handoff.created',
   'usage.updated',
+  'tool.started',
+  'tool.completed',
+  'tool.approval_required',
   'run.completed',
   'run.failed',
   'run.cancelled',
@@ -63,6 +71,8 @@ function normalizeState(value: string): VisualState {
     value === 'thinking' ||
     value === 'planning' ||
     value === 'responding' ||
+    value === 'coding' ||
+    value === 'testing' ||
     value === 'reviewing' ||
     value === 'waiting' ||
     value === 'blocked' ||
@@ -109,6 +119,9 @@ function eventIcon(type: string): string {
   if (type === 'run.failed') return '!';
   if (type === 'agent.state') return '●';
   if (type === 'usage.updated') return '↯';
+  if (type === 'tool.started') return '⚙';
+  if (type === 'tool.completed') return '✓';
+  if (type === 'tool.approval_required') return '◇';
   return '•';
 }
 
@@ -154,6 +167,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [liveStates, setLiveStates] = useState<Record<string, { state: string; activity: string; updated_at: string }>>({});
   const [liveEvents, setLiveEvents] = useState<ChatStreamEnvelope[]>([]);
   const [lastHandoff, setLastHandoff] = useState<{ from: string; to: string } | null>(null);
+  const [approvals, setApprovals] = useState<ToolApproval[]>([]);
+  const [resolvingApproval, setResolvingApproval] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -161,18 +176,20 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const loadSnapshot = useCallback(async () => {
     if (!project) return;
     try {
-      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity] = await Promise.all([
+      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity, nextApprovals] = await Promise.all([
         api.listAgentsV2(),
         api.listProvidersV2(),
         api.listAgentStatesV2(project.id),
         api.getConversation(project.id),
         api.listActivityV2(project.id),
+        api.listToolApprovalsV2(project.id),
       ]);
       setAgents(nextAgents.filter((agent) => agent.enabled).sort((a, b) => a.sort_order - b.sort_order));
       setProviders(nextProviders);
       setStates(nextStates);
       setConversation(nextConversation);
       setActivity(nextActivity);
+      setApprovals(nextApprovals);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar o escritório.');
@@ -186,6 +203,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     setLiveStates({});
     setLiveEvents([]);
     setLastHandoff(null);
+    setApprovals([]);
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
     void loadSnapshot();
@@ -196,6 +214,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         api.listAgentStatesV2(project.id).then(setStates),
         api.listActivityV2(project.id).then(setActivity),
         api.getConversation(project.id).then(setConversation),
+        api.listToolApprovalsV2(project.id).then(setApprovals),
       ]).catch(() => undefined);
     }, 3500);
 
@@ -209,6 +228,38 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [conversation?.messages.length, streamingByAgent]);
+
+  useEffect(() => {
+    if (!project || !currentRun || !sending) return;
+
+    let active = true;
+    const reconcile = async () => {
+      try {
+        const run = await api.getChatRun(currentRun.run_id);
+        if (!active) return;
+        if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+          setSending(false);
+          setRunStatus(run.status);
+          eventSourceRef.current?.close();
+          eventSourceRef.current = null;
+          setStreamingByAgent({});
+          setLiveStates({});
+          const nextConversation = await api.getConversation(project.id);
+          if (active) setConversation(nextConversation);
+        }
+      } catch {
+        // SSE remains the primary channel; reconciliation is best-effort.
+      }
+    };
+
+    void reconcile();
+    const timer = window.setInterval(() => void reconcile(), 1800);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [project, currentRun?.run_id, sending]);
+
 
   const visibleAgents = useMemo(
     () => agents
@@ -352,8 +403,23 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     }
 
     source.onerror = () => {
-      if (source.readyState === EventSource.CLOSED) return;
-      setError('A conexão ao stream foi interrompida. O histórico continuará sendo sincronizado.');
+      void api.getChatRun(receipt.run_id)
+        .then((run) => {
+          if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
+            setRunStatus(run.status);
+            setSending(false);
+            source.close();
+            if (eventSourceRef.current === source) eventSourceRef.current = null;
+            if (project) {
+              void api.getConversation(project.id).then(setConversation).catch(() => undefined);
+            }
+            return;
+          }
+          setError('A conexão ao stream foi interrompida. O Agent Office continuará sincronizando esta execução.');
+        })
+        .catch(() => {
+          setError('A conexão ao stream foi interrompida. O Agent Office continuará tentando recuperar o estado.');
+        });
     };
   }, [loadSnapshot, project]);
 
@@ -364,6 +430,19 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       await api.cancelChatRun(currentRun.run_id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao cancelar a execução.');
+    }
+  };
+
+  const resolveApproval = async (approvalId: string, status: 'approved' | 'denied') => {
+    setResolvingApproval(approvalId);
+    setError(null);
+    try {
+      await api.resolveToolApprovalV2(approvalId, status);
+      if (project) setApprovals(await api.listToolApprovalsV2(project.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao resolver aprovação.');
+    } finally {
+      setResolvingApproval(null);
     }
   };
 
@@ -449,7 +528,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
             {runStatus === 'running' && currentRun && (
               <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>Cancelar</button>
             )}
-            <span className="api-only-pill">API only</span>
+            <span className="api-only-pill">{currentRun?.tools_enabled ? 'Tools ativos' : 'Texto/API'}</span>
             <span className="agent-count-pill">{activeCount}/{visibleAgents.length || 0} ativos</span>
           </div>
         </header>
@@ -675,6 +754,41 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           <span className="live-pill"><span />Live</span>
         </div>
 
+        {approvals.some((item) => item.status === 'pending') && (
+          <div className="approval-stack">
+            {approvals.filter((item) => item.status === 'pending').slice(0, 3).map((approval) => {
+              const agent = approval.agent_id ? agents.find((candidate) => candidate.id === approval.agent_id) : null;
+              return (
+                <div key={approval.id} className="approval-card">
+                  <div>
+                    <span className="office-kicker">Aprovação necessária</span>
+                    <strong>{agent?.name || 'Agente'} quer usar {approval.tool_name}</strong>
+                    <small>{approval.reason || 'Esta ação exige sua confirmação.'}</small>
+                  </div>
+                  <div className="approval-actions">
+                    <button
+                      type="button"
+                      className="approval-deny"
+                      disabled={resolvingApproval === approval.id}
+                      onClick={() => void resolveApproval(approval.id, 'denied')}
+                    >
+                      Negar
+                    </button>
+                    <button
+                      type="button"
+                      className="approval-allow"
+                      disabled={resolvingApproval === approval.id}
+                      onClick={() => void resolveApproval(approval.id, 'approved')}
+                    >
+                      Aprovar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className="activity-list">
           {latestActivities.length ? latestActivities.map((item) => {
             const agent = item.agent_id ? agents.find((candidate) => candidate.id === item.agent_id) : null;
@@ -717,7 +831,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           </div>
           <div className="status-card-row">
             <span>Tools</span>
-            <strong>Desligadas</strong>
+            <strong>{currentRun?.tools_enabled ? 'Ativas nesta execução' : 'Não usadas'}</strong>
           </div>
         </div>
       </aside>

@@ -8,6 +8,7 @@ import { ProviderRepositoryV2, AgentRepositoryV2, ChatRunRepository, ActivityRep
 import { ChatRunnerService } from './chatRunner.js';
 import { ChatEventHub } from './chatEventHub.js';
 import { MessageRepository } from './conversationRepository.js';
+import { AgentToolPolicyRepository } from './toolRegistry.js';
 
 class MemorySecretStore implements SecretStore {
   private values = new Map<string, string>();
@@ -24,10 +25,12 @@ function fixture() {
     logLevel: 'silent',
   });
   const timestamp = new Date().toISOString();
+  const projectRoot = path.join(dataDir, 'project-1');
+  fs.mkdirSync(projectRoot, { recursive: true });
   database.connection.prepare(`
     INSERT INTO projects (id, name, root_path, git_enabled, git_branch, created_at, updated_at)
     VALUES ('project-1', 'Project 1', ?, 0, NULL, ?, ?)
-  `).run(path.join(dataDir, 'project-1'), timestamp, timestamp);
+  `).run(projectRoot, timestamp, timestamp);
   database.connection.prepare(`
     INSERT INTO project_memory (project_id, summary, architecture, rules, known_issues, updated_at)
     VALUES ('project-1', 'Project memory summary', 'TypeScript app', 'Be concise', '', ?)
@@ -130,7 +133,7 @@ describe('ChatRunnerService', () => {
 
     const bodyMessages = requestBody.messages as Array<{ role: string; content: string }>;
     expect(bodyMessages[0].role).toBe('system');
-    expect(bodyMessages[0].content).toContain('you have no computer, filesystem, shell, browser, Git, deployment or external action tools');
+    expect(bodyMessages[0].content).toContain('You have no active computer tools for this run');
     expect(requestBody).not.toHaveProperty('tools');
 
     const events = f.hub.snapshot(prepared.run.id);
@@ -293,6 +296,108 @@ describe('ChatRunnerService', () => {
     expect(f.hub.snapshot(prepared.run.id).some((event) => event.event === 'run.cancelled')).toBe(true);
     const state = new AgentStateRepository(f.database.connection).listForProject('project-1')[0];
     expect(state).toMatchObject({ state: 'idle', run_id: null });
+    f.cleanup();
+  });
+
+
+  it('uses adaptive Auto routing and only adds specialists when the request needs them', () => {
+    const f = fixture();
+    addProviderModelAgent(f, { providerId: 'route-provider', agentId: 'planner', role: 'Architect Planner', sort: 1 });
+    addProviderModelAgent(f, { providerId: 'route-provider', agentId: 'integration', role: 'Integration API Engineer', sort: 2 });
+    addProviderModelAgent(f, { providerId: 'route-provider', agentId: 'reviewer', role: 'QA Reviewer', sort: 3 });
+
+    const service = new ChatRunnerService(f.database.connection, f.secrets, f.hub, async () => {
+      throw new Error('not called');
+    });
+
+    const simple = service.prepare({
+      project_id: 'project-1',
+      message: 'Integre esta API ao backend.',
+      target: 'auto',
+    });
+    expect(simple.mode).toBe('single');
+    expect(simple.selected_agents).toEqual(['integration']);
+
+    const complex = service.prepare({
+      project_id: 'project-1',
+      message: 'Planeje e implemente uma integração completa da API, valide os casos de erro e revise os testes antes de finalizar.',
+      target: 'auto',
+    });
+    expect(complex.mode).toBe('team');
+    expect(complex.selected_agents).toEqual(['planner', 'integration', 'reviewer']);
+    f.cleanup();
+  });
+
+  it('executes enabled local tools through an OpenAI-compatible agent and audits the work', async () => {
+    const f = fixture();
+    const agent = addProviderModelAgent(f, {
+      providerId: 'tools-provider',
+      agentId: 'builder-tools',
+      role: 'Backend Engineer',
+      sort: 1,
+    });
+    new AgentToolPolicyRepository(f.database.connection).save({
+      agent_id: agent.id,
+      enabled: true,
+      allowed_tools: ['write_file', 'read_file'],
+      approval_mode: 'safe',
+      max_tool_steps: 5,
+    });
+
+    let call = 0;
+    const bodies: Array<Record<string, any>> = [];
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      bodies.push(body);
+      call += 1;
+      if (call === 1) {
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '',
+              tool_calls: [{
+                id: 'call-write',
+                type: 'function',
+                function: {
+                  name: 'write_file',
+                  arguments: JSON.stringify({ path: 'hello.txt', content: 'feito pelo agente' }),
+                },
+              }],
+            },
+            finish_reason: 'tool_calls',
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 2 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'Arquivo criado e confirmado.' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 7, completion_tokens: 4 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+
+    const service = new ChatRunnerService(f.database.connection, f.secrets, f.hub, fetchImpl);
+    const prepared = service.prepare({
+      project_id: 'project-1',
+      message: 'Crie hello.txt com a frase feito pelo agente.',
+      target: agent.id,
+    });
+    expect(prepared.tools_enabled).toBe(true);
+
+    await service.execute(prepared);
+
+    expect(fs.readFileSync(path.join(f.dataDir, 'project-1', 'hello.txt'), 'utf8')).toBe('feito pelo agente');
+    expect(bodies[0].tools.some((tool: any) => tool.function.name === 'write_file')).toBe(true);
+    expect(bodies[1].messages.some((message: any) => message.role === 'tool' && message.tool_call_id === 'call-write')).toBe(true);
+
+    const run = new ChatRunRepository(f.database.connection).get(prepared.run.id)!;
+    expect(run.status).toBe('completed');
+    expect(run.metadata.tools_enabled).toBe(true);
+    const activities = new ActivityRepository(f.database.connection).listForRun(prepared.run.id);
+    expect(activities.some((event) => event.type === 'tool.started')).toBe(true);
+    expect(activities.some((event) => event.type === 'tool.completed')).toBe(true);
+
+    const audit = f.database.connection.prepare('SELECT tool_name, status FROM tool_audit_events').get() as any;
+    expect(audit).toMatchObject({ tool_name: 'write_file', status: 'completed' });
     f.cleanup();
   });
 
