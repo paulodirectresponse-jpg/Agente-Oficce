@@ -146,4 +146,51 @@ describe('Phase H tool registry', () => {
     expect(approval).toMatchObject({ status: 'pending', tool_name: 'run_command' });
     f.cleanup();
   });
+
+  it('executes the same gated tool after an explicit approval without leaking raw content into approval storage', async () => {
+    const f = fixture();
+    const policy = new AgentToolPolicyRepository(f.database.connection).save({
+      agent_id: f.agent.id,
+      enabled: true,
+      allowed_tools: ['write_file'],
+      approval_mode: 'manual',
+      max_tool_steps: 5,
+    });
+    const registry = new ToolRegistry();
+    const input = { path: 'approved.txt', content: 'approved content' };
+    const context = {
+      database: f.database.connection,
+      project_id: 'project-1',
+      project_root: f.projectRoot,
+      run_id: 'run-1',
+      agent_id: f.agent.id,
+    };
+
+    const gated = await registry.execute('write_file', input, policy, context);
+    expect(gated).toMatchObject({ approval_required: true, error: 'TOOL_APPROVAL_REQUIRED' });
+    const storedApproval = f.database.connection.prepare('SELECT input_json FROM tool_approvals WHERE id = ?')
+      .get(gated.approval_id) as { input_json: string };
+    expect(storedApproval.input_json).not.toContain('approved content');
+
+    f.database.connection.prepare(
+      "UPDATE tool_approvals SET status = 'approved', resolved_at = ? WHERE id = ?",
+    ).run(new Date().toISOString(), gated.approval_id);
+
+    const executed = await registry.executeApproved(
+      'write_file',
+      input,
+      policy,
+      context,
+      gated.approval_id!,
+      gated.audit_id,
+    );
+    expect(executed.ok).toBe(true);
+    expect(fs.readFileSync(path.join(f.projectRoot, 'approved.txt'), 'utf8')).toBe('approved content');
+
+    const audit = f.database.connection.prepare('SELECT status FROM tool_audit_events WHERE id = ?')
+      .get(gated.audit_id) as { status: string };
+    expect(audit.status).toBe('completed');
+    f.cleanup();
+  });
+
 });
