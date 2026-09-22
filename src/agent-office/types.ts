@@ -201,3 +201,29 @@ export interface DiscoveredModel {
   max_output_tokens: number | null;
   metadata: Record<string, unknown>;
 }
+
+
+export interface ChatRunReceipt {
+  run_id: string;
+  conversation_id: string;
+  selected_agents: string[];
+  mode: 'single' | 'team';
+  status: 'running';
+  tools_enabled: false;
+}
+
+export interface ChatStartInput {
+  project_id: string;
+  conversation_id?: string;
+  message: string;
+  target?: 'auto' | 'team' | string;
+  model_override?: string;
+}
+
+export interface ChatStreamEnvelope {
+  sequence: number;
+  run_id: string;
+  event: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
