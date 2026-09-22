@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import os from 'node:os';
@@ -443,7 +444,7 @@ export async function executeFullAccessTool(
       const executables: Record<string, string> = { railway: 'railway', vercel: 'vercel', netlify: 'netlify', fly: 'flyctl', 'fly.io': 'flyctl' };
       const executable = executables[provider] || String(input.provider ?? '');
       if (!executable) return { ok: false, error: 'DEPLOY_PROVIDER_REQUIRED' };
-      return runExecutable(process.platform === 'win32' && !executable.endsWith('.exe') ? executable + '.cmd' : executable, Array.isArray(input.args) ? input.args.map(String) : [], context, cwd);
+      return runExecutable(executable, Array.isArray(input.args) ? input.args.map(String) : [], context, cwd);
     }
     if (name === 'runtime_health') return { ok: true, data: { tools: await getFullAccessToolHealth(context.projectRoot) } };
     return { ok: false, error: 'FULL_ACCESS_TOOL_NOT_FOUND' };
