@@ -3,7 +3,7 @@
 ## Checkpoint atual
 - Atualizado: 2026-09-22
 - Branch estável: `main`
-- HEAD funcional após a Fase C: `1827d514`
+- HEAD funcional após a Fase D: `df5f4802`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
 ## V2 — Experience Layer + Universal API
@@ -12,9 +12,9 @@
 |---|---|---|---|
 | A | Stabilize Desktop | DONE | Runtime desktop, MSI, backend bundled, SQLite e lifecycle validados no Windows. |
 | B | Data Model V2 | DONE | Providers dinâmicos, múltiplos modelos, agentes dinâmicos, chat_runs, activity_events e agent_states; migração não destrutiva. |
-| C | Universal Provider Engine | DONE | OpenAI Chat/Responses, Anthropic, Gemini, Generic JSON/SSE/NDJSON, auth drivers, presets, discovery e health; 98/98 testes + gate Windows verde. |
-| D | Chat Runner API-only | NEXT | Chat único, SSE/streaming, single/auto/team, sem ferramentas. |
-| E | Experience V2 | PENDING | Office-first, personagens 2D, estados ao vivo, chat central, activity rail e handoffs visuais. |
+| C | Universal Provider Engine | DONE | OpenAI Chat/Responses, Anthropic, Gemini, Generic JSON/SSE/NDJSON, auth drivers, presets, discovery e health. |
+| D | Chat Runner API-only | DONE | Single/auto/team, contexto/memória, SSE, fallback sem streaming, handoffs, estados/activity, usage e persistência; 104/104 testes + gate Windows verde. |
+| E | Experience V2 | NEXT | Office-first, personagens 2D, estados ao vivo, chat central, activity rail e handoffs visuais. |
 | F | Provider/Agent Manager | PENDING | UI universal para APIs, vários modelos e agentes configuráveis. |
 | G | Hardening | PENDING | Secrets, retries, timeout, cancelamento, rate limits, usage, recovery e release gate final. |
 | H | Tools | BLOCKED_BY_SCOPE | Só inicia após aprovação explícita da versão API-only. |
@@ -28,207 +28,214 @@
 - Fechar o app encerra o backend.
 - MSI foi instalado e executado em Windows real no CI.
 
-Gate de referência da Fase A:
+Gate de referência:
 - workflow run `35726810443`
 - 84/84 testes
-- artifact `10694365881`
 
 ## Fase B — concluída
+- Migration 4 não destrutiva.
+- `providers`, `provider_models`, `agents`, `chat_runs`, `activity_events`, `agent_states`.
+- Providers independentes dos agentes.
+- Vários modelos por provider.
+- Agentes dinâmicos com provider/model/system prompt/avatar/ordem.
+- Kimi/Claude/Codex preservados apenas como seeds de compatibilidade.
+- Configs legadas são migradas sem apagar projetos, conversas, tasks ou memória.
+- API V2 e frontend contracts para o novo modelo.
 
-### Schema V2
-Migration `4` adiciona sem destruir o legado:
-- `providers`
-- `provider_models`
-- `agents`
-- `chat_runs`
-- `activity_events`
-- `agent_states`
-
-### Providers/modelos/agentes
-- Provider é conexão independente do agente.
-- Um provider pode ter vários modelos.
-- Modelos carregam capabilities, contexto, max output, pricing metadata, enabled/default.
-- Agentes têm nome, slug, função, avatar, provider, modelo, system prompt, ordem e metadata.
-- Binding provider/model é validado.
-- Kimi/Claude/Codex seguem como seeds de compatibilidade, não como limite arquitetural.
-
-### Migração do legado
-- `provider_configs` -> `providers`.
-- modelo legado -> `provider_models`.
-- secrets continuam apenas como `secret_ref`.
-- projetos, conversas, tasks e memória são preservados.
-- teste específico valida migração de schema V3 para V4 sem perda.
-
-### Runtime V2
-- `chat_runs` guarda execuções textuais.
-- `activity_events` alimentará a timeline visual.
-- `agent_states` guarda estado/atividade/progresso atual.
-- CRUD e endpoints V2 já existem.
-
-Gate da Fase B:
+Gate de referência:
 - workflow run `35730087256`
-- 19 arquivos / 88 testes
-- MSI e lifecycle Windows verdes.
+- 88/88 testes
 
 ## Fase C — concluída
 
-### Migration 5
-Providers passam a persistir configuração de runtime universal:
+### Universal Provider Engine
+Protocol drivers:
+- `openai_chat`
+- `openai_responses`
+- `anthropic_messages`
+- `google_gemini`
+- `generic_json`
+- `generic_sse`
+- `generic_ndjson`
+
+Auth drivers:
+- bearer
+- x-api-key
+- custom header
+- query parameter
+- basic
+- none
+
+Inclui:
+- HttpTransport único;
+- timeout/cancel por AbortController;
+- erros normalizados;
+- streaming normalizado;
+- model discovery;
+- health check + latência;
+- upsert de modelos sem duplicação;
+- custom request/response templates;
+- presets para providers conhecidos e APIs customizadas;
+- secrets apenas por referência.
+
+Migration 5 adiciona:
 - `auth_config_json`
 - `protocol_config_json`
 - `timeout_ms`
 - `last_health_at`
 - `last_health_error`
 
-A migration é aditiva e preserva o schema/dados anteriores.
+Gate de referência:
+- workflow run `35737431451`
+- 98/98 testes
 
-### Protocol drivers
-O novo `UniversalProviderEngine` suporta:
+## Fase D — concluída
 
-1. `openai_chat`
-   - Chat Completions e APIs OpenAI-compatible.
-   - streaming SSE.
-   - usage normalizado.
-   - model discovery estilo `/v1/models`.
+### Chat Runner API-only
+Novo fluxo principal de execução textual:
 
-2. `openai_responses`
-   - Responses API.
-   - instructions + input.
-   - streaming por eventos.
-   - usage normalizado.
-   - model discovery.
+```
+mensagem do usuário
+       ↓
+target: auto | agente | team
+       ↓
+agente(s) dinâmicos
+       ↓
+contexto + memória compartilhada
+       ↓
+Universal Provider Engine
+       ↓
+streaming/fallback
+       ↓
+mensagens + estados + activity + usage
+```
 
-3. `anthropic_messages`
-   - Messages API.
-   - system separado da conversa.
-   - streaming SSE.
-   - usage.
-   - model discovery.
+### Endpoints
+- `POST /api/agent-office/chat/runs`
+- `GET /api/agent-office/chat/runs/:runId`
+- `GET /api/agent-office/chat/runs/:runId/stream`
 
-4. `google_gemini`
-   - `generateContent`.
-   - `streamGenerateContent`.
-   - systemInstruction.
-   - usageMetadata.
-   - model discovery e token limits.
+O POST retorna imediatamente:
+- run id;
+- conversation id;
+- agentes selecionados;
+- modo;
+- `tools_enabled: false`.
 
-5. `generic_json`
-   - request template configurável.
-   - response path configurável.
-   - usage paths configuráveis.
+### Modos
+`single`
+- agente explícito por id/slug ou `@agente`.
 
-6. `generic_sse`
-   - streaming SSE configurável por paths JSON.
+`auto`
+- roteamento dinâmico baseado na solicitação e na função/descrição dos agentes disponíveis.
+- não depende de nomes fixos Kimi/Claude/Codex.
 
-7. `generic_ndjson`
-   - streaming NDJSON configurável por paths JSON.
+`team`
+- até três agentes;
+- sequência textual planner → responder → reviewer quando essas funções existem;
+- fallback para equipe de dois agentes quando necessário;
+- handoffs explícitos entre os estágios;
+- cada estágio persiste sua própria resposta;
+- a última resposta é marcada como final.
 
-Isso cobre APIs conhecidas diretamente e permite cadastrar APIs REST novas sem alterar o core na maioria dos casos.
+### Contexto compartilhado
+Cada chamada recebe:
+- system prompt do agente;
+- regras explícitas da fase API-only;
+- project summary;
+- architecture;
+- project rules;
+- known issues;
+- memória recuperada via FTS;
+- histórico recente da conversa;
+- handoff/resultado do agente anterior em team mode.
 
-### Auth drivers
-Implementados:
-- `bearer`
-- `x-api-key`
-- `custom_header`
-- `query_param`
-- `basic`
-- `none`
+O contexto possui orçamento próprio e histórico antigo não é despejado inteiro.
 
-Secrets nunca entram no provider JSON persistido; o provider guarda apenas `secret_ref`.
+### Garantia API-only
+O system prompt do runtime informa explicitamente:
+- sem filesystem;
+- sem shell;
+- sem browser;
+- sem Git;
+- sem deploy;
+- sem ferramentas externas;
+- não pode afirmar que editou arquivos ou executou ações.
 
-### HttpTransport
-Camada única de transporte:
-- merge de headers/query;
-- autenticação centralizada;
-- JSON request/response;
-- streaming;
-- timeout via AbortController;
-- HTTP/network/JSON errors normalizados;
-- corpo de erro limitado;
-- sem incluir secret nas mensagens de erro.
+O `UniversalProviderEngine` recebe somente mensagens/modelo; nenhuma definição de tool é enviada.
 
-### Generic API templates
-Custom providers podem mapear:
-- base URL;
-- endpoint;
-- método;
-- request template;
-- modelo;
-- mensagens;
-- system prompt;
-- último prompt;
-- response text path;
-- usage paths;
-- error path;
-- health path;
-- models path;
-- model id/display name paths;
-- SSE ou NDJSON.
+### Streaming
+SSE local do Agent Office emite:
+- `run.created`
+- `agent.state`
+- `response.delta`
+- `response.streaming_fallback`
+- `response.completed`
+- `handoff.created`
+- `usage.updated`
+- `run.completed`
+- `run.failed`
 
-### Presets
-Presets iniciais:
-- OpenAI
-- OpenAI-compatible
-- Anthropic
-- Google Gemini
-- OpenRouter
-- Groq
-- xAI
-- DeepSeek
-- Moonshot/Kimi
-- Together AI
-- Fireworks AI
-- Mistral
-- Cerebras
-- Ollama local
-- Custom JSON
-- Custom SSE
-- Custom NDJSON
+O event hub:
+- mantém buffer por run;
+- possui sequence id;
+- permite reconnect com `Last-Event-ID` ou `?after=`;
+- retém runs terminais temporariamente;
+- envia heartbeat;
+- encerra SSE após evento terminal.
 
-Presets não hardcodam catálogo/preços de modelos.
+### Fallback sem streaming
+- se o modelo declara `streaming: false`, usa completion normal;
+- se o stream falha antes de emitir texto, tenta completion sem streaming;
+- se já houve texto parcial, não dispara uma segunda geração automaticamente, evitando resposta duplicada.
 
-### Model discovery
-`discoverModels()`:
-- consulta o endpoint do provider;
-- normaliza ids/nomes/capabilities/limites;
-- faz upsert;
-- não duplica modelos em discoveries repetidos;
-- preserva metadata manual;
-- marca origem de discovery;
-- mantém apenas um default.
+### Persistência
+Persistidos:
+- mensagem do usuário;
+- todas as respostas de agentes;
+- root chat run;
+- child runs de team mode;
+- tokens;
+- duração;
+- provider/model;
+- stage;
+- final message id;
+- activity events;
+- agent states;
+- usage snapshots.
 
-### Health
-`testConnection()`:
-- executa health/model-list real;
-- mede latência;
-- persiste `healthy/unavailable`;
-- persiste timestamp e erro sanitizado;
-- informa se model discovery está disponível.
+Falha de child run em team mode também é persistida como failed.
 
-### API V2 da Fase C
-Além do CRUD da Fase B:
-- `GET /api/agent-office/v2/provider-engine/capabilities`
-- `POST /api/agent-office/v2/providers/from-preset`
-- `POST /api/agent-office/v2/providers/:providerId/secret`
-- `DELETE /api/agent-office/v2/providers/:providerId/secret`
-- `POST /api/agent-office/v2/providers/:providerId/test`
-- `POST /api/agent-office/v2/providers/:providerId/discover-models`
+### Estados para a futura UI
+Durante a execução:
+- thinking
+- planning
+- responding
+- reviewing
+- error
+- idle
 
-O frontend client já possui métodos/tipos para capabilities, health e discovery.
+Cada estado é gravado em `agent_states` e emitido ao vivo no SSE.
 
-### Escopo mantido
-A Fase C implementa o motor de chamada/streaming, mas ainda não conecta isso ao chat principal. Essa orquestração entra na Fase D.
+### Frontend foundation
+Client/types já expõem:
+- `startChatRun`
+- `getChatRun`
+- `getChatStreamUrl`
+- `ChatRunReceipt`
+- `ChatStartInput`
+- `ChatStreamEnvelope`
 
-Nenhuma tool local é disponibilizada ao Universal Provider Engine nesta fase.
+A tela visual final entra na Fase E.
 
-## Gate verificado da Fase C
+## Gate verificado da Fase D
 
 Workflow: `Phase A Desktop Gate`
-Run: `35737431451`
+Run: `35739360160`
 
 Passou:
 - `npm ci`
-- `npm test` — 20 arquivos / 98 testes
+- `npm test` — 22 arquivos / 104 testes
 - `npm run lint`
 - `npm run build`
 - Rust/Tauri build
@@ -242,24 +249,24 @@ Passou:
 
 Artefato:
 - nome: `agent-office-phase-a-msi`
-- artifact id: `10698375748`
-- tamanho ZIP: 48.436.728 bytes
-- SHA-256: `b46b3a079f5cbeae9ae1e645806a40e7ad930ead8994e68aa0d144e0becb2770`
+- artifact id: `10698558043`
+- tamanho ZIP: 48.457.936 bytes
+- SHA-256: `bd6022080ffe18cf88168518f0c971c79d7692157c4704f03c920bdcdf949aa5`
 
 ## Compatibilidade V1
-Continuam disponíveis durante a migração:
+Continuam preservados durante a migração:
 - projetos;
 - conversa persistente;
 - memória/FTS/handoffs;
-- task orchestration/retry/cancel;
-- adapters legados Kimi/Claude/Codex;
+- task orchestration legado;
+- adapters legados;
 - router/Protected Mode;
-- usage tracking;
+- usage;
 - local tools.
 
-Tools permanecem fora da experiência V2 API-only até a Fase H.
+As tools legadas não são expostas pelo Chat Runner V2 e permanecem fora do escopo até a Fase H.
 
 ## Próximo passo
-Fase D — Chat Runner API-only.
+Fase E — Experience V2.
 
-Objetivo: ligar conversa + agentes dinâmicos + Universal Provider Engine + streaming + activity/state em um fluxo de chat único, com modos single/auto/team e sem qualquer ferramenta local.
+Objetivo: substituir a interface administrativa atual por uma experiência Office-first com personagens 2D, chat central real usando o Chat Runner da Fase D, estados ao vivo, timeline de activity e handoffs visuais.
