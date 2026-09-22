@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
+    fs::OpenOptions,
+    io::Write,
     net::TcpListener,
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -79,21 +81,34 @@ fn main() {
             let data_dir = app.path().app_data_dir()?;
 
             std::fs::create_dir_all(&data_dir)?;
+            let log_path = data_dir.join("backend.log");
+            let mut log = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)?;
+            let _ = writeln!(
+                log,
+                "\n=== Agent Office backend startup ===\nruntime={}\nserver={}\ndata={}",
+                runtime_path.display(),
+                server_path.display(),
+                data_dir.display()
+            );
+            let stderr_log = log.try_clone()?;
 
             let port = reserve_loopback_port()?;
             let url = format!("http://127.0.0.1:{port}");
 
-            let mut command = Command::new(runtime_path);
+            let mut command = Command::new(&runtime_path);
             command
-                .arg(server_path)
-                .current_dir(runtime_dir)
+                .arg(&server_path)
+                .current_dir(&runtime_dir)
                 .env("AGENT_OFFICE_DESKTOP", "1")
                 .env("AGENT_OFFICE_DATA_DIR", &data_dir)
                 .env("HOST", "127.0.0.1")
                 .env("PORT", port.to_string())
                 .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
+                .stdout(Stdio::from(log))
+                .stderr(Stdio::from(stderr_log));
 
             #[cfg(target_os = "windows")]
             command.creation_flags(CREATE_NO_WINDOW);
