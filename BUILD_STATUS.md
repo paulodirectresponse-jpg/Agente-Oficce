@@ -3,7 +3,7 @@
 ## Checkpoint atual
 - Atualizado: 2026-09-22
 - Branch estável: `main`
-- HEAD funcional após a Fase E: `fc29db57`
+- HEAD funcional após a Fase F: `21a4377f`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
 ## V2 — Experience Layer + Universal API
@@ -15,8 +15,8 @@
 | C | Universal Provider Engine | DONE | OpenAI Chat/Responses, Anthropic, Gemini, Generic JSON/SSE/NDJSON, auth drivers, presets, discovery e health. |
 | D | Chat Runner API-only | DONE | Single/auto/team, contexto/memória, SSE, fallback sem streaming, handoffs, estados/activity, usage e persistência; 104/104 testes + gate Windows verde. |
 | E | Experience V2 | DONE | Office-first baseado no visual aprovado, agentes 2D, estados ao vivo, chat compartilhado, Event Stream e handoffs visuais; desktop gate verde. |
-| F | Provider/Agent Manager | NEXT | UI universal para APIs, vários modelos e agentes configuráveis. |
-| G | Hardening | PENDING | Secrets, retries, timeout, cancelamento, rate limits, usage, recovery e release gate final. |
+| F | Provider/Agent Manager | DONE | UI completa para providers, secrets, health, discovery/catálogo de modelos e agentes dinâmicos configuráveis; desktop gate verde. |
+| G | Hardening | NEXT | Secrets, retries, timeout, cancelamento, rate limits, usage, recovery e release gate final. |
 | H | Tools | BLOCKED_BY_SCOPE | Só inicia após aprovação explícita da versão API-only. |
 
 ## Fase A — concluída
@@ -319,6 +319,84 @@ PR da Fase E:
 - `#5`
 - merge commit: `fc29db57dd14b0e4476a882b87a62e23a1abfc3c`
 
+## Fase F — concluída
+
+### Provider Manager
+A tela Providers agora permite:
+- criar provider por preset;
+- criar provider customizado;
+- editar nome, base URL, protocolo, autenticação e timeout;
+- ativar/desativar provider;
+- inserir/substituir API key sem exibir o valor salvo;
+- testar conexão e medir latência;
+- descobrir modelos via API;
+- adicionar modelos manualmente;
+- ativar/desativar modelos;
+- definir modelo padrão;
+- excluir modelos;
+- editar headers/query/auth/protocol config em JSON avançado.
+
+Presets continuam desacoplados do catálogo de modelos e APIs customizadas continuam suportadas.
+
+### Agent Manager
+A tela Agentes agora permite:
+- criar, editar e excluir agentes;
+- nome e slug;
+- função/especialidade;
+- descrição;
+- avatar visual;
+- provider;
+- modelo;
+- system prompt;
+- enabled/disabled;
+- ordem no escritório;
+- idle timeout;
+- reordenação por setas.
+
+A seleção provider/model respeita o vínculo correto e só apresenta modelos do provider escolhido.
+
+### Integração com Office V2
+- agentes configurados passam a ser usados pelo Chat Runner;
+- os três primeiros por ordem são priorizados no Office;
+- agentes desativados ficam fora de Auto/Team;
+- providers/modelos configurados alimentam diretamente as telas Office e Chat;
+- nenhuma tool local foi habilitada.
+
+### API client
+O frontend recebeu operações completas para:
+- create/update/delete provider;
+- create provider from preset;
+- save/delete secret;
+- health test;
+- model discovery;
+- create/update/delete model;
+- create/update/delete agent.
+
+### Desktop gate da Fase F
+Workflow: `Agent Office Desktop Gate`
+Run: `35746590373`
+
+Passou:
+- instalação de dependências;
+- suite de testes;
+- typecheck;
+- build client/server;
+- Rust/Tauri build;
+- smoke do backend empacotado;
+- instalação do MSI;
+- lifecycle do desktop instalado;
+- verificação e upload do MSI.
+
+Artefato:
+- nome: `agent-office-desktop-msi`
+- artifact id: `10703281646`
+- tamanho ZIP: 48.471.432 bytes
+- SHA-256: `ad1e5239bfc23230f404d9cabffd16e28e98475f678f6176766f971fff496612`
+
+PR da Fase F:
+- `#6`
+- merge commit: `21a4377f8f51846e5837bc7c3f20cab17abdf61b`
+
 ## Compatibilidade V1
 Continuam preservados durante a migração:
 - projetos;
@@ -333,6 +411,6 @@ Continuam preservados durante a migração:
 As tools legadas não são expostas pelo Chat Runner V2 e permanecem fora do escopo até a Fase H.
 
 ## Próximo passo
-Fase F — Provider/Agent Manager.
+Fase G — Hardening.
 
-Objetivo: transformar as fundações dinâmicas das Fases B/C em uma interface completa para cadastrar providers, secrets, descobrir/ativar modelos, criar agentes, escolher modelo/provider, avatar, função, system prompt e ordem no escritório.
+Objetivo: preparar a versão API-only para uso contínuo e release: armazenamento de secrets mais robusto, retries/backoff, cancelamento, rate limits, recovery de runs, usage mais completo, validações de segurança e release gate final antes de liberar a Fase H de tools.
