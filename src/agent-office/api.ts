@@ -92,11 +92,34 @@ export const api = {
   providerEngineCapabilities: () =>
     request<ProviderEngineCapabilities>('/api/agent-office/v2/provider-engine/capabilities'),
   listProvidersV2: () => request<UniversalProvider[]>('/api/agent-office/v2/providers'),
+  createProviderV2: (input: Partial<UniversalProvider> & { name: string; protocol_driver: string }) =>
+    request<UniversalProvider>('/api/agent-office/v2/providers', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  createProviderFromPresetV2: (input: { preset_id: string; id?: string; name?: string; base_url?: string; timeout_ms?: number }) =>
+    request<UniversalProvider>('/api/agent-office/v2/providers/from-preset', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateProviderV2: (providerId: string, patch: Partial<UniversalProvider>) =>
+    request<UniversalProvider>(`/api/agent-office/v2/providers/${providerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteProviderV2: async (providerId: string) => {
+    const response = await fetchWithStartupRetry(`/api/agent-office/v2/providers/${providerId}`, { method: 'DELETE' });
+    if (!response.ok && response.status !== 204) throw new Error(`Request failed (${response.status})`);
+  },
   saveProviderSecretV2: (providerId: string, secret: string) =>
     request<UniversalProvider>(`/api/agent-office/v2/providers/${providerId}/secret`, {
       method: 'POST',
       body: JSON.stringify({ secret }),
     }),
+  deleteProviderSecretV2: async (providerId: string) => {
+    const response = await fetchWithStartupRetry(`/api/agent-office/v2/providers/${providerId}/secret`, { method: 'DELETE' });
+    if (!response.ok && response.status !== 204) throw new Error(`Request failed (${response.status})`);
+  },
   testProviderV2: (providerId: string) =>
     request<ProviderHealthResult>(`/api/agent-office/v2/providers/${providerId}/test`, { method: 'POST' }),
   discoverProviderModelsV2: (providerId: string, persist = true) =>
@@ -106,7 +129,35 @@ export const api = {
     }),
   listProviderModelsV2: (providerId: string) =>
     request<ProviderModel[]>(`/api/agent-office/v2/providers/${providerId}/models`),
+  createProviderModelV2: (providerId: string, input: Partial<ProviderModel> & { model_id: string }) =>
+    request<ProviderModel>(`/api/agent-office/v2/providers/${providerId}/models`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateProviderModelV2: (modelId: string, patch: Partial<ProviderModel>) =>
+    request<ProviderModel>(`/api/agent-office/v2/models/${modelId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteProviderModelV2: async (modelId: string) => {
+    const response = await fetchWithStartupRetry(`/api/agent-office/v2/models/${modelId}`, { method: 'DELETE' });
+    if (!response.ok && response.status !== 204) throw new Error(`Request failed (${response.status})`);
+  },
   listAgentsV2: () => request<AgentProfile[]>('/api/agent-office/v2/agents'),
+  createAgentV2: (input: Partial<AgentProfile> & { name: string; slug: string }) =>
+    request<AgentProfile>('/api/agent-office/v2/agents', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateAgentV2: (agentId: string, patch: Partial<AgentProfile>) =>
+    request<AgentProfile>(`/api/agent-office/v2/agents/${agentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  deleteAgentV2: async (agentId: string) => {
+    const response = await fetchWithStartupRetry(`/api/agent-office/v2/agents/${agentId}`, { method: 'DELETE' });
+    if (!response.ok && response.status !== 204) throw new Error(`Request failed (${response.status})`);
+  },
   listChatRunsV2: (projectId: string) =>
     request<ChatRun[]>(`/api/agent-office/v2/projects/${projectId}/chat-runs`),
   listActivityV2: (projectId: string) =>
