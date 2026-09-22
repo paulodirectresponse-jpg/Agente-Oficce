@@ -55,13 +55,8 @@ fn main() {
     let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![backend_url])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.manage(BackendRuntime {
-                    child: Mutex::new(None),
-                    url: "http://127.0.0.1:3001".to_string(),
-                });
-                return Ok(());
-            }
+            let data_dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&data_dir)?;
 
             let runtime_name = if cfg!(target_os = "windows") {
                 "runtime/node-runtime.exe"
@@ -78,9 +73,17 @@ fn main() {
             let runtime_dir = app
                 .path()
                 .resolve("runtime", BaseDirectory::Resource)?;
-            let data_dir = app.path().app_data_dir()?;
 
-            std::fs::create_dir_all(&data_dir)?;
+            // In development, the Node/Vite stack is started by beforeDevCommand.
+            // In an installed build, the bundled runtime is present and is launched here.
+            if !runtime_path.exists() || !server_path.exists() {
+                app.manage(BackendRuntime {
+                    child: Mutex::new(None),
+                    url: "http://127.0.0.1:3001".to_string(),
+                });
+                return Ok(());
+            }
+
             let log_path = data_dir.join("backend.log");
             let mut log = OpenOptions::new()
                 .create(true)
