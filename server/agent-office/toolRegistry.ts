@@ -36,6 +36,8 @@ export interface ToolExecutionContext {
   agent_id: string;
   signal?: AbortSignal;
   idempotency_key?: string;
+  execution_plan_id?: string;
+  execution_step_id?: string;
 }
 
 export interface ToolExecutionResult extends LocalToolResult {
@@ -422,8 +424,9 @@ export class ToolRegistry {
       const approvalId = crypto.randomUUID();
       context.database.prepare(`
         INSERT INTO tool_approvals (
-          id, project_id, run_id, agent_id, tool_name, input_json, input_fingerprint, audit_id, reason, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+          id, project_id, run_id, agent_id, tool_name, input_json, input_fingerprint, audit_id, reason, status, created_at,
+          execution_plan_id, execution_step_id, expires_at, tool_invocation_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
       `).run(
         approvalId,
         context.project_id,
@@ -435,6 +438,10 @@ export class ToolRegistry {
         auditId,
         `${definition.name} requires approval under policy ${policy.approval_mode}`,
         startedAt,
+        context.execution_plan_id ?? null,
+        context.execution_step_id ?? null,
+        context.execution_plan_id ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null,
+        context.idempotency_key ?? null,
       );
       context.database.prepare(`
         UPDATE tool_audit_events SET status = 'waiting_approval', result_json = ?, ended_at = ? WHERE id = ?
@@ -478,7 +485,7 @@ export class ToolRegistry {
     }
 
     const approval = context.database.prepare(`
-      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint, audit_id
+      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint, audit_id, expires_at
       FROM tool_approvals
       WHERE id = ?
     `).get(approvalId) as {
@@ -489,6 +496,7 @@ export class ToolRegistry {
       agent_id: string | null;
       input_fingerprint: string | null;
       audit_id: string | null;
+      expires_at: string | null;
     } | undefined;
 
     if (!approval
@@ -513,6 +521,11 @@ export class ToolRegistry {
     }
     if (audit.status === 'completed') {
       return { ok: true, data: { idempotent_replay: true }, audit_id: auditId, risk: definition.risk };
+    }
+
+    if (approval.expires_at && approval.expires_at <= now() && approval.status === 'pending') {
+      context.database.prepare("UPDATE tool_approvals SET status = 'denied', resolved_at = ?, actor = 'system:expiry' WHERE id = ? AND status = 'pending'").run(now(), approval.id);
+      return { ok: false, error: 'TOOL_APPROVAL_EXPIRED', audit_id: auditId, risk: definition.risk };
     }
 
     if (approval.status === 'denied') {
