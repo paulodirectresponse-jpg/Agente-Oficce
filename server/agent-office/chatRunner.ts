@@ -149,6 +149,24 @@ function messageTextForContext(message: AgentOfficeMessage): UniversalMessage | 
   return { role, content: message.content };
 }
 
+function estimateCostUsd(model: ProviderModel, usage: UniversalUsage | undefined): number | undefined {
+  if (!usage) return undefined;
+  const pricing = model.pricing ?? {};
+  const inputRate = typeof pricing.input_per_million === 'number'
+    ? pricing.input_per_million
+    : typeof pricing.input_per_1m === 'number'
+      ? pricing.input_per_1m
+      : undefined;
+  const outputRate = typeof pricing.output_per_million === 'number'
+    ? pricing.output_per_million
+    : typeof pricing.output_per_1m === 'number'
+      ? pricing.output_per_1m
+      : undefined;
+  if (inputRate === undefined && outputRate === undefined) return undefined;
+  return ((usage.input_tokens ?? 0) / 1_000_000) * (inputRate ?? 0)
+    + ((usage.output_tokens ?? 0) / 1_000_000) * (outputRate ?? 0);
+}
+
 function sumUsage(values: Array<UniversalUsage | undefined>): UniversalUsage {
   let input = 0;
   let output = 0;
@@ -752,6 +770,7 @@ export class ChatRunnerService {
     this.usage.recordRunUsage(binding.agent.id, binding.provider.id, {
       input_tokens: usage?.input_tokens,
       output_tokens: usage?.output_tokens,
+      cost_usd: estimateCostUsd(binding.model, usage),
       request_count: 1,
       duration_ms: duration,
     });
