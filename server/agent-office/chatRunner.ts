@@ -23,6 +23,7 @@ import {
 } from './universalProviderEngine.js';
 import { chatEventHub, type ChatEventHub } from './chatEventHub.js';
 import { ChatRunCancelledError } from './runtimeControls.js';
+import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -32,6 +33,7 @@ export interface PrepareChatRunInput {
   message: string;
   target?: ChatTarget;
   model_override?: string;
+  tools_enabled: boolean;
 }
 
 export interface PreparedChatRun {
@@ -48,7 +50,7 @@ export interface ChatRunReceipt {
   selected_agents: string[];
   mode: 'single' | 'team';
   status: 'running';
-  tools_enabled: false;
+  tools_enabled: boolean;
 }
 
 interface AgentBinding {
@@ -199,6 +201,7 @@ export class ChatRunnerService {
   private readonly states: AgentStateRepository;
   private readonly usage: UsageTracker;
   private readonly engine: UniversalProviderEngine;
+  private readonly toolPolicies: AgentToolPolicyRepository;
 
   constructor(
     private readonly database: Database,
@@ -216,6 +219,7 @@ export class ChatRunnerService {
     this.states = new AgentStateRepository(database);
     this.usage = new UsageTracker(database);
     this.engine = new UniversalProviderEngine(database, secrets, fetchImpl);
+    this.toolPolicies = new AgentToolPolicyRepository(database);
   }
 
   prepare(input: PrepareChatRunInput): PreparedChatRun {
@@ -237,7 +241,11 @@ export class ChatRunnerService {
 
     const selected = target === 'team'
       ? this.selectTeam(available, message)
-      : [this.selectSingle(available, message, target)];
+      : target === 'auto'
+        ? this.selectAdaptive(available, message)
+        : [this.selectSingle(available, message, target)];
+
+    const toolsEnabled = selected.some((binding) => this.toolsAvailable(binding));
 
     const userMessage = this.messages.create({
       conversation_id: conversationId,
@@ -246,11 +254,11 @@ export class ChatRunnerService {
       metadata: {
         source: 'chat_v2',
         target,
-        tools_enabled: false,
+        tools_enabled: toolsEnabled,
       },
     });
 
-    const mode = target === 'team' ? 'team' : 'single';
+    const mode = selected.length > 1 ? 'team' : 'single';
     if (mode === 'team' && input.model_override) throw new Error('CHAT_MODEL_OVERRIDE_TEAM_UNSUPPORTED');
     const first = selected[0];
     const run = this.runs.create({
@@ -266,7 +274,8 @@ export class ChatRunnerService {
         target,
         selected_agents: selected.map((binding) => binding.agent.id),
         user_message_id: userMessage.id,
-        tools_enabled: false,
+        tools_enabled: toolsEnabled,
+        routing: target === 'auto' ? 'adaptive' : target,
         model_override: input.model_override ?? null,
       },
     });
@@ -275,7 +284,7 @@ export class ChatRunnerService {
       mode,
       target,
       selected_agents: selected.map((binding) => binding.agent.id),
-      tools_enabled: false,
+      tools_enabled: toolsEnabled,
     });
 
     return {
@@ -284,6 +293,7 @@ export class ChatRunnerService {
       selected_agents: selected.map((binding) => binding.agent.id),
       mode,
       model_override: input.model_override,
+      tools_enabled: toolsEnabled,
     };
   }
 
@@ -294,7 +304,7 @@ export class ChatRunnerService {
       selected_agents: prepared.selected_agents,
       mode: prepared.mode,
       status: 'running',
-      tools_enabled: false,
+      tools_enabled: prepared.tools_enabled,
     };
   }
 
@@ -331,7 +341,7 @@ export class ChatRunnerService {
             status: 'running',
             mode: stage === 'reviewer' ? 'review' : 'single',
             parent_run_id: rootRun.id,
-            metadata: { stage, tools_enabled: false },
+            metadata: { stage, tools_enabled: this.toolsAvailable({ ...binding, model }) },
           })
           : rootRun;
 
@@ -370,7 +380,7 @@ export class ChatRunnerService {
         final_message_id: final.message_id,
         selected_agents: prepared.selected_agents,
         child_run_ids: stageResults.map((result) => result.child_run_id),
-        tools_enabled: false,
+        tools_enabled: prepared.tools_enabled,
       };
       this.runs.update(rootRun.id, {
         status: 'completed',
@@ -499,6 +509,45 @@ export class ChatRunnerService {
     return best;
   }
 
+  private selectAdaptive(available: AgentBinding[], message: string): AgentBinding[] {
+    const primary = this.selectSingle(available, message, 'auto');
+    const normalized = message.toLowerCase();
+    const category = classifyTask(message, '').category;
+    const complexSignal = message.length > 700
+      || /\b(arquitet|planej|refator|migra|integra|deploy|release|sistema completo|end[- ]to[- ]end|do zero)\b/i.test(normalized);
+    const reviewSignal = /\b(test|teste|revis|review|qa|valid|bug|corrig|seguran|security|release)\b/i.test(normalized);
+    const planSignal = complexSignal || ['architecture', 'integration', 'devops', 'auth_security'].includes(category);
+
+    const selected: AgentBinding[] = [];
+    if (planSignal) {
+      const planner = available.find((binding) => {
+        const text = `${binding.agent.role} ${binding.agent.description}`.toLowerCase();
+        return binding.agent.id !== primary.agent.id && /(plan|architect|arquitet|estrateg)/i.test(text);
+      });
+      if (planner) selected.push(planner);
+    }
+
+    selected.push(primary);
+
+    if (reviewSignal || (complexSignal && selected.length < 3)) {
+      const reviewer = available.find((binding) => {
+        const text = `${binding.agent.role} ${binding.agent.description}`.toLowerCase();
+        return !selected.some((item) => item.agent.id === binding.agent.id)
+          && /(review|revis|qa|critic|test|security|seguran)/i.test(text);
+      });
+      if (reviewer) selected.push(reviewer);
+    }
+
+    return selected.slice(0, 3);
+  }
+
+  private toolsAvailable(binding: AgentBinding): boolean {
+    const policy = this.toolPolicies.get(binding.agent.id);
+    return policy.enabled
+      && binding.provider.protocol_driver === 'openai_chat'
+      && toolRegistry.definitionsForPolicy(policy).length > 0;
+  }
+
   private selectTeam(available: AgentBinding[], message: string): AgentBinding[] {
     const primary = this.selectSingle(available, message, 'auto');
     const planner = available.find((binding) => {
@@ -546,6 +595,7 @@ export class ChatRunnerService {
     agent: Agent,
     stage: string,
     previousText: string,
+    toolsEnabled = false,
   ): UniversalMessage[] {
     const projectMemory = this.memory.getProjectMemory(projectId);
     const recent = this.messages.list(conversationId, RECENT_MESSAGE_LIMIT);
@@ -556,9 +606,12 @@ export class ChatRunnerService {
 
     const systemParts = [
       'You are an AI agent inside Agent Office.',
-      'This is the API-only phase: you have no computer, filesystem, shell, browser, Git, deployment or external action tools.',
-      'Never claim that you changed files, ran commands, published a site, or performed an external action.',
-      'You may reason, plan, draft, review and answer in text.',
+      toolsEnabled
+        ? 'You are in Agent Office tool mode. You may use ONLY the tools explicitly provided to you for the active project. Never assume a tool succeeded: inspect its returned result.'
+        : 'You have no active computer tools for this run. Do not claim that you changed files, ran commands, published or performed external actions.',
+      toolsEnabled
+        ? 'Keep all file and command work inside the active project root. Destructive operations are forbidden. Prefer the minimum number of tool calls needed.'
+        : 'You may reason, plan, draft, review and answer in text.',
       agent.system_prompt.trim(),
       projectMemory?.summary ? `Project summary: ${projectMemory.summary}` : '',
       projectMemory?.architecture ? `Project architecture: ${projectMemory.architecture}` : '',
@@ -636,6 +689,7 @@ export class ChatRunnerService {
       binding.agent,
       stage,
       previousText,
+      this.toolsAvailable(binding),
     );
 
     const completionInput: UniversalCompletionInput = {
