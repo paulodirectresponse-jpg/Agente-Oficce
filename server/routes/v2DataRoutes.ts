@@ -648,6 +648,11 @@ v2DataRouter.post('/tool-approvals/:approvalId/resolve', (request, response) => 
       UPDATE tool_approvals
       SET status = ?, resolved_at = ?
       WHERE id = ? AND status = 'pending'
+        AND EXISTS (
+          SELECT 1 FROM chat_runs
+          WHERE chat_runs.id = tool_approvals.run_id
+            AND chat_runs.status IN ('created', 'running')
+        )
     `).run(status, new Date().toISOString(), request.params.approvalId);
     if (!result.changes) {
       response.status(404).json({ ok: false, error: { code: 'TOOL_APPROVAL_NOT_FOUND', message: 'Pending approval not found.' } });
