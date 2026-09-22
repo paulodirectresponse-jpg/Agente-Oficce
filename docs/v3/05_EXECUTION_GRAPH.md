@@ -1,6 +1,6 @@
 # V3.4 — Execution Graph
 
-**Status:** PLANNED  
+**Status:** DONE  
 **Depende de:** V3.2 + V3.3.  
 **Bloqueia:** Durable Runs, Teams e Dev Chat completo.
 

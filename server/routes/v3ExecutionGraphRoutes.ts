@@ -1,0 +1,6 @@
+import{Router}from'express';import{openAgentOfficeDatabase}from'../agent-office/database.js';import{ExecutionGraphService}from'../agent-office/executionGraph.js';
+export const v3ExecutionGraphRouter=Router();
+const err=(e:unknown)=>e instanceof Error&&/^[A-Z0-9_]+$/.test(e.message)?e.message:'EXECUTION_GRAPH_FAILED';
+v3ExecutionGraphRouter.post('/plans',(req,res)=>{const db=openAgentOfficeDatabase();try{const data=new ExecutionGraphService(db.connection).createValidated(req.body??{});res.status(201).json({ok:true,data})}catch(e){const code=err(e);res.status(code.endsWith('NOT_FOUND')?404:400).json({ok:false,error:{code,message:code}})}finally{db.connection.close()}});
+v3ExecutionGraphRouter.get('/plans/:planId',(req,res)=>{const db=openAgentOfficeDatabase();try{const data=new ExecutionGraphService(db.connection).getPlan(req.params.planId);if(!data){res.status(404).json({ok:false,error:{code:'EXECUTION_PLAN_NOT_FOUND',message:'EXECUTION_PLAN_NOT_FOUND'}});return}res.json({ok:true,data})}finally{db.connection.close()}});
+v3ExecutionGraphRouter.get('/plans/:planId/ready',(req,res)=>{const db=openAgentOfficeDatabase();try{res.json({ok:true,data:new ExecutionGraphService(db.connection).readySteps(req.params.planId)})}finally{db.connection.close()}});

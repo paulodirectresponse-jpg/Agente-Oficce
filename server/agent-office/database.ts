@@ -494,7 +494,95 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_orchestration_project_created ON orchestration_runs(project_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_orchestration_conversation_created ON orchestration_runs(conversation_id, created_at DESC);
     `,
-  }
+  },
+  {
+    version: 11,
+    sql: `
+      CREATE TABLE IF NOT EXISTS execution_plans (
+        id TEXT PRIMARY KEY,
+        orchestration_run_id TEXT REFERENCES orchestration_runs(id) ON DELETE SET NULL,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+        status TEXT NOT NULL CHECK(status IN ('draft','validated','running','superseded','completed','failed','cancelled')),
+        goal TEXT NOT NULL,
+        rationale TEXT NOT NULL DEFAULT '',
+        budget_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS execution_steps (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        key TEXT NOT NULL,
+        title TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        required_capabilities_json TEXT NOT NULL DEFAULT '[]',
+        required_tools_json TEXT NOT NULL DEFAULT '[]',
+        resource_locks_json TEXT NOT NULL DEFAULT '[]',
+        assigned_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        assigned_team_id TEXT,
+        status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','ready','running','blocked','completed','failed','cancelled')),
+        risk TEXT NOT NULL DEFAULT 'low' CHECK(risk IN ('low','medium','high')),
+        expected_outputs_json TEXT NOT NULL DEFAULT '[]',
+        success_criteria_json TEXT NOT NULL DEFAULT '[]',
+        timeout_ms INTEGER NOT NULL DEFAULT 60000 CHECK(timeout_ms > 0),
+        retry_policy_json TEXT NOT NULL DEFAULT '{}',
+        priority INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(plan_id,key)
+      );
+      CREATE TABLE IF NOT EXISTS step_dependencies (
+        step_id TEXT NOT NULL REFERENCES execution_steps(id) ON DELETE CASCADE,
+        depends_on_step_id TEXT NOT NULL REFERENCES execution_steps(id) ON DELETE CASCADE,
+        dependency_type TEXT NOT NULL DEFAULT 'hard' CHECK(dependency_type IN ('hard','artifact','approval')),
+        PRIMARY KEY(step_id,depends_on_step_id),
+        CHECK(step_id <> depends_on_step_id)
+      );
+      CREATE TABLE IF NOT EXISTS step_attempts (
+        id TEXT PRIMARY KEY,
+        step_id TEXT NOT NULL REFERENCES execution_steps(id) ON DELETE CASCADE,
+        attempt_number INTEGER NOT NULL CHECK(attempt_number > 0),
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        status TEXT NOT NULL CHECK(status IN ('running','completed','failed','cancelled','timed_out','budget_exceeded')),
+        started_at TEXT NOT NULL,
+        ended_at TEXT,
+        error_json TEXT,
+        result_summary TEXT NOT NULL DEFAULT '',
+        usage_json TEXT NOT NULL DEFAULT '{}',
+        provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL,
+        model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL,
+        UNIQUE(step_id,attempt_number)
+      );
+      CREATE TABLE IF NOT EXISTS execution_artifacts (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        step_id TEXT REFERENCES execution_steps(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        uri TEXT,
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS resource_locks (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        resource_key TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK(mode IN ('read','write','exclusive')),
+        owner_step_id TEXT NOT NULL REFERENCES execution_steps(id) ON DELETE CASCADE,
+        owner_attempt_id TEXT REFERENCES step_attempts(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','released','expired')),
+        acquired_at TEXT NOT NULL,
+        heartbeat_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_execution_plan_status ON execution_plans(project_id,status,created_at);
+      CREATE INDEX IF NOT EXISTS idx_execution_step_status ON execution_steps(plan_id,status,priority);
+      CREATE INDEX IF NOT EXISTS idx_step_dependency_reverse ON step_dependencies(depends_on_step_id,step_id);
+      CREATE INDEX IF NOT EXISTS idx_step_attempt_step ON step_attempts(step_id,attempt_number);
+      CREATE INDEX IF NOT EXISTS idx_resource_lock_lookup ON resource_locks(project_id,resource_key,status,expires_at);
+      CREATE INDEX IF NOT EXISTS idx_execution_artifact_step ON execution_artifacts(step_id,created_at);
+    `,
+  },
 ];
 
 function assertMigrationPlan(): void {

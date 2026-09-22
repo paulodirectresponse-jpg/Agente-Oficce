@@ -8,8 +8,8 @@ Este arquivo deve ser atualizado a cada bloco para permitir continuidade por qua
 | V3.1 Capability Core | DONE | PR #17 | 9 | 35778249756 | Taxonomy, matcher determinístico, APIs e fixture 500 agentes |
 | V3.2 Orchestrator Gateway | DONE | PR #18 | 10 | 35780852880 | Gateway em camadas, fallback e policy validator |
 | V3.3 Gap Analysis | DONE | PR #19 | — | 35783572521 | Cobertura determinística, inactive hints, set minimization e tool/capability gaps |
-| V3.4 Execution Graph | NOT STARTED | — | — | — | Desbloqueado por V3.2–V3.3 |
-| V3.5 Durable Runs + Replanning | BLOCKED | — | — | — | Depende de V3.4 |
+| V3.4 Execution Graph | DONE | PR #20 | 11 | 35788214610 | DAG validado, scheduler paralelo, attempts/retries/timeouts, budgets, artifacts/work packets e resource locks |
+| V3.5 Durable Runs + Replanning | NOT STARTED | — | — | — | Desbloqueado por V3.4 |
 | V3.6 Teams + Subagents | BLOCKED | — | — | — | Depende de V3.4–V3.5 |
 | V3.7 Proposal Engine + Agent Factory | BLOCKED | — | — | — | Depende de V3.3 + V3.6 |
 | V3.8 Evaluation + Learning | BLOCKED | — | — | — | Depende de execução/proposals |
