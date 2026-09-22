@@ -135,7 +135,8 @@ jobs:
               Format-Table -AutoSize
 
             Write-Host "--- backend.log ---"
-            Get-ChildItem "$env:APPDATA" -Filter "backend.log" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+            Get-ChildItem -Path @("$env:APPDATA", "$env:LOCALAPPDATA") -Filter "backend.log" -File -Recurse -Depth 6 -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending |
               ForEach-Object {
                 Write-Host $_.FullName
                 Get-Content $_.FullName
