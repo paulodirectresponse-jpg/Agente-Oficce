@@ -1,10 +1,33 @@
 import type { Conversation, Project, ProviderConfig, Task, TaskEvent, UsageEntry } from './types.js';
 
+const API_BASE = import.meta.env.DEV ? '' : 'http://127.0.0.1:3001';
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+async function fetchWithStartupRetry(path: string, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const attempts = method === 'GET' ? 6 : 1;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetch(`${API_BASE}${path}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...init,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) await sleep(200 * (attempt + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('Local Agent Office backend is unavailable.');
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...init,
-  });
+  const response = await fetchWithStartupRetry(path, init);
   const payload = (await response.json()) as { ok: boolean; data?: T; error?: { message?: string } };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.error?.message || `Request failed (${response.status})`);
@@ -13,6 +36,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  health: () => request<{ service: string; storage: string }>('/api/agent-office/health'),
   listProjects: () => request<Project[]>('/api/agent-office/projects'),
   createProject: (input: { name: string; root_path: string }) =>
     request<Project>('/api/agent-office/projects', { method: 'POST', body: JSON.stringify(input) }),
