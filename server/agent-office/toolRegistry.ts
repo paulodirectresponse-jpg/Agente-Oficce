@@ -349,7 +349,7 @@ function auditResult(toolName: string, result: LocalToolResult): Record<string, 
       stdout_bytes: Buffer.byteLength(stdout),
       stderr_bytes: Buffer.byteLength(stderr),
       executable: data.executable,
-      args: data.args,
+      args: redactSecrets(data.args),
     };
   }
   return { ok: true, ...data };
@@ -401,9 +401,9 @@ export class ToolRegistry {
       if (existing) {
         const pending = context.database.prepare(`
           SELECT id FROM tool_approvals
-          WHERE run_id = ? AND agent_id = ? AND tool_name = ? AND input_fingerprint = ? AND status = 'pending'
-          ORDER BY created_at DESC LIMIT 1
-        `).get(context.run_id, context.agent_id, definition.name, inputFingerprint) as { id: string } | undefined;
+          WHERE audit_id = ? AND run_id = ? AND agent_id = ? AND tool_name = ? AND input_fingerprint = ? AND status = 'pending'
+          LIMIT 1
+        `).get(existing.id, context.run_id, context.agent_id, definition.name, inputFingerprint) as { id: string } | undefined;
         if (pending) {
           return { ok: false, error: 'TOOL_APPROVAL_REQUIRED', approval_required: true, approval_id: pending.id, audit_id: existing.id, risk: definition.risk };
         }
@@ -422,8 +422,8 @@ export class ToolRegistry {
       const approvalId = crypto.randomUUID();
       context.database.prepare(`
         INSERT INTO tool_approvals (
-          id, project_id, run_id, agent_id, tool_name, input_json, input_fingerprint, reason, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+          id, project_id, run_id, agent_id, tool_name, input_json, input_fingerprint, audit_id, reason, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
       `).run(
         approvalId,
         context.project_id,
@@ -432,6 +432,7 @@ export class ToolRegistry {
         definition.name,
         JSON.stringify(auditInput(definition.name, input)),
         inputFingerprint,
+        auditId,
         `${definition.name} requires approval under policy ${policy.approval_mode}`,
         startedAt,
       );
@@ -477,7 +478,7 @@ export class ToolRegistry {
     }
 
     const approval = context.database.prepare(`
-      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint
+      SELECT id, status, tool_name, run_id, agent_id, input_fingerprint, audit_id
       FROM tool_approvals
       WHERE id = ?
     `).get(approvalId) as {
@@ -487,12 +488,14 @@ export class ToolRegistry {
       run_id: string | null;
       agent_id: string | null;
       input_fingerprint: string | null;
+      audit_id: string | null;
     } | undefined;
 
     if (!approval
       || approval.tool_name !== definition.name
       || approval.run_id !== context.run_id
       || approval.agent_id !== context.agent_id
+      || approval.audit_id !== auditId
       || approval.input_fingerprint !== fingerprintInput(input)) {
       return { ok: false, error: 'TOOL_APPROVAL_INVALID', audit_id: auditId, risk: definition.risk };
     }
