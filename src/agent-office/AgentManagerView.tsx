@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentProfile, AgentToolPolicy, ProviderModel, ToolDefinitionV2, UniversalProvider } from './types.js';
+import type { AgentProfile, AgentToolPolicy, ProviderModel, Team, ToolDefinitionV2, UniversalProvider } from './types.js';
 import { api } from './api.js';
 
 interface AgentManagerViewProps {
@@ -74,6 +74,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     max_tool_steps: 12,
   });
   const [subagentIds, setSubagentIds] = useState<string[]>([]);
+  const [participatingTeams, setParticipatingTeams] = useState<Team[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,8 +125,9 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     void Promise.all([
       api.getAgentToolPolicyV2(selected.id),
       api.listSubagentsV2(selected.id),
+      api.listAgentTeamsV3(selected.id),
     ])
-      .then(([policy, relations]) => {
+      .then(([policy, relations, teams]) => {
         setToolPolicy({
           enabled: policy.enabled,
           allowed_tools: policy.allowed_tools,
@@ -133,10 +135,12 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
           max_tool_steps: policy.max_tool_steps,
         });
         setSubagentIds(relations.map((relation) => relation.child_agent_id));
+        setParticipatingTeams(teams);
       })
       .catch(() => {
         setToolPolicy((current) => ({ ...current, enabled: false }));
         setSubagentIds([]);
+        setParticipatingTeams([]);
       });
     setNotice(null);
     setError(null);
@@ -542,6 +546,23 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                     }))}
                   />
                 </div>
+              </div>
+            </div>
+
+            <div className="agent-advanced-field agent-hierarchy-card">
+              <div className="binding-title">
+                <div>
+                  <strong>Participa de equipes</strong>
+                  <span>Membership de Team é independente da hierarquia direta de subagentes.</span>
+                </div>
+              </div>
+              <div className="subagent-grid">
+                {participatingTeams.map((team) => (
+                  <span key={team.id} className="subagent-chip selected">
+                    <span>{team.name} · v{team.current_version}</span>
+                  </span>
+                ))}
+                {!participatingTeams.length && <span className="manager-empty-small">Este agente não participa de nenhuma equipe permanente.</span>}
               </div>
             </div>
 
