@@ -65,6 +65,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
   const [isCreating, setIsCreating] = useState(false);
   const [draft, setDraft] = useState<AgentDraft>(EMPTY_DRAFT);
   const [models, setModels] = useState<ProviderModel[]>([]);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,8 +112,10 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     void api.listProviderModelsV2(draft.provider_id)
       .then((items) => {
         setModels(items);
-        if (draft.model_id && !items.some((model) => model.id === draft.model_id)) {
-          setDraft((current) => ({ ...current, model_id: '' }));
+        const currentValid = draft.model_id && items.some((model) => model.id === draft.model_id && model.enabled);
+        if (!currentValid) {
+          const preferred = items.find((model) => model.enabled && model.is_default) ?? items.find((model) => model.enabled);
+          setDraft((current) => ({ ...current, model_id: preferred?.id ?? '' }));
         }
       })
       .catch((reason) => {
@@ -130,6 +133,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
       provider_id: firstProvider?.id ?? '',
       sort_order: (agents.reduce((max, agent) => Math.max(max, agent.sort_order), 0) || 0) + 10,
     });
+    setShowAdvanced(false);
     setNotice(null);
     setError(null);
   };
@@ -240,7 +244,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
         <div>
           <span className="office-kicker">Equipe dinâmica</span>
           <h1>Agentes</h1>
-          <p>Crie funções, escolha provider/modelo e defina quem aparece primeiro no escritório.</p>
+          <p>Dê um nome, escolha a função, provider e modelo. O restante pode ficar automático.</p>
         </div>
         <button type="button" className="manager-primary" onClick={startCreate}>+ Novo agente</button>
       </header>
@@ -283,7 +287,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
         </aside>
 
         <section className="manager-detail">
-          <div className="manager-card agent-editor-card">
+          <div className={`manager-card agent-editor-card ${showAdvanced ? 'show-advanced' : 'simple-mode'}`}>
             <div className="manager-card-header">
               <div>
                 <span className="office-kicker">{selected ? 'Editar agente' : 'Novo agente'}</span>
@@ -314,7 +318,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                   placeholder="Ex.: Builder"
                 />
               </div>
-              <div className="manager-field">
+              <div className="manager-field agent-advanced-field">
                 <label>Slug</label>
                 <input value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: slugify(event.target.value) })} placeholder="builder" />
               </div>
@@ -322,13 +326,13 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                 <label>Função</label>
                 <input value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value })} placeholder="Backend Engineer, Reviewer..." />
               </div>
-              <div className="manager-field">
+              <div className="manager-field agent-advanced-field">
                 <label>Avatar</label>
                 <select value={draft.avatar_key} onChange={(event) => setDraft({ ...draft, avatar_key: event.target.value })}>
                   {AVATARS.map((avatar) => <option key={avatar} value={avatar}>{avatar}</option>)}
                 </select>
               </div>
-              <div className="manager-field span-2">
+              <div className="manager-field span-2 agent-advanced-field">
                 <label>Descrição / especialidade</label>
                 <input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="O que este agente faz melhor?" />
               </div>
@@ -391,7 +395,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               <small>As regras API-only continuam sendo aplicadas pelo runtime independentemente deste prompt.</small>
             </div>
 
-            <div className="manager-form-grid">
+            <div className="manager-form-grid agent-advanced-field">
               <div className="manager-field">
                 <label>Ordem no escritório</label>
                 <input type="number" value={draft.sort_order} onChange={(event) => setDraft({ ...draft, sort_order: Number(event.target.value) || 0 })} />
@@ -402,13 +406,17 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               </div>
             </div>
 
-            <label className="manager-switch-row agent-enabled-row">
+            <label className="manager-switch-row agent-enabled-row agent-advanced-field">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
               <span>
                 <strong>Agente ativo</strong>
                 <small>Agentes desativados não são selecionados pelo Auto/Team.</small>
               </span>
             </label>
+
+            <button type="button" className="manager-advanced-toggle" onClick={() => setShowAdvanced((value) => !value)}>
+              {showAdvanced ? 'Ocultar opções avançadas' : 'Opções avançadas'}
+            </button>
 
             <div className="manager-actions">
               <button type="button" className="manager-primary" onClick={save} disabled={busy}>{busy ? 'Salvando...' : 'Salvar agente'}</button>
@@ -426,9 +434,9 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                 <h2>Quem aparece na sala</h2>
               </div>
             </div>
-            <p>O Office prioriza os três primeiros agentes configurados e ativos. Use as setas na lista para ordenar a equipe.</p>
+            <p>O Office cria uma mesa para cada agente ativo. A sala se reorganiza automaticamente conforme a equipe cresce ou diminui.</p>
             <div className="placement-preview">
-              {agents.slice().sort((a, b) => a.sort_order - b.sort_order).slice(0, 3).map((agent, index) => (
+              {agents.slice().filter((agent) => agent.enabled).sort((a, b) => a.sort_order - b.sort_order).map((agent, index) => (
                 <div key={agent.id}>
                   <span className={`placement-avatar avatar-${index}`}>{avatarLabel(agent.avatar_key)}</span>
                   <strong>{agent.name}</strong>
