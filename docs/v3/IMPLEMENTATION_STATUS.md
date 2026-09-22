@@ -6,8 +6,8 @@ Este arquivo deve ser atualizado a cada bloco para permitir continuidade por qua
 |---|---|---|---|---|---|
 | V3.0 Foundation Hardening | DONE | PR #14–#16 | 7–8 | 35776782381 | Foundation hardening concluído |
 | V3.1 Capability Core | DONE | PR #17 | 9 | 35778249756 | Taxonomy, matcher determinístico, APIs e fixture 500 agentes |
-| V3.2 Orchestrator Gateway | NOT STARTED | — | — | — | Desbloqueado por V3.0–V3.1 |
-| V3.3 Gap Analysis | BLOCKED | — | — | — | Depende de V3.1–V3.2 |
+| V3.2 Orchestrator Gateway | DONE | PR #18 | 10 | 35780852880 | Gateway em camadas, fallback e policy validator |
+| V3.3 Gap Analysis | NOT STARTED | — | — | — | Desbloqueado por V3.1–V3.2 |
 | V3.4 Execution Graph | BLOCKED | — | — | — | Depende de V3.2–V3.3 |
 | V3.5 Durable Runs + Replanning | BLOCKED | — | — | — | Depende de V3.4 |
 | V3.6 Teams + Subagents | BLOCKED | — | — | — | Depende de V3.4–V3.5 |
