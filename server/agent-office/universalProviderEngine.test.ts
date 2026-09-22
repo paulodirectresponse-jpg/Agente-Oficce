@@ -514,4 +514,34 @@ describe('UniversalProviderEngine', () => {
     fixture.cleanup();
   });
 
+
+  it('rejects non-http provider URLs before sending credentials', async () => {
+    const fixture = tempDatabase();
+    const secrets = new MemorySecretStore();
+    await secrets.set('unsafe-secret', 'never-send-me');
+    const providers = new ProviderRepositoryV2(fixture.database.connection);
+    providers.create({
+      id: 'unsafe-provider',
+      name: 'Unsafe Provider',
+      protocol_driver: 'openai_chat',
+      base_url: 'file:///tmp/provider',
+      auth_driver: 'bearer',
+      secret_ref: 'unsafe-secret',
+    });
+
+    let called = false;
+    const fetchImpl: typeof fetch = async () => {
+      called = true;
+      return jsonResponse({});
+    };
+    const engine = new UniversalProviderEngine(fixture.database.connection, secrets, fetchImpl);
+
+    await expect(engine.complete('unsafe-provider', {
+      model: 'model',
+      messages: [{ role: 'user', content: 'hello' }],
+    })).rejects.toMatchObject({ code: 'PROVIDER_BASE_URL_INVALID' });
+    expect(called).toBe(false);
+    fixture.cleanup();
+  });
+
 });
