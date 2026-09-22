@@ -62,21 +62,23 @@ function avatarLabel(key: string): string {
 
 export function AgentManagerView({ agents, providers, onChanged }: AgentManagerViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(agents[0]?.id ?? null);
+  const [isCreating, setIsCreating] = useState(false);
   const [draft, setDraft] = useState<AgentDraft>(EMPTY_DRAFT);
   const [models, setModels] = useState<ProviderModel[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const selected = agents.find((agent) => agent.id === selectedId) ?? null;
+  const selected = isCreating ? null : (agents.find((agent) => agent.id === selectedId) ?? null);
   const providerById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers]);
 
   useEffect(() => {
+    if (isCreating) return;
     if (!selectedId && agents[0]) setSelectedId(agents[0].id);
     if (selectedId && !agents.some((agent) => agent.id === selectedId)) {
       setSelectedId(agents[0]?.id ?? null);
     }
-  }, [agents, selectedId]);
+  }, [agents, selectedId, isCreating]);
 
   useEffect(() => {
     if (!selected) {
@@ -121,6 +123,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
 
   const startCreate = () => {
     const firstProvider = providers.find((provider) => provider.enabled);
+    setIsCreating(true);
     setSelectedId(null);
     setDraft({
       ...EMPTY_DRAFT,
@@ -182,6 +185,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
         ? await api.updateAgentV2(selected.id, payload)
         : await api.createAgentV2(payload);
 
+      setIsCreating(false);
       setSelectedId(saved.id);
       await onChanged();
       setNotice('Agente salvo e disponível no escritório.');
@@ -197,6 +201,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     setBusy(true);
     try {
       await api.deleteAgentV2(selected.id);
+      setIsCreating(false);
       setSelectedId(null);
       await onChanged();
       setNotice('Agente excluído.');
@@ -251,7 +256,14 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               const provider = agent.provider_id ? providerById.get(agent.provider_id) : undefined;
               return (
                 <div key={agent.id} className={`agent-manager-list-item ${selectedId === agent.id ? 'active' : ''}`}>
-                  <button type="button" className="agent-manager-select" onClick={() => setSelectedId(agent.id)}>
+                  <button
+                    type="button"
+                    className="agent-manager-select"
+                    onClick={() => {
+                      setIsCreating(false);
+                      setSelectedId(agent.id);
+                    }}
+                  >
                     <span className={`agent-manager-avatar avatar-${index % 3}`}>{avatarLabel(agent.avatar_key)}</span>
                     <span className="manager-list-copy">
                       <strong>{agent.name}</strong>
