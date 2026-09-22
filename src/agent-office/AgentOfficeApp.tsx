@@ -253,17 +253,19 @@ export function AgentOfficeApp() {
         {view === 'providers' && <ProvidersOverview providers={providers} />}
 
         {view === 'projects' && (
-          <WorkspaceView
-            activeProject={activeProject}
-            onSelectProject={(project) => {
-              setActiveProject(project);
-              void loadShellData();
-            }}
-          />
+          <div className="legacy-view-wrap">
+            <WorkspaceView
+              activeProject={activeProject}
+              onSelectProject={(project) => {
+                setActiveProject(project);
+                void loadShellData();
+              }}
+            />
+          </div>
         )}
 
-        {view === 'usage' && <UsageView />}
-        {view === 'settings' && <SettingsView />}
+        {view === 'usage' && <div className="legacy-view-wrap"><UsageView /></div>}
+        {view === 'settings' && <div className="legacy-view-wrap"><SettingsView /></div>}
 
         {view !== 'office' && view !== 'chat' && (
           <div className="shell-top-status">
