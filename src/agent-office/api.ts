@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, Conversation, Project, ProviderConfig, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, Conversation, DiscoveredModel, Project, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -75,7 +75,21 @@ export const api = {
     }),
 
   // V2 dynamic data model
+  providerEngineCapabilities: () =>
+    request<ProviderEngineCapabilities>('/api/agent-office/v2/provider-engine/capabilities'),
   listProvidersV2: () => request<UniversalProvider[]>('/api/agent-office/v2/providers'),
+  saveProviderSecretV2: (providerId: string, secret: string) =>
+    request<UniversalProvider>(`/api/agent-office/v2/providers/${providerId}/secret`, {
+      method: 'POST',
+      body: JSON.stringify({ secret }),
+    }),
+  testProviderV2: (providerId: string) =>
+    request<ProviderHealthResult>(`/api/agent-office/v2/providers/${providerId}/test`, { method: 'POST' }),
+  discoverProviderModelsV2: (providerId: string, persist = true) =>
+    request<DiscoveredModel[]>(`/api/agent-office/v2/providers/${providerId}/discover-models`, {
+      method: 'POST',
+      body: JSON.stringify({ persist }),
+    }),
   listProviderModelsV2: (providerId: string) =>
     request<ProviderModel[]>(`/api/agent-office/v2/providers/${providerId}/models`),
   listAgentsV2: () => request<AgentProfile[]>('/api/agent-office/v2/agents'),
