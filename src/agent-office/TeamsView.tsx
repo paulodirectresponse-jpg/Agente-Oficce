@@ -5,7 +5,8 @@ import { api } from './api.js';
 interface Props { agents: AgentProfile[]; }
 
 const slugify=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
-const empty=()=>({name:'',slug:'',purpose:'',lead_agent_id:'',enabled:true,max_parallelism:3,max_delegation_depth:2,allow_external_borrowing:false,approval_mode:'safe' as const,allowed_tools:''});
+type TeamDraft={name:string;slug:string;purpose:string;lead_agent_id:string;enabled:boolean;max_parallelism:number;max_delegation_depth:number;allow_external_borrowing:boolean;approval_mode:'safe'|'manual'|'auto';allowed_tools:string};
+const empty=():TeamDraft=>({name:'',slug:'',purpose:'',lead_agent_id:'',enabled:true,max_parallelism:3,max_delegation_depth:2,allow_external_borrowing:false,approval_mode:'safe',allowed_tools:''});
 
 export function TeamsView({agents}:Props){
  const [teams,setTeams]=useState<Team[]>([]),[selectedId,setSelectedId]=useState<string|null>(null),[creating,setCreating]=useState(false);
@@ -31,7 +32,7 @@ export function TeamsView({agents}:Props){
      <div className="manager-field"><label>Slug</label><input value={draft.slug} onChange={e=>setDraft(x=>({...x,slug:slugify(e.target.value)}))}/></div>
      <div className="manager-field span-2"><label>Propósito</label><input value={draft.purpose} onChange={e=>setDraft(x=>({...x,purpose:e.target.value}))} placeholder="Quando esta equipe deve ser usada?"/></div>
      <div className="manager-field"><label>Team Lead (opcional)</label><select value={draft.lead_agent_id} onChange={e=>setDraft(x=>({...x,lead_agent_id:e.target.value}))}><option value="">Sem lead</option>{members.filter(m=>m.enabled).map(m=><option key={m.agent_id} value={m.agent_id}>{agentMap.get(m.agent_id)?.name??m.agent_id}</option>)}</select></div>
-     <div className="manager-field"><label>Approval policy</label><select value={draft.approval_mode} onChange={e=>setDraft(x=>({...x,approval_mode:e.target.value as any}))}><option value="safe">Safe</option><option value="manual">Manual</option><option value="auto">Auto dentro das permissões</option></select></div>
+     <div className="manager-field"><label>Approval policy</label><select value={draft.approval_mode} onChange={e=>setDraft(x=>({...x,approval_mode:e.target.value as TeamDraft['approval_mode']}))}><option value="safe">Safe</option><option value="manual">Manual</option><option value="auto">Auto dentro das permissões</option></select></div>
      <div className="manager-field"><label>Máx. paralelismo</label><input type="number" min={1} value={draft.max_parallelism} onChange={e=>setDraft(x=>({...x,max_parallelism:Number(e.target.value)||1}))}/></div>
      <div className="manager-field"><label>Profundidade de delegação</label><input type="number" min={0} value={draft.max_delegation_depth} onChange={e=>setDraft(x=>({...x,max_delegation_depth:Math.max(0,Number(e.target.value)||0)}))}/></div>
      <div className="manager-field span-2"><label>Tools permitidas pela equipe</label><input value={draft.allowed_tools} onChange={e=>setDraft(x=>({...x,allowed_tools:e.target.value}))} placeholder="read_file, npm_test (vazio = sem elevação; agent/tool policies continuam valendo)"/></div>
