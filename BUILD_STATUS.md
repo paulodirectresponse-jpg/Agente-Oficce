@@ -3,7 +3,7 @@
 ## Checkpoint atual
 - Atualizado: 2026-09-22
 - Branch estável: `main`
-- HEAD funcional após a Fase F: `21a4377f`
+- HEAD funcional após a Fase G: `1ff5a144`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
 ## V2 — Experience Layer + Universal API
@@ -16,8 +16,8 @@
 | D | Chat Runner API-only | DONE | Single/auto/team, contexto/memória, SSE, fallback sem streaming, handoffs, estados/activity, usage e persistência; 104/104 testes + gate Windows verde. |
 | E | Experience V2 | DONE | Office-first baseado no visual aprovado, agentes 2D, estados ao vivo, chat compartilhado, Event Stream e handoffs visuais; desktop gate verde. |
 | F | Provider/Agent Manager | DONE | UI completa para providers, secrets, health, discovery/catálogo de modelos e agentes dinâmicos configuráveis; desktop gate verde. |
-| G | Hardening | NEXT | Secrets, retries, timeout, cancelamento, rate limits, usage, recovery e release gate final. |
-| H | Tools | BLOCKED_BY_SCOPE | Só inicia após aprovação explícita da versão API-only. |
+| G | Hardening | DONE | Secrets criptografados, retries/backoff, cancelamento real, rate/concurrency limits, recovery, usage avançado e release gate final verde. |
+| H | Tools | NEXT / AWAITING APPROVAL | Só inicia após aprovação explícita para liberar ações no computador/repositórios. |
 
 ## Fase A — concluída
 - Vite ignora `src-tauri/target/**` e não quebra com `EBUSY`.
@@ -397,6 +397,139 @@ PR da Fase F:
 - `#6`
 - merge commit: `21a4377f8f51846e5837bc7c3f20cab17abdf61b`
 
+## Fase G — concluída
+
+### Secrets endurecidos
+- secrets de providers continuam fora do SQLite;
+- armazenamento em disco agora usa AES-256-GCM;
+- chave mestra local separada do arquivo criptografado;
+- escrita atômica;
+- permissões restritivas quando suportadas pelo sistema;
+- migração automática de `development-secrets.json` plaintext para `secrets.enc.json`;
+- arquivo plaintext antigo é removido/renomeado após migração;
+- credenciais continuam sem ser retornadas pela API;
+- UI permite substituir ou remover a credencial sem revelar o valor salvo.
+
+### Cancelamento real
+O Chat Runner V2 agora possui cancelamento fim a fim:
+- botão Cancelar no Office;
+- endpoint `POST /api/agent-office/chat/runs/:runId/cancel`;
+- registry de AbortController por execução;
+- AbortSignal chega ao Universal Provider Engine;
+- request HTTP em andamento é abortado;
+- runs e child runs passam para `cancelled`;
+- agentes retornam para `idle`;
+- SSE emite `run.cancelled`;
+- cancelamento após perda do controller ainda é persistido como terminal.
+
+### Retries e backoff
+HttpTransport recebeu política limitada:
+- retry automático conservador para GETs de health/discovery;
+- status transitórios: 408, 429, 500, 502, 503 e 504;
+- backoff exponencial limitado;
+- suporte a Retry-After;
+- timeout continua independente por tentativa;
+- geração POST não é repetida por padrão para evitar cobrança/resposta duplicada;
+- retries de geração podem ser habilitados explicitamente por provider.
+
+### Limites por provider
+Provider Request Gate adiciona:
+- máximo de requests simultâneos por provider;
+- intervalo mínimo entre requests;
+- fila local;
+- cancelamento enquanto aguarda a fila;
+- configuração pela tela Providers.
+
+Campos de runtime via `protocol_config`:
+- `retry_attempts`
+- `retry_backoff_ms`
+- `max_concurrent_requests`
+- `min_request_interval_ms`
+
+### Recovery depois de reinício
+No startup do backend:
+- runs V2 deixados em `running/created` são detectados;
+- viram `failed` com `RUN_INTERRUPTED_BY_RESTART`;
+- metadata registra recovery;
+- activity recebe `run.recovered`;
+- agentes presos em estados ativos retornam para `idle`;
+- recovery é idempotente.
+
+### Usage endurecido
+Além de tokens e número de runs:
+- custo estimado é calculado quando o model pricing possui input/output por milhão;
+- duração média das chamadas é agregada;
+- a tela Uso mostra custo estimado e latência média;
+- ausência de pricing permanece explícita, sem inventar custo.
+
+### Segurança de transporte
+- base URLs são validadas antes de enviar credenciais;
+- apenas HTTP/HTTPS são aceitos;
+- username/password embutidos na URL são rejeitados;
+- secrets são removidos de mensagens de erro de transporte;
+- corpo de erro continua truncado;
+- auth permanece centralizada no transport.
+
+### Testes novos da Fase G
+Cobertura adicionada para:
+- secrets criptografados;
+- migração de plaintext;
+- cancellation registry;
+- provider request gate;
+- cancelamento em fila;
+- cancellation de request HTTP;
+- cancelamento completo de chat;
+- retry/backoff;
+- recovery após restart;
+- URL insegura;
+- atualização das expectativas legadas de provider secrets.
+
+### Release gate final da versão API-only
+Workflow: `Agent Office Desktop Gate`
+Run: `35751867387`
+
+Passou:
+- `npm ci`;
+- `npm test` — 25 arquivos / 114 testes;
+- `npm run lint`;
+- `npm run build`;
+- Rust/Tauri build;
+- smoke direto do backend empacotado;
+- instalação real do MSI;
+- espera robusta pelo backend instalado;
+- health real na porta loopback dinâmica;
+- SQLite;
+- fechamento do desktop;
+- backend sem processo órfão;
+- verificação do MSI;
+- upload do artefato.
+
+Artefato final da Fase G:
+- nome: `agent-office-desktop-msi`
+- artifact id: `10707535553`
+- tamanho ZIP: 48.476.787 bytes
+- SHA-256: `0f9491d1efc03b5bd95f2dc6e6650ba0a2466853a45779f47ebdd52e055069e1`
+
+PR da Fase G:
+- `#7`
+- merge commit: `1ff5a14445d2c629e43b3a0916f16058d4b3ba14`
+
+### Estado da versão API-only
+As Fases A–G agora formam uma versão utilizável sem tools:
+- desktop instalável;
+- Office 2D;
+- providers universais;
+- vários modelos;
+- agentes dinâmicos;
+- chat single/auto/team;
+- memória compartilhada;
+- streaming;
+- handoffs;
+- gerenciamento visual;
+- segurança/resiliência/recovery de runtime.
+
+Tools continuam explicitamente fora do Chat Runner V2 até a Fase H.
+
 ## Compatibilidade V1
 Continuam preservados durante a migração:
 - projetos;
@@ -411,6 +544,6 @@ Continuam preservados durante a migração:
 As tools legadas não são expostas pelo Chat Runner V2 e permanecem fora do escopo até a Fase H.
 
 ## Próximo passo
-Fase G — Hardening.
+Fase H — Tools, aguardando aprovação explícita.
 
-Objetivo: preparar a versão API-only para uso contínuo e release: armazenamento de secrets mais robusto, retries/backoff, cancelamento, rate limits, recovery de runs, usage mais completo, validações de segurança e release gate final antes de liberar a Fase H de tools.
+Objetivo futuro: dar mãos aos agentes com uma camada permissionada de filesystem, terminal, Git, testes, browser/publicação e integrações, mantendo aprovação para ações destrutivas, isolamento por projeto, auditoria e limites. Até essa aprovação, a versão V2 permanece API-only.
