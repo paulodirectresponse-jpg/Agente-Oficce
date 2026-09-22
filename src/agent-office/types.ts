@@ -211,7 +211,7 @@ export interface ChatRunReceipt {
   selected_agents: string[];
   mode: 'single' | 'team';
   status: 'running';
-  tools_enabled: false;
+  tools_enabled: boolean;
 }
 
 export interface ChatStartInput {
@@ -234,4 +234,55 @@ export interface ChatStreamEnvelope {
 export interface ProjectRootSetting {
   path: string;
   configured: boolean;
+}
+
+
+export interface ToolDefinitionV2 {
+  name: string;
+  description: string;
+  risk: 'read' | 'write' | 'execute' | 'external' | 'destructive';
+  input_schema: Record<string, unknown>;
+  default_enabled: boolean;
+}
+
+export interface AgentToolPolicy {
+  agent_id: string;
+  enabled: boolean;
+  allowed_tools: string[];
+  approval_mode: 'safe' | 'manual' | 'auto';
+  max_tool_steps: number;
+  updated_at: string;
+}
+
+export interface ToolAuditEvent {
+  id: string;
+  project_id: string;
+  run_id: string | null;
+  agent_id: string | null;
+  tool_name: string;
+  risk: string;
+  status: string;
+  input: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export interface ToolApproval {
+  id: string;
+  project_id: string;
+  run_id: string | null;
+  agent_id: string | null;
+  tool_name: string;
+  input: Record<string, unknown>;
+  reason: string;
+  status: 'pending' | 'approved' | 'denied';
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface AgentRelation {
+  child_agent_id: string;
+  relation_type: string;
+  priority: number;
 }
