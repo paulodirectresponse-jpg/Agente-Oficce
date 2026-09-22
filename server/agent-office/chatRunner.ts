@@ -33,7 +33,6 @@ export interface PrepareChatRunInput {
   message: string;
   target?: ChatTarget;
   model_override?: string;
-  tools_enabled: boolean;
 }
 
 export interface PreparedChatRun {
@@ -42,6 +41,7 @@ export interface PreparedChatRun {
   selected_agents: string[];
   mode: 'single' | 'team';
   model_override?: string;
+  tools_enabled: boolean;
 }
 
 export interface ChatRunReceipt {
