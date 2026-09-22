@@ -335,7 +335,7 @@ export class ToolRegistry {
         context.run_id,
         context.agent_id,
         definition.name,
-        JSON.stringify(input),
+        JSON.stringify(auditInput(definition.name, input)),
         `${definition.name} requires approval under policy ${policy.approval_mode}`,
         startedAt,
       );
@@ -351,6 +351,77 @@ export class ToolRegistry {
         risk: definition.risk,
       };
     }
+
+    const localContext: LocalToolContext = {
+      projectRoot: context.project_root,
+      timeoutMs: 30_000,
+      signal: context.signal,
+    };
+    const result = await executeLocalTool(definition.name, input, localContext);
+    context.database.prepare(`
+      UPDATE tool_audit_events
+      SET status = ?, result_json = ?, ended_at = ?
+      WHERE id = ?
+    `).run(result.ok ? 'completed' : 'failed', JSON.stringify(auditResult(definition.name, result)), now(), auditId);
+    return { ...result, audit_id: auditId, risk: definition.risk };
+  }
+
+  async executeApproved(
+    toolName: string,
+    input: Record<string, unknown>,
+    policy: AgentToolPolicy,
+    context: ToolExecutionContext,
+    approvalId: string,
+    auditId: string,
+  ): Promise<ToolExecutionResult> {
+    const definition = TOOL_DEFINITIONS.find((tool) => tool.name === toolName);
+    if (!definition) return { ok: false, error: 'TOOL_NOT_FOUND', audit_id: auditId, risk: 'execute' };
+    if (!policy.enabled || !policy.allowed_tools.includes(definition.name)) {
+      return { ok: false, error: 'TOOL_NOT_ALLOWED_FOR_AGENT', audit_id: auditId, risk: definition.risk };
+    }
+
+    const approval = context.database.prepare(`
+      SELECT id, status, tool_name, run_id, agent_id
+      FROM tool_approvals
+      WHERE id = ?
+    `).get(approvalId) as {
+      id: string;
+      status: string;
+      tool_name: string;
+      run_id: string | null;
+      agent_id: string | null;
+    } | undefined;
+
+    if (!approval
+      || approval.tool_name !== definition.name
+      || approval.run_id !== context.run_id
+      || approval.agent_id !== context.agent_id) {
+      return { ok: false, error: 'TOOL_APPROVAL_INVALID', audit_id: auditId, risk: definition.risk };
+    }
+
+    if (approval.status === 'denied') {
+      context.database.prepare(`
+        UPDATE tool_audit_events SET status = 'denied', result_json = ?, ended_at = ? WHERE id = ?
+      `).run(JSON.stringify({ ok: false, error: 'TOOL_APPROVAL_DENIED' }), now(), auditId);
+      return { ok: false, error: 'TOOL_APPROVAL_DENIED', audit_id: auditId, risk: definition.risk };
+    }
+    if (approval.status !== 'approved') {
+      return {
+        ok: false,
+        error: 'TOOL_APPROVAL_REQUIRED',
+        approval_required: true,
+        approval_id: approvalId,
+        audit_id: auditId,
+        risk: definition.risk,
+      };
+    }
+    if (context.signal?.aborted) {
+      return { ok: false, error: 'TOOL_RUN_CANCELLED', audit_id: auditId, risk: definition.risk };
+    }
+
+    context.database.prepare(`
+      UPDATE tool_audit_events SET status = 'running', result_json = NULL, ended_at = NULL WHERE id = ?
+    `).run(auditId);
 
     const localContext: LocalToolContext = {
       projectRoot: context.project_root,
