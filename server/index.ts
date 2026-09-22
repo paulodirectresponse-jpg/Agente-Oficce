@@ -21,12 +21,13 @@ app.get('/health', (_req, res) => {
 
 app.use('/api', agentOfficeRouter);
 
-// Browser preview serves the built SPA. The packaged Tauri app serves the
-// frontend itself, so its embedded backend only exposes health + API routes.
+// Browser preview serves dist/client. In the packaged Tauri build the webview
+// serves frontend assets itself and this process exposes only health + API.
 if (!DESKTOP_RUNTIME) {
-  app.use(express.static(join(__dirname, '../dist/client')));
+  const clientDir = join(__dirname, '../client');
+  app.use(express.static(clientDir));
   app.get('*', (_req, res) => {
-    res.sendFile(join(__dirname, '../dist/client/index.html'));
+    res.sendFile(join(clientDir, 'index.html'));
   });
 }
 
