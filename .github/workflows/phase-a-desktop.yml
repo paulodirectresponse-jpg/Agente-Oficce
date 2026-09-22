@@ -1,4 +1,4 @@
-name: Phase A Desktop Gate
+name: Agent Office Desktop Gate
 
 on:
   push:
@@ -144,13 +144,45 @@ jobs:
             throw "Bundled backend process did not start after MSI installation"
           }
 
-          $db = Get-ChildItem -Path "$env:APPDATA" -Filter "agent-office.sqlite" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+          $listener = $null
+          for ($i = 0; $i -lt 20; $i++) {
+            $listener = Get-NetTCPConnection -OwningProcess $backend.ProcessId -State Listen -ErrorAction SilentlyContinue |
+              Where-Object { $_.LocalAddress -eq "127.0.0.1" -or $_.LocalAddress -eq "::1" } |
+              Select-Object -First 1
+            if ($listener) { break }
+            Start-Sleep -Milliseconds 500
+          }
+
+          if (-not $listener) {
+            throw "Installed backend did not open a loopback listener"
+          }
+
+          $healthUrl = "http://127.0.0.1:$($listener.LocalPort)/api/agent-office/health"
+          $healthy = $false
+          for ($i = 0; $i -lt 20; $i++) {
+            try {
+              $health = Invoke-RestMethod $healthUrl -TimeoutSec 2
+              if ($health.ok -eq $true) {
+                $healthy = $true
+                break
+              }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          }
+
+          if (-not $healthy) {
+            throw "Installed backend health endpoint did not respond"
+          }
+
+          $db = Get-ChildItem -Path @("$env:APPDATA", "$env:LOCALAPPDATA") -Filter "agent-office.sqlite" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
           if (-not $db) {
-            throw "Frontend/backend health handshake did not initialize SQLite"
+            throw "Installed backend health request did not initialize SQLite"
           }
 
           Write-Host "Desktop process: $($app.Id); backend process: $($backend.ProcessId)"
+          Write-Host "Backend health: $healthUrl"
           Write-Host "SQLite: $($db.FullName)"
 
           $closed = $app.CloseMainWindow()
@@ -177,6 +209,6 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
-          name: agent-office-phase-a-msi
+          name: agent-office-desktop-msi
           path: src-tauri/target/release/bundle/msi/*.msi
           if-no-files-found: error
