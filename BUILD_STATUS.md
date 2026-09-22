@@ -1,52 +1,85 @@
-# Build Status - Agent Office (Standalone)
+# Agent Office — Build Status
 
-## Current checkpoint
-- Updated: 2026-09-21
-- Branch: `main`
-- Evidence scope: local code, tests, typecheck, and build only unless explicitly marked otherwise.
+## Checkpoint atual
+- Atualizado: 2026-09-22
+- Branch estável: `main`
+- HEAD após a Fase A: `4f075470`
+- Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
-## Phase status
+## V2 — Experience Layer + Universal API
 
-| Phase | Description | Status | Evidence / blocker |
-|---:|---|---|---|
-| 0 | Bootstrap | DONE | Standalone config, server, client entrypoint, health route, and tests exist. |
-| 1 | SQLite + Projects | DONE | WAL, migrations 1–3, project-scoped writer lock, persisted retry counters, cancellation registry, FTS triggers, and fresh-manager crash recovery test pass locally. |
-| 2 | Single Conversation | DONE | Conversation and message repositories plus integration tests pass locally. |
-| 3 | Adapter Framework | DONE | Adapter contract, registry, mock adapter, and integration tests pass locally. |
-| 4 | Claude / Gateway | BLOCKED_REAL_VALIDATION | Tool-use loop fully implemented and covered by 19 deterministic mock/SSE tests; capabilities now advertise the 9 local tools. Real provider smoke test is blocked until valid Gateway credentials/base URL are supplied. |
-| 5 | Tasks + Autonomous Loop | DONE | TaskOrchestrator drives runs with event persistence (dedup via event_key), retry with diagnosis up to 3 attempts, blocked on max_tool_steps/max attempts, waiting_approval on denied dangerous ops, cancelled runs idempotent. 7 orchestrator tests pass. |
-| 6 | Context Pack + Shared Memory | DONE | MemoryRepository (project memory, FTS5-ranked chunks, handoffs), ContextPackBuilder with 8 sections inside token budgets, orchestrator checkpoint summaries; raw history preserved. 5 memory tests pass. |
-| 7 | Kimi | DONE | Kimi adapter over the official Moonshot Server API (openai_compatible) sharing the local tool layer; health, streaming, cancel, timeout covered by mocked-fetch tests. Kimi CLI/ACP upgrade path documented; real validation needs a KIMI_API_KEY. |
-| 8 | Codex | DONE | codexAdapter spawns `codex exec --json` (ChatGPT-auth CLI, no paid API), maps JSONL events, cancel/timeout/prompt guards; deadlock fixed. Registry probes `codex --version` before registering. Real validation needs the CLI on PATH (auth.json exists under ~/.codex). |
-| 9 | Router | DONE | Rule classifier (15 categories + risk heuristics), blueprint routing defaults, failure escalation (kimi→claude→codex), manual override @agent, Codex Protected Mode (25%/10% thresholds, unknown-quota state), team plans. 10 router tests pass. |
-| 10 | Usage | DONE | UsageTracker persists run usage to usage_snapshots, per-agent 30-day aggregation, GET /agent-office/usage; no fabricated values when empty. 3 usage tests pass. |
-| 11 | UI Final | DONE | SPA with workspace, tasks (run + live events polling), usage, provider settings, pt-BR, dark desktop theme, empty/loading/error states. |
-| 12 | Office View | DONE | CSS-only 2D office: 3 desks (Kimi/Claude/Codex) with idle/working/blocked states derived from tasks; click desk sets manual agent override. |
-| 13 | Release Gate | DONE | 83/83 tests, lint, client+server builds pass; Tauri v2 MSI built: `src-tauri/target/release/bundle/msi/Agent Office_0.1.0_x64_en-US.msi`; user README (README-USUARIO.md) written; provider setup via Settings view. |
-| 14 | Dogfooding | PARTIAL | Controlled E2E (dogfooding.test.ts) proves: routing (UI→kimi, auth→codex, Protected Mode manual-only), task execution with real local tools (write_file + run_command on disk), retry with diagnosis, handoff kimi→claude injected into next context pack, SQLite persistence of tasks/runs/events/memory/usage, restart with orphan-run recovery. Real-provider validation BLOCKED_REAL_VALIDATION: no KIMI_API_KEY, no Claude Gateway credential, no codex.exe on PATH (only WindowsApps stubs; auth.json exists). |
+| Fase | Escopo | Status | Evidência |
+|---|---|---|---|
+| A | Stabilize Desktop | DONE | Windows gate verde: 84/84 testes, typecheck, build client+server, Tauri release, backend runtime direto, instalação MSI, startup do app instalado, SQLite, encerramento do backend e upload do MSI. |
+| B | Data Model V2 | NEXT | Providers, provider_models, agents dinâmicos, chat_runs e activity_events. |
+| C | Universal Provider Engine | PENDING | ProtocolDriver/AuthDriver/HttpTransport, presets, model discovery e APIs customizadas. |
+| D | Chat Runner API-only | PENDING | Chat único, SSE/streaming, single/auto/team, sem ferramentas. |
+| E | Experience V2 | PENDING | Office-first, personagens 2D, estados ao vivo, chat central, activity rail e handoffs visuais. |
+| F | Provider/Agent Manager | PENDING | UI universal para APIs, vários modelos e agentes configuráveis. |
+| G | Hardening | PENDING | Secrets, retries, timeout, cancelamento, rate limits, usage, recovery e release gate final. |
+| H | Tools | BLOCKED_BY_SCOPE | Só inicia após aprovação explícita da versão API-only. |
 
-## Verified local checks
-- `npm test`: 18 files, 84 tests passing.
-- `npm run lint`: TypeScript no-emit check passing.
-- `npm run build`: client and server build passing.
-- Crash recovery test: a fresh SQLite connection marks an orphan run failed, blocks the task, clears the writer lock, and permits a subsequent successful run.
+## Fase A — concluída
 
-## Claude tool-use loop (Phase 4 core)
-- `providerProtocol.ts`: internal `ModelTurn`/`ToolRequest`/`ToolResult`/`ToolDefinition` model plus `ProviderProtocol` abstraction; `AnthropicMessagesProtocol` with a stateful SSE parser that accumulates `input_json_delta` chunks into complete tool inputs. `openai_compatible` and `custom` strategies are declared but intentionally unimplemented until needed.
-- `toolLoop.ts`: provider-agnostic loop — model turn → validate tool schema/permissions → execute local tool → append tool results → next turn, until `complete`, `error`, `cancelled`, or `max_tool_steps` (default 20). Streams `delta`/`tool_start`/`tool_end` events through an async queue.
-- `claudeAdapter.ts`: `startRun` now drives the tool loop with `executeLocalTool` scoped to `projectRoot`; unknown tools, invalid arguments, and denials are fed back to the model as error tool results; destructive commands produce `approval_required` + `warning` events (waiting_approval semantics, never auto-executed); run timeout yields `RUN_TIMEOUT`.
-- Security verifications: path traversal, symlink escape, destructive command denial, unknown tool, invalid args, timeout, cancellation, and max-tool-steps all covered by tests.
+Entregue:
+- Vite ignora `src-tauri/target/**`, eliminando o crash `EBUSY` do watcher no Windows.
+- `tauri dev` inicia o stack de desenvolvimento automaticamente via `beforeDevCommand`.
+- O servidor local usa loopback, não exposição de rede por padrão.
+- O build de servidor agora emite JavaScript de produção em `dist/server`.
+- O MSI inclui:
+  - frontend Tauri;
+  - backend compilado;
+  - dependências Node de produção;
+  - runtime Node compatível com `better-sqlite3`.
+- No app instalado, o Tauri encontra o runtime relativo ao próprio executável, escolhe uma porta loopback livre e inicia o backend automaticamente.
+- O frontend resolve dinamicamente a URL do backend pelo runtime Tauri.
+- Banco e logs ficam no diretório de dados do aplicativo do usuário, não em `Program Files`.
+- `backend.log` registra diagnóstico local de startup.
+- Ao fechar o Agent Office, o processo do backend também é encerrado.
+- Indicador de runtime local foi adicionado à interface.
+- MSI foi instalado e executado em um runner Windows real como parte do gate.
 
-## Security boundaries
-- Provider configuration persists nonsecret fields in `provider_configs`; SQLite stores only `secret_ref`, never the secret value.
-- `DevelopmentSecretStore` stores local development secrets outside SQLite in an ignored file with restrictive permissions.
-- `SystemSecretStore` is an explicit unavailable boundary until a Tauri credential-manager implementation exists.
-- Local tools constrain paths to the canonical project root, reject traversal and symlink escapes, bound file/output sizes, and use allowlisted executables without a shell.
-- Destructive command forms return a denial rather than executing.
-- `max_tool_steps` is persisted per provider config (migration 3, default 20).
+## Gate verificado no GitHub Actions
 
-## Known blockers and next work
-- Real Claude validation is blocked only by unavailable credentials/reachable provider in this local environment.
-- Provider config repository and secret store need bootstrapping into adapter creation (routes currently construct adapters directly).
-- Phase 5: wire run lifecycle to the autonomous loop (test → retry → blocked at 3 attempts), persist orchestration checkpoints.
-- Kimi, Codex, routing, usage aggregation, Office View, Tauri release, and dogfooding remain unimplemented.
+Workflow: `Phase A Desktop Gate`
+Run: `35726810443`
+
+Passou:
+- `npm ci`
+- `npm test` — 18 arquivos / 84 testes
+- `npm run lint`
+- `npm run build`
+- Rust/Tauri build
+- smoke do backend empacotado
+- instalação silenciosa do MSI
+- abertura do Agent Office instalado
+- backend bundled ativo
+- inicialização SQLite
+- encerramento do desktop + backend sem órfão
+- verificação do MSI
+- upload do artefato
+
+Artefato:
+- nome: `agent-office-phase-a-msi`
+- artifact id: `10694365881`
+- tamanho do ZIP: 48.418.773 bytes
+- SHA-256 do artefato: `2f970606b68550042e017f9f733416a5c44e4f86fdb1c44e2a7934fb198d8f2b`
+
+## V1 legado preservado
+
+A infraestrutura existente continua disponível durante a migração V2:
+- SQLite/WAL e projetos;
+- conversa persistente;
+- memória/FTS/handoffs;
+- task orchestration/retry/cancel;
+- adapters Kimi, Claude/Gateway e Codex;
+- router e Protected Mode;
+- usage tracking;
+- local tools e testes existentes.
+
+A V2 não considera a UI antiga de Office como experiência final. Ela será substituída progressivamente nas fases B–F.
+
+## Próximo passo
+Fase B — Data Model V2.
+
+Objetivo imediato: remover o acoplamento estrutural a `kimi | claude | codex` e criar providers, múltiplos modelos por provider, agentes dinâmicos, chat runs e activity events com migração não destrutiva.
