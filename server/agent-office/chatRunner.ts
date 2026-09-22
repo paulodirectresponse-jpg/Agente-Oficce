@@ -288,7 +288,7 @@ export class ChatRunnerService {
       for (let index = 0; index < selected.length; index += 1) {
         const binding = selected[index];
         const stage = this.stageFor(prepared.mode, selected, index);
-        const previous = stageResults.at(-1)?.text ?? '';
+        const previous = stageResults.length ? stageResults[stageResults.length - 1].text : '';
         const model = this.resolveModel(binding, prepared.model_override);
 
         if (index > 0) {
@@ -296,7 +296,7 @@ export class ChatRunnerService {
           this.emit(rootRun, 'handoff.created', `Handoff ${fromAgent.name} → ${binding.agent.name}`, {
             from_agent: fromAgent.id,
             to_agent: binding.agent.id,
-            from_message_id: stageResults.at(-1)?.message_id ?? null,
+            from_message_id: stageResults.length ? stageResults[stageResults.length - 1].message_id : null,
             stage,
           });
         }
@@ -337,7 +337,7 @@ export class ChatRunnerService {
         }
       }
 
-      const final = stageResults.at(-1);
+      const final = stageResults.length ? stageResults[stageResults.length - 1] : undefined;
       if (!final) throw new Error('CHAT_EMPTY_TEAM');
 
       const aggregate = sumUsage(stageResults.map((result) => result.usage));
@@ -374,7 +374,7 @@ export class ChatRunnerService {
 
       this.emit(rootRun, 'run.completed', 'Resposta concluída', {
         final_message_id: final.message_id,
-        final_agent_id: selected.at(-1)?.agent.id ?? null,
+        final_agent_id: selected.length ? selected[selected.length - 1].agent.id : null,
         usage: aggregate,
       });
     } catch (error) {
