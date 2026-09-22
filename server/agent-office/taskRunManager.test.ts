@@ -106,6 +106,8 @@ describe('TaskRunManager', () => {
     const run = database2.connection.prepare('SELECT * FROM runs WHERE id = ?').get(runId) as { status: string; error_json: string } | undefined;
     expect(run?.status).toBe('failed');
     expect(JSON.parse(run?.error_json || '{}')).toMatchObject({ recovered_from_crash: true });
+    expect(database2.connection.prepare('SELECT COUNT(*) AS count FROM project_run_locks WHERE project_id = ?').get(project.id))
+      .toEqual({ count: 0 });
 
     const resumed = await manager2.startRun(task.id, 'kimi', 'Recovered context', projectDir);
     for await (const event of resumed.events) expect(event.type).toBeTruthy();
