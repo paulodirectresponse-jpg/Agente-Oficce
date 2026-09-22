@@ -24,6 +24,10 @@ interface ProviderDraft {
   query_text: string;
   auth_config_text: string;
   protocol_config_text: string;
+  retry_attempts: number;
+  retry_backoff_ms: number;
+  max_concurrent_requests: number;
+  min_request_interval_ms: number;
   enabled: boolean;
 }
 
@@ -39,6 +43,10 @@ const EMPTY_DRAFT: ProviderDraft = {
   query_text: '{}',
   auth_config_text: '{}',
   protocol_config_text: '{}',
+  retry_attempts: 0,
+  retry_backoff_ms: 500,
+  max_concurrent_requests: 2,
+  min_request_interval_ms: 0,
   enabled: true,
 };
 
@@ -112,6 +120,10 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
       query_text: pretty(selected.query),
       auth_config_text: pretty(selected.auth_config),
       protocol_config_text: pretty(selected.protocol_config),
+      retry_attempts: typeof selected.protocol_config.retry_attempts === 'number' ? selected.protocol_config.retry_attempts : 0,
+      retry_backoff_ms: typeof selected.protocol_config.retry_backoff_ms === 'number' ? selected.protocol_config.retry_backoff_ms : 500,
+      max_concurrent_requests: typeof selected.protocol_config.max_concurrent_requests === 'number' ? selected.protocol_config.max_concurrent_requests : 2,
+      min_request_interval_ms: typeof selected.protocol_config.min_request_interval_ms === 'number' ? selected.protocol_config.min_request_interval_ms : 0,
       enabled: selected.enabled,
     });
     void api.listProviderModelsV2(selected.id).then(setModels).catch(() => setModels([]));
@@ -148,6 +160,10 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
       base.query_text = pretty(preset.query ?? {});
       base.auth_config_text = pretty(preset.auth_config ?? {});
       base.protocol_config_text = pretty(preset.protocol_config ?? {});
+      base.retry_attempts = typeof preset.protocol_config?.retry_attempts === 'number' ? preset.protocol_config.retry_attempts : 0;
+      base.retry_backoff_ms = typeof preset.protocol_config?.retry_backoff_ms === 'number' ? preset.protocol_config.retry_backoff_ms : 500;
+      base.max_concurrent_requests = typeof preset.protocol_config?.max_concurrent_requests === 'number' ? preset.protocol_config.max_concurrent_requests : 2;
+      base.min_request_interval_ms = typeof preset.protocol_config?.min_request_interval_ms === 'number' ? preset.protocol_config.min_request_interval_ms : 0;
     }
     setSelectedId(null);
     setDraft(base);
@@ -169,7 +185,13 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
       const headers = parseObject(draft.headers_text, 'Headers');
       const query = parseObject(draft.query_text, 'Query');
       const authConfig = parseObject(draft.auth_config_text, 'Auth config');
-      const protocolConfig = parseObject(draft.protocol_config_text, 'Protocol config');
+      const protocolConfig = {
+        ...parseObject(draft.protocol_config_text, 'Protocol config'),
+        retry_attempts: Math.max(0, Math.min(5, draft.retry_attempts)),
+        retry_backoff_ms: Math.max(100, draft.retry_backoff_ms),
+        max_concurrent_requests: Math.max(1, Math.min(20, draft.max_concurrent_requests)),
+        min_request_interval_ms: Math.max(0, draft.min_request_interval_ms),
+      };
       let saved: UniversalProvider;
       if (selected) {
         saved = await api.updateProviderV2(selected.id, {
@@ -460,13 +482,67 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
               </label>
             </div>
 
+            <div className="provider-resilience-card">
+              <div className="binding-title">
+                <div>
+                  <strong>Resiliência e limites</strong>
+                  <span>Protege a API contra rajadas, falhas temporárias e excesso de concorrência.</span>
+                </div>
+              </div>
+              <div className="manager-form-grid">
+                <div className="manager-field">
+                  <label>Retries de geração</label>
+                  <input type="number" min={0} max={5} value={draft.retry_attempts} onChange={(event) => setDraft({ ...draft, retry_attempts: Number(event.target.value) || 0 })} />
+                </div>
+                <div className="manager-field">
+                  <label>Backoff inicial (ms)</label>
+                  <input type="number" min={100} value={draft.retry_backoff_ms} onChange={(event) => setDraft({ ...draft, retry_backoff_ms: Number(event.target.value) || 500 })} />
+                </div>
+                <div className="manager-field">
+                  <label>Máx. requisições simultâneas</label>
+                  <input type="number" min={1} max={20} value={draft.max_concurrent_requests} onChange={(event) => setDraft({ ...draft, max_concurrent_requests: Number(event.target.value) || 1 })} />
+                </div>
+                <div className="manager-field">
+                  <label>Intervalo mínimo (ms)</label>
+                  <input type="number" min={0} value={draft.min_request_interval_ms} onChange={(event) => setDraft({ ...draft, min_request_interval_ms: Number(event.target.value) || 0 })} />
+                </div>
+              </div>
+              <small>GETs de health/discovery têm retry conservador automático. Gerações POST só repetem se você permitir acima.</small>
+            </div>
+
             <div className="manager-secret-box">
               <div>
                 <strong>Credencial / API key</strong>
                 <span>{selected?.secret_ref ? 'Credencial configurada. Digite outra somente para substituir.' : 'A chave não é exibida novamente.'}</span>
               </div>
               <input type="password" value={secret} onChange={(event) => setSecret(event.target.value)} placeholder={selected?.secret_ref ? '••••••••••••' : 'Cole a chave aqui'} />
-              {selected && <button type="button" onClick={saveSecret} disabled={!secret.trim() || busy === 'secret'}>Salvar chave</button>}
+              {selected && (
+                <div className="secret-actions">
+                  <button type="button" onClick={saveSecret} disabled={!secret.trim() || busy === 'secret'}>Salvar chave</button>
+                  {selected.secret_ref && (
+                    <button
+                      type="button"
+                      className="danger-link"
+                      onClick={async () => {
+                        if (!window.confirm('Remover a credencial deste provider?')) return;
+                        setBusy('secret-delete');
+                        try {
+                          await api.deleteProviderSecretV2(selected.id);
+                          await onChanged();
+                          setNotice('Credencial removida.');
+                        } catch (reason) {
+                          setError(reason instanceof Error ? reason.message : 'Falha ao remover credencial.');
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                      disabled={busy === 'secret-delete'}
+                    >
+                      Remover chave
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <button type="button" className="manager-advanced-toggle" onClick={() => setShowAdvanced((value) => !value)}>
