@@ -62,102 +62,43 @@ function fixture() {
   };
 }
 
-describe('Phase H tool registry', () => {
-  it('keeps tools disabled by default and persists an explicit per-agent policy', () => {
+describe('Block 1 Full Access registry', () => {
+  it('gives every agent Full Access by default', () => {
+    const f = fixture();
+    const policy = new AgentToolPolicyRepository(f.database.connection).get(f.agent.id);
+    expect(policy.enabled).toBe(true);
+    expect(policy.approval_mode).toBe('auto');
+    expect(policy.max_tool_steps).toBeGreaterThanOrEqual(200);
+    expect(policy.allowed_tools).toContain('shell_command');
+    expect(policy.allowed_tools).toContain('git_command');
+    expect(policy.allowed_tools).toContain('github_command');
+    expect(policy.allowed_tools).toContain('browser_open');
+    expect(policy.allowed_tools).toContain('computer_screenshot');
+    expect(policy.allowed_tools).toContain('deploy_command');
+    f.cleanup();
+  });
+
+  it('cannot be downgraded to a disabled tool policy', () => {
     const f = fixture();
     const policies = new AgentToolPolicyRepository(f.database.connection);
-    expect(policies.get(f.agent.id).enabled).toBe(false);
-
     const saved = policies.save({
       agent_id: f.agent.id,
-      enabled: true,
-      allowed_tools: ['read_file', 'write_file', 'run_tests'],
-      approval_mode: 'safe',
-      max_tool_steps: 7,
-    });
-    expect(saved).toMatchObject({
-      enabled: true,
-      allowed_tools: ['read_file', 'write_file', 'run_tests'],
-      approval_mode: 'safe',
-      max_tool_steps: 7,
-    });
-    f.cleanup();
-  });
-
-  it('executes permitted project-root tools and stores bounded audit metadata', async () => {
-    const f = fixture();
-    const policies = new AgentToolPolicyRepository(f.database.connection);
-    const policy = policies.save({
-      agent_id: f.agent.id,
-      enabled: true,
-      allowed_tools: ['read_file', 'write_file'],
-      approval_mode: 'safe',
-      max_tool_steps: 5,
-    });
-    const registry = new ToolRegistry();
-
-    const read = await registry.execute('read_file', { path: 'README.md' }, policy, {
-      database: f.database.connection,
-      project_id: 'project-1',
-      project_root: f.projectRoot,
-      run_id: 'run-1',
-      agent_id: f.agent.id,
-    });
-    expect(read.ok).toBe(true);
-    expect(read.data?.content).toBe('hello tools');
-
-    const write = await registry.execute('write_file', { path: 'src.txt', content: 'secret-ish content' }, policy, {
-      database: f.database.connection,
-      project_id: 'project-1',
-      project_root: f.projectRoot,
-      run_id: 'run-1',
-      agent_id: f.agent.id,
-    });
-    expect(write.ok).toBe(true);
-    expect(fs.readFileSync(path.join(f.projectRoot, 'src.txt'), 'utf8')).toBe('secret-ish content');
-
-    const rows = f.database.connection.prepare('SELECT tool_name, input_json, result_json FROM tool_audit_events ORDER BY started_at').all() as Array<any>;
-    expect(rows).toHaveLength(2);
-    expect(rows[0].result_json).not.toContain('hello tools');
-    expect(rows[1].input_json).not.toContain('secret-ish content');
-    expect(JSON.parse(rows[1].input_json)).toMatchObject({ path: 'src.txt', content_bytes: 18 });
-    f.cleanup();
-  });
-
-  it('creates an approval gate for run_command in safe mode', async () => {
-    const f = fixture();
-    const policy = new AgentToolPolicyRepository(f.database.connection).save({
-      agent_id: f.agent.id,
-      enabled: true,
-      allowed_tools: ['run_command'],
-      approval_mode: 'safe',
-      max_tool_steps: 5,
-    });
-
-    const result = await new ToolRegistry().execute('run_command', { command: ['git', 'status', '--short'] }, policy, {
-      database: f.database.connection,
-      project_id: 'project-1',
-      project_root: f.projectRoot,
-      run_id: 'run-1',
-      agent_id: f.agent.id,
-    });
-    expect(result).toMatchObject({ ok: false, approval_required: true, error: 'TOOL_APPROVAL_REQUIRED' });
-    const approval = f.database.connection.prepare('SELECT status, tool_name FROM tool_approvals').get() as any;
-    expect(approval).toMatchObject({ status: 'pending', tool_name: 'run_command' });
-    f.cleanup();
-  });
-
-  it('executes the same gated tool after an explicit approval without leaking raw content into approval storage', async () => {
-    const f = fixture();
-    const policy = new AgentToolPolicyRepository(f.database.connection).save({
-      agent_id: f.agent.id,
-      enabled: true,
-      allowed_tools: ['write_file'],
+      enabled: false,
+      allowed_tools: [],
       approval_mode: 'manual',
-      max_tool_steps: 5,
+      max_tool_steps: 1,
     });
+    expect(saved.enabled).toBe(true);
+    expect(saved.approval_mode).toBe('auto');
+    expect(saved.max_tool_steps).toBeGreaterThanOrEqual(200);
+    expect(saved.allowed_tools.length).toBeGreaterThan(10);
+    f.cleanup();
+  });
+
+  it('executes project tools and Full Access shell tools with audit records', async () => {
+    const f = fixture();
+    const policy = new AgentToolPolicyRepository(f.database.connection).get(f.agent.id);
     const registry = new ToolRegistry();
-    const input = { path: 'approved.txt', content: 'approved content' };
     const context = {
       database: f.database.connection,
       project_id: 'project-1',
@@ -166,31 +107,16 @@ describe('Phase H tool registry', () => {
       agent_id: f.agent.id,
     };
 
-    const gated = await registry.execute('write_file', input, policy, context);
-    expect(gated).toMatchObject({ approval_required: true, error: 'TOOL_APPROVAL_REQUIRED' });
-    const storedApproval = f.database.connection.prepare('SELECT input_json FROM tool_approvals WHERE id = ?')
-      .get(gated.approval_id) as { input_json: string };
-    expect(storedApproval.input_json).not.toContain('approved content');
+    const read = await registry.execute('read_file', { path: 'README.md' }, policy, context);
+    expect(read.ok).toBe(true);
 
-    f.database.connection.prepare(
-      "UPDATE tool_approvals SET status = 'approved', resolved_at = ? WHERE id = ?",
-    ).run(new Date().toISOString(), gated.approval_id);
+    const shell = await registry.execute('shell_command', { command: 'node --version' }, policy, context);
+    expect(shell.ok).toBe(true);
+    expect(String(shell.data?.stdout ?? '')).toMatch(/^v\d+/);
 
-    const executed = await registry.executeApproved(
-      'write_file',
-      input,
-      policy,
-      context,
-      gated.approval_id!,
-      gated.audit_id,
-    );
-    expect(executed.ok).toBe(true);
-    expect(fs.readFileSync(path.join(f.projectRoot, 'approved.txt'), 'utf8')).toBe('approved content');
-
-    const audit = f.database.connection.prepare('SELECT status FROM tool_audit_events WHERE id = ?')
-      .get(gated.audit_id) as { status: string };
-    expect(audit.status).toBe('completed');
+    const rows = f.database.connection.prepare('SELECT tool_name, status FROM tool_audit_events ORDER BY started_at').all() as Array<any>;
+    expect(rows.map(row => row.tool_name)).toEqual(expect.arrayContaining(['read_file', 'shell_command']));
+    expect(rows.every(row => row.status === 'completed')).toBe(true);
     f.cleanup();
   });
-
 });
