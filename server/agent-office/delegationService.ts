@@ -39,11 +39,10 @@ export class DelegationService{
   const match=this.matcher.match(req.required_capabilities??[],req.required_tools??[]).find(x=>x.agent_id===req.child_agent_id);if(!match?.eligible)throw new Error(match?.blockers.some(x=>x.startsWith('tool:'))?'DELEGATION_TOOL_MISMATCH':'DELEGATION_CAPABILITY_MISMATCH');
   const agentPolicy=this.db.prepare('SELECT enabled,allowed_tools_json FROM agent_tool_policies WHERE agent_id=?').get(req.child_agent_id) as any;
   if((req.required_tools??[]).some(t=>!agentPolicy?.enabled||!set(parse(agentPolicy.allowed_tools_json,[])).has(t)))throw new Error('DELEGATION_TOOL_MISMATCH');
-  if((req.required_tools??[]).some(t=>Array.isArray(teamPolicy.allowed_tools)&&teamPolicy.allowed_tools.length&&!teamPolicy.allowed_tools.includes(t)))throw new Error('DELEGATION_TEAM_TOOL_BLOCKED');
+  if(req.team_id&&(req.required_tools??[]).some(t=>!Array.isArray(teamPolicy.allowed_tools)||!teamPolicy.allowed_tools.includes(t)))throw new Error('DELEGATION_TEAM_TOOL_BLOCKED');
   const remaining=req.remaining_budget??{};if(remaining.agents!==undefined&&remaining.agents<=0)throw new Error('DELEGATION_BUDGET_EXHAUSTED');if(remaining.cost_usd!==undefined&&remaining.cost_usd<=0)throw new Error('DELEGATION_BUDGET_EXHAUSTED');if(remaining.tokens!==undefined&&remaining.tokens<=0)throw new Error('DELEGATION_BUDGET_EXHAUSTED');if(remaining.tool_calls!==undefined&&remaining.tool_calls<(req.required_tools?.length??0))throw new Error('DELEGATION_BUDGET_EXHAUSTED');
-  const agentPermissions=parse<string[]>((this.db.prepare('SELECT metadata_json FROM agents WHERE id=?').get(req.child_agent_id) as any)?.metadata_json,[] as any);
   const agentMeta=parse<any>((this.db.prepare('SELECT metadata_json FROM agents WHERE id=?').get(req.child_agent_id) as any)?.metadata_json,{});
-  const effective=intersectPermissions({user:req.user_permissions??[],project:req.project_permissions??[],team:teamPolicy.permissions??[],delegation:req.delegation_scope??[],agent:Array.isArray(agentMeta.permissions)?agentMeta.permissions:[],tool:req.required_tools??[]});
+  const effective=intersectPermissions({user:req.user_permissions??[],project:req.project_permissions??[],team:teamPolicy.permissions??[],delegation:req.delegation_scope??[],agent:Array.isArray(agentMeta.permissions)?agentMeta.permissions:[]});
   return{allowed:true,depth,max_depth:maxDepth,external_borrowed:Boolean(req.team_id&&!members.includes(req.child_agent_id)),effective_permissions:effective,ancestor_chain:chain};
  }
  delegate(req:DelegationRequest){
