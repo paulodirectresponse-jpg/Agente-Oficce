@@ -34,11 +34,19 @@ fn main() {
         .setup(|app| {
             #[cfg(not(debug_assertions))]
             {
+                let runtime_name = if cfg!(target_os = "windows") {
+                    "runtime/node-runtime.exe"
+                } else {
+                    "runtime/node-runtime"
+                };
+                let runtime_path = app
+                    .path()
+                    .resolve(runtime_name, BaseDirectory::Resource)?;
                 let server_path = app
                     .path()
                     .resolve("runtime/server/index.js", BaseDirectory::Resource)?;
 
-                let mut command = Command::new("node");
+                let mut command = Command::new(runtime_path);
                 command
                     .arg(server_path)
                     .env("AGENT_OFFICE_DESKTOP", "1")
@@ -56,8 +64,7 @@ fn main() {
                         app.manage(BackendProcess(Mutex::new(Some(child))));
                     }
                     Err(error) => {
-                        // Keep the window usable so Settings/diagnostics can explain the
-                        // missing local runtime instead of failing to launch the app.
+                        // Keep the shell visible so diagnostics can report startup failure.
                         eprintln!("Agent Office backend failed to start: {error}");
                     }
                 }
