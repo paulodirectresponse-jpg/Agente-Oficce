@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentProfile, Team, TeamMember } from './types.js';
+import type { AgentProfile, Team } from './types.js';
 import { api } from './api.js';
 
 interface Props { agents: AgentProfile[]; }
