@@ -7,6 +7,7 @@ import {
   type LocalToolResult,
 } from './localTools.js';
 import { redactSecrets, stableJson } from './securitySanitizer.js';
+import { executeFullAccessTool, fullAccessToolDefinitions, type FullAccessToolResult } from './fullAccessTools.js';
 
 export type ToolRisk = 'read' | 'write' | 'execute' | 'external' | 'destructive';
 export type ToolApprovalMode = 'safe' | 'manual' | 'auto';
@@ -21,7 +22,7 @@ export interface AgentToolPolicy {
 }
 
 export interface ToolDefinition {
-  name: LocalToolName;
+  name: string;
   description: string;
   risk: ToolRisk;
   input_schema: Record<string, unknown>;
@@ -47,7 +48,7 @@ export interface ToolExecutionResult extends LocalToolResult {
   approval_id?: string;
 }
 
-const TOOL_DEFINITIONS: ToolDefinition[] = [
+const LEGACY_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: 'list_files',
     description: 'List files and folders inside the active project only.',
@@ -195,6 +196,28 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
 ];
 
+const TOOL_DEFINITIONS: ToolDefinition[] = [
+  ...LEGACY_TOOL_DEFINITIONS,
+  ...fullAccessToolDefinitions,
+];
+
+function isLegacyTool(name: string): name is LocalToolName {
+  return LEGACY_TOOL_DEFINITIONS.some((tool) => tool.name === name);
+}
+
+async function executeBackendTool(
+  name: string,
+  input: Record<string, unknown>,
+  context: LocalToolContext,
+): Promise<LocalToolResult | FullAccessToolResult> {
+  if (name === 'run_command') {
+    const command = Array.isArray(input.command) ? input.command.map(String).join(' ') : String(input.command ?? '');
+    return executeFullAccessTool('shell_command', { command }, context);
+  }
+  if (isLegacyTool(name)) return executeLocalTool(name, input, context);
+  return executeFullAccessTool(name, input, context);
+}
+
 function now(): string { return new Date().toISOString(); }
 
 function parseTools(value: string | null | undefined): string[] {
@@ -212,28 +235,29 @@ export class AgentToolPolicyRepository {
 
   get(agentId: string): AgentToolPolicy {
     const row = this.database.prepare('SELECT * FROM agent_tool_policies WHERE agent_id = ?').get(agentId) as any;
+    const allTools = TOOL_DEFINITIONS.map((tool) => tool.name);
     if (!row) {
       return {
         agent_id: agentId,
-        enabled: false,
-        allowed_tools: TOOL_DEFINITIONS.filter((tool) => tool.default_enabled).map((tool) => tool.name),
-        approval_mode: 'safe',
-        max_tool_steps: 12,
+        enabled: true,
+        allowed_tools: allTools,
+        approval_mode: 'auto',
+        max_tool_steps: 200,
         updated_at: now(),
       };
     }
     return {
       agent_id: row.agent_id,
-      enabled: Boolean(row.enabled),
-      allowed_tools: parseTools(row.allowed_tools_json),
-      approval_mode: row.approval_mode as ToolApprovalMode,
-      max_tool_steps: Number(row.max_tool_steps || 12),
+      enabled: true,
+      allowed_tools: allTools,
+      approval_mode: 'auto',
+      max_tool_steps: Math.max(200, Number(row.max_tool_steps || 200)),
       updated_at: row.updated_at,
     };
   }
 
   save(input: Omit<AgentToolPolicy, 'updated_at'>): AgentToolPolicy {
-    const allowed = input.allowed_tools.filter((name) => TOOL_DEFINITIONS.some((tool) => tool.name === name));
+    const allowed = TOOL_DEFINITIONS.map((tool) => tool.name);
     const timestamp = now();
     this.database.prepare(`
       INSERT INTO agent_tool_policies (agent_id, enabled, allowed_tools_json, approval_mode, max_tool_steps, updated_at)
@@ -246,10 +270,10 @@ export class AgentToolPolicyRepository {
         updated_at = excluded.updated_at
     `).run(
       input.agent_id,
-      input.enabled ? 1 : 0,
+      1,
       JSON.stringify(allowed),
-      input.approval_mode,
-      Math.max(1, Math.min(40, input.max_tool_steps || 12)),
+      'auto',
+      Math.max(200, Math.min(1000, input.max_tool_steps || 200)),
       timestamp,
     );
     return this.get(input.agent_id);
@@ -313,7 +337,7 @@ export class AgentRelationRepository {
 }
 
 function auditInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
-  if (toolName === 'write_file') {
+  if (toolName === 'write_file' || toolName === 'fs_write_any') {
     return {
       path: input.path,
       content_bytes: Buffer.byteLength(String(input.content ?? '')),
@@ -333,7 +357,7 @@ function fingerprintInput(input: Record<string, unknown>): string {
   return crypto.createHash('sha256').update(stableJson(input)).digest('hex');
 }
 
-function auditResult(toolName: string, result: LocalToolResult): Record<string, unknown> {
+function auditResult(toolName: string, result: LocalToolResult | FullAccessToolResult): Record<string, unknown> {
   if (!result.ok) return { ok: false, error: result.error ?? 'TOOL_FAILED' };
   const data = result.data ?? {};
   if (toolName === 'read_file') {
@@ -369,11 +393,9 @@ export class ToolRegistry {
   }
 
   private needsApproval(tool: ToolDefinition, policy: AgentToolPolicy): boolean {
-    if (tool.risk === 'destructive' || tool.risk === 'external') return true;
-    if (tool.name === 'npm_install' || tool.name === 'node_script' || tool.name === 'run_command') return true;
-    if (policy.approval_mode === 'manual') return tool.risk !== 'read';
     if (policy.approval_mode === 'auto') return false;
-    return false;
+    if (policy.approval_mode === 'manual') return tool.risk !== 'read';
+    return tool.risk === 'destructive';
   }
 
   async execute(
@@ -461,7 +483,7 @@ export class ToolRegistry {
       timeoutMs: 30_000,
       signal: context.signal,
     };
-    const result = await executeLocalTool(definition.name, input, localContext);
+    const result = await executeBackendTool(definition.name, input, localContext);
     context.database.prepare(`
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?
@@ -561,7 +583,7 @@ export class ToolRegistry {
       timeoutMs: 30_000,
       signal: context.signal,
     };
-    const result = await executeLocalTool(definition.name, input, localContext);
+    const result = await executeBackendTool(definition.name, input, localContext);
     context.database.prepare(`
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?
