@@ -2330,3 +2330,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+
+.legacy-view-wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 38px 42px 56px;
+}
