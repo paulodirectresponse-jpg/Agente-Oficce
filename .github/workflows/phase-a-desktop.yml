@@ -119,7 +119,8 @@ jobs:
           }
 
           $backend = Get-CimInstance Win32_Process |
-            Where-Object { $_.CommandLine -and $_.CommandLine -match "runtime[\\\\/]server[\\\\/]index\\.js" } |
+            Where-Object { $_.Name -ieq "node-runtime.exe" } |
+            Sort-Object CreationDate -Descending |
             Select-Object -First 1
 
           if (-not $backend) {
