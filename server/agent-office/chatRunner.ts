@@ -200,12 +200,17 @@ export class ChatRunnerService {
   }
 
   prepare(input: PrepareChatRunInput): PreparedChatRun {
+    const projectId = input.project_id.trim();
+    if (!projectId) throw new Error('CHAT_PROJECT_REQUIRED');
+    const projectExists = this.database.prepare('SELECT 1 AS ok FROM projects WHERE id = ?').get(projectId);
+    if (!projectExists) throw new Error('CHAT_PROJECT_NOT_FOUND');
+
     const message = input.message.trim();
     if (!message) throw new Error('CHAT_MESSAGE_REQUIRED');
 
     const conversationId = input.conversation_id
-      ? this.requireConversation(input.conversation_id, input.project_id)
-      : this.conversations.ensureForProject(input.project_id);
+      ? this.requireConversation(input.conversation_id, projectId)
+      : this.conversations.ensureForProject(projectId);
 
     const target = normalizeTarget(input.target);
     const available = this.availableBindings();
@@ -227,10 +232,11 @@ export class ChatRunnerService {
     });
 
     const mode = target === 'team' ? 'team' : 'single';
+    if (mode === 'team' && input.model_override) throw new Error('CHAT_MODEL_OVERRIDE_TEAM_UNSUPPORTED');
     const first = selected[0];
     const run = this.runs.create({
       conversation_id: conversationId,
-      project_id: input.project_id,
+      project_id: projectId,
       agent_id: mode === 'single' ? first.agent.id : null,
       provider_id: mode === 'single' ? first.provider.id : null,
       model_id: mode === 'single' ? this.resolveModel(first, input.model_override).id : null,
@@ -309,14 +315,26 @@ export class ChatRunnerService {
           })
           : rootRun;
 
-        const result = await this.runAgent({
-          rootRun,
-          childRun,
-          binding: { ...binding, model },
-          stage,
-          previousText: previous,
-        });
-        stageResults.push(result);
+        try {
+          const result = await this.runAgent({
+            rootRun,
+            childRun,
+            binding: { ...binding, model },
+            stage,
+            previousText: previous,
+            isFinal: index === selected.length - 1,
+          });
+          stageResults.push(result);
+        } catch (error) {
+          if (childRun.id !== rootRun.id) {
+            this.runs.update(childRun.id, {
+              status: 'failed',
+              ended_at: new Date().toISOString(),
+              error: { message: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED' },
+            });
+          }
+          throw error;
+        }
       }
 
       const final = stageResults.at(-1);
@@ -471,8 +489,18 @@ export class ChatRunnerService {
 
   private stageFor(mode: 'single' | 'team', selected: AgentBinding[], index: number): 'planner' | 'responder' | 'reviewer' {
     if (mode === 'single') return 'responder';
-    if (index === selected.length - 1 && selected.length > 1) return 'reviewer';
-    if (index === 0 && selected.length > 2) return 'planner';
+    if (selected.length >= 3) {
+      if (index === 0) return 'planner';
+      if (index === selected.length - 1) return 'reviewer';
+      return 'responder';
+    }
+    if (selected.length === 2) {
+      const firstText = `${selected[0].agent.role} ${selected[0].agent.description}`.toLowerCase();
+      if (/(plan|architect|arquitet|estrateg)/i.test(firstText)) {
+        return index === 0 ? 'planner' : 'responder';
+      }
+      return index === 0 ? 'responder' : 'reviewer';
+    }
     return 'responder';
   }
 
@@ -545,8 +573,9 @@ export class ChatRunnerService {
     binding: AgentBinding;
     stage: 'planner' | 'responder' | 'reviewer';
     previousText: string;
+    isFinal: boolean;
   }): Promise<AgentResult> {
-    const { rootRun, childRun, binding, stage, previousText } = input;
+    const { rootRun, childRun, binding, stage, previousText, isFinal } = input;
     const state = stateForStage(stage);
     this.states.upsert({
       agent_id: binding.agent.id,
@@ -681,7 +710,7 @@ export class ChatRunnerService {
         model_id: binding.model.id,
         model: binding.model.model_id,
         finish_reason: finishReason ?? null,
-        final: false,
+        final: isFinal,
         tools_enabled: false,
       },
     });
@@ -724,6 +753,7 @@ export class ChatRunnerService {
       stage,
       finish_reason: finishReason ?? null,
       usage: usage ?? null,
+      final: isFinal,
     });
 
     return {
