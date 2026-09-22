@@ -370,3 +370,54 @@ table.data-table th {
   font-family: 'Cascadia Code', ui-monospace, monospace;
   font-size: 11px;
 }
+
+
+.runtime-status {
+  margin: -6px 10px 16px;
+  padding: 8px 10px;
+  border: 1px solid #1c2634;
+  border-radius: 8px;
+  font-size: 11px;
+  color: #7c8a9e;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.runtime-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #64748b;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.1);
+}
+
+.runtime-status.online {
+  color: #86efac;
+  border-color: rgba(74, 222, 128, 0.25);
+}
+
+.runtime-status.online .runtime-dot {
+  background: #4ade80;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.12);
+}
+
+.runtime-status.offline {
+  color: #fda4af;
+  border-color: rgba(251, 113, 133, 0.25);
+}
+
+.runtime-status.offline .runtime-dot {
+  background: #fb7185;
+  box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.12);
+}
+
+.runtime-banner {
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  border-radius: 8px;
+  background: rgba(127, 29, 29, 0.14);
+  color: #fecdd3;
+  font-size: 12px;
+}
