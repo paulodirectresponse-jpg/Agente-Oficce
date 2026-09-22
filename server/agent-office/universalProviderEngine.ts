@@ -284,7 +284,7 @@ async function* ndjsonPayloads(response: Response): AsyncIterable<Record<string,
 }
 
 class OpenAiChatDriver implements ProtocolDriver {
-  readonly id = 'openai_chat';
+  readonly id: string = 'openai_chat';
 
   prepareCompletion(provider: Provider, input: UniversalCompletionInput, stream: boolean): PreparedRequest {
     const body: Record<string, unknown> = {
