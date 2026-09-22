@@ -11,11 +11,13 @@ import { ProviderConfigRepository } from '../agent-office/providerConfig.js';
 import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
 import { getAgentOfficeConfig, ensureAgentOfficeDataDir } from '../agent-office/config.js';
 import { v2DataRouter } from './v2DataRoutes.js';
+import { chatRouter } from './chatRoutes.js';
 
 export const agentOfficeRouter = Router();
 
 // V2 data model endpoints live behind a versioned namespace while the V1 API remains intact.
 agentOfficeRouter.use('/agent-office/v2', v2DataRouter);
+agentOfficeRouter.use('/agent-office/chat', chatRouter);
 
 // Health check - validates local SQLite foundation
 agentOfficeRouter.get('/agent-office/health', (_request, response) => {

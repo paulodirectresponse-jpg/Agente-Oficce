@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, Conversation, DiscoveredModel, Project, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentState, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, UniversalProvider, UsageEntry } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -73,6 +73,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(config),
     }),
+
+  // API-only chat runner
+  startChatRun: (input: ChatStartInput) =>
+    request<ChatRunReceipt>('/api/agent-office/chat/runs', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  getChatRun: (runId: string) =>
+    request<ChatRun>(`/api/agent-office/chat/runs/${runId}`),
+  getChatStreamUrl: async (runId: string, afterSequence = 0) => {
+    const base = await resolveApiBase();
+    const query = afterSequence > 0 ? `?after=${afterSequence}` : '';
+    return `${base}/api/agent-office/chat/runs/${runId}/stream${query}`;
+  },
 
   // V2 dynamic data model
   providerEngineCapabilities: () =>
