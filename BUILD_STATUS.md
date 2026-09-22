@@ -3,7 +3,7 @@
 ## Checkpoint atual
 - Atualizado: 2026-09-22
 - Branch estável: `main`
-- HEAD funcional após a Fase G: `1ff5a144`
+- HEAD funcional após a Fase H: `039093a0`
 - Blueprint V2: `docs/EXPERIENCE_V2_UNIVERSAL_API.md`
 
 ## V2 — Experience Layer + Universal API
@@ -17,7 +17,7 @@
 | E | Experience V2 | DONE | Office-first baseado no visual aprovado, agentes 2D, estados ao vivo, chat compartilhado, Event Stream e handoffs visuais; desktop gate verde. |
 | F | Provider/Agent Manager | DONE | UI completa para providers, secrets, health, discovery/catálogo de modelos e agentes dinâmicos configuráveis; desktop gate verde. |
 | G | Hardening | DONE | Secrets criptografados, retries/backoff, cancelamento real, rate/concurrency limits, recovery, usage avançado e release gate final verde. |
-| H | Tools | NEXT / AWAITING APPROVAL | Só inicia após aprovação explícita para liberar ações no computador/repositórios. |
+| H | Tools + Adaptive Orchestration | DONE (core local) | Tools permissionadas por agente, sandbox de projeto, audit/approvals, tool calling OpenAI-compatible, roteamento adaptativo e fundação de subagentes; gate Windows verde. |
 
 ## Fase A — concluída
 - Vite ignora `src-tauri/target/**` e não quebra com `EBUSY`.
@@ -357,7 +357,7 @@ A seleção provider/model respeita o vínculo correto e só apresenta modelos d
 
 ### Integração com Office V2
 - agentes configurados passam a ser usados pelo Chat Runner;
-- os três primeiros por ordem são priorizados no Office;
+- todos os agentes ativos podem aparecer no Office; a sala se reorganiza dinamicamente;
 - agentes desativados ficam fora de Auto/Team;
 - providers/modelos configurados alimentam diretamente as telas Office e Chat;
 - nenhuma tool local foi habilitada.
@@ -530,6 +530,140 @@ As Fases A–G agora formam uma versão utilizável sem tools:
 
 Tools continuam explicitamente fora do Chat Runner V2 até a Fase H.
 
+## Fase H — concluída (core local)
+
+### Orquestração adaptativa
+O modo `Auto` não chama mais uma equipe fixa. Ele avalia a solicitação e usa somente o necessário:
+- tarefa simples: normalmente 1 agente especialista;
+- tarefa complexa/arquitetural: pode adicionar planner;
+- tarefa com validação/revisão/testes: pode adicionar reviewer;
+- máximo inicial de 3 agentes por execução automática;
+- `Team` explícito continua disponível quando o usuário quer colaboração forçada;
+- agentes desativados continuam fora de Auto/Team.
+
+### Agentes ativos e inativos
+- o toggle `Agente ativo` ficou visível no fluxo normal de edição;
+- agente inativo permanece cadastrado, mas não entra no Office nem é escolhido pelo roteador;
+- isso permite manter especialistas raros sem custo/ruído no trabalho cotidiano.
+
+### Tool Registry V2
+Tools locais iniciais:
+- `list_files`
+- `read_file`
+- `search_files`
+- `write_file`
+- `apply_patch`
+- `git_status`
+- `git_diff`
+- `run_tests`
+- `run_command` allowlisted
+
+Cada agente possui política independente:
+- tools ligadas/desligadas;
+- lista de tools permitidas;
+- modo de aprovação `safe | manual | auto`;
+- orçamento máximo de passos.
+
+Tools ficam desligadas por padrão em novos agentes.
+
+### Segurança
+- filesystem restrito à pasta raiz do projeto ativo;
+- paths absolutos/escape do root são bloqueados;
+- symlink escape é bloqueado;
+- arquivos binários e leituras excessivas são bloqueados;
+- escrita limitada ao projeto;
+- comandos sem shell genérico;
+- executáveis permitidos inicialmente: Git, npm e Node;
+- comandos Git destrutivos conhecidos são negados;
+- timeout, output bounded e AbortSignal;
+- cancelamento do chat chega à tool em execução.
+
+### Tool calling
+Providers `openai_chat` / OpenAI-compatible podem receber function tools nativas.
+O ciclo é:
+```
+modelo → tool_call → Tool Registry → resultado → modelo → resposta final
+```
+
+O responder é o estágio que recebe tools. Planner e reviewer continuam focados em raciocínio, reduzindo ações desnecessárias.
+
+### Aprovações reais
+Quando uma tool exige confirmação:
+- o run entra em espera;
+- o Office mostra um card Aprovar / Negar;
+- a execução permanece pausada;
+- após aprovação, a mesma tool é executada e o agente continua;
+- após negação, o modelo recebe o resultado negado e pode adaptar a resposta;
+- aprovação respeita cancelamento e timeout.
+
+### Auditoria
+Migration 6 adiciona:
+- `agent_tool_policies`
+- `tool_audit_events`
+- `tool_approvals`
+- `agent_relations`
+
+Audit registra ferramenta, risco, status, agente, run e metadados.
+Conteúdo bruto de arquivos escritos/lidos não é persistido no audit; são gravados caminhos/tamanhos e resultados resumidos.
+
+### Estados visuais
+O Office agora também entende:
+- `coding` / Programando
+- `testing` / Testando
+- `waiting` durante aprovação
+
+Event Stream inclui:
+- `tool.started`
+- `tool.approval_required`
+- `tool.approved`
+- `tool.denied`
+- `tool.completed`
+
+### Correção do chat travado
+Foi corrigido o caso observado no app em que, após a primeira resposta, o composer podia permanecer desabilitado se o evento terminal SSE fosse perdido.
+Agora:
+- SSE continua como canal principal;
+- o frontend reconcilia o status do run por polling durante execução;
+- se o run já terminou, o composer é liberado;
+- `EventSource.onerror` também consulta o status persistido;
+- histórico é sincronizado novamente após término.
+
+### Fundação de subagentes
+`agent_relations` permite registrar relações supervisor → subagentes.
+A UI já permite configurar essa estrutura nas opções avançadas do agente.
+
+Importante:
+- esta fase cria a fundação hierárquica;
+- criação autônoma de novos agentes e roteamento recursivo de equipes de subagentes ficam para uma evolução posterior;
+- integrações externas específicas como browser/GitHub/deploy entram como novos adapters/tools sobre o mesmo registry, sem precisar refazer o core.
+
+### Gate da Fase H
+Workflow: `Agent Office Desktop Gate`
+Run: `35762755020`
+
+Passou:
+- 26 arquivos / 123 testes;
+- typecheck;
+- build client/server;
+- Rust/Tauri;
+- smoke do backend empacotado;
+- MSI;
+- instalação real no Windows;
+- backend instalado + health;
+- SQLite;
+- shutdown sem processo órfão;
+- upload do MSI.
+
+Artefato do gate:
+- nome: `agent-office-desktop-msi`
+- artifact id: `10710932280`
+- tamanho ZIP: 48.494.137 bytes
+- SHA-256: `0d56aaf43cfb270f386eeb7e5ef7544b9535556f9af51dfbd8997d26507b0168`
+
+PR da Fase H:
+- `#11`
+- merge commit: `039093a0df2af385512270a88628900c2d97cec9`
+
 ## Compatibilidade V1
 Continuam preservados durante a migração:
 - projetos;
@@ -544,6 +678,6 @@ Continuam preservados durante a migração:
 As tools legadas não são expostas pelo Chat Runner V2 e permanecem fora do escopo até a Fase H.
 
 ## Próximo passo
-Fase H — Tools, aguardando aprovação explícita.
+Expansão pós-H — equipe inicial + integrações externas.
 
-Objetivo futuro: dar mãos aos agentes com uma camada permissionada de filesystem, terminal, Git, testes, browser/publicação e integrações, mantendo aprovação para ações destrutivas, isolamento por projeto, auditoria e limites. Até essa aprovação, a versão V2 permanece API-only.
+Objetivo: definir os agentes iniciais, ativar tools somente nos especialistas que realmente precisam delas e adicionar adapters externos (ex.: GitHub/browser/deploy) de forma incremental. A arquitetura de relações já prepara o caminho para subagentes e, futuramente, criação supervisionada de novos agentes.
