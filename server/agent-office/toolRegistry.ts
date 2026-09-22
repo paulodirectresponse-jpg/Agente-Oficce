@@ -243,6 +243,47 @@ export class AgentRelationRepository {
   }
 }
 
+function auditInput(toolName: string, input: Record<string, unknown>): Record<string, unknown> {
+  if (toolName === 'write_file') {
+    return {
+      path: input.path,
+      content_bytes: Buffer.byteLength(String(input.content ?? '')),
+    };
+  }
+  if (toolName === 'apply_patch') {
+    return {
+      path: input.path,
+      old_text_bytes: Buffer.byteLength(String(input.old_text ?? '')),
+      new_text_bytes: Buffer.byteLength(String(input.new_text ?? '')),
+    };
+  }
+  return input;
+}
+
+function auditResult(toolName: string, result: LocalToolResult): Record<string, unknown> {
+  if (!result.ok) return { ok: false, error: result.error ?? 'TOOL_FAILED' };
+  const data = result.data ?? {};
+  if (toolName === 'read_file') {
+    return {
+      ok: true,
+      path: data.path,
+      content_bytes: typeof data.content === 'string' ? Buffer.byteLength(data.content) : 0,
+    };
+  }
+  if (toolName === 'git_diff' || toolName === 'git_status' || toolName === 'run_command' || toolName === 'run_tests') {
+    const stdout = typeof data.stdout === 'string' ? data.stdout : '';
+    const stderr = typeof data.stderr === 'string' ? data.stderr : '';
+    return {
+      ok: true,
+      stdout_bytes: Buffer.byteLength(stdout),
+      stderr_bytes: Buffer.byteLength(stderr),
+      executable: data.executable,
+      args: data.args,
+    };
+  }
+  return { ok: true, ...data };
+}
+
 export class ToolRegistry {
   listDefinitions(): ToolDefinition[] {
     return TOOL_DEFINITIONS.map((tool) => ({ ...tool, input_schema: { ...tool.input_schema } }));
@@ -280,7 +321,7 @@ export class ToolRegistry {
 
     const auditId = crypto.randomUUID();
     const startedAt = now();
-    this.databaseInsertAudit(context, auditId, definition, input, startedAt);
+    this.databaseInsertAudit(context, auditId, definition, auditInput(definition.name, input), startedAt);
 
     if (this.needsApproval(definition, policy)) {
       const approvalId = crypto.randomUUID();
@@ -320,7 +361,7 @@ export class ToolRegistry {
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?
       WHERE id = ?
-    `).run(result.ok ? 'completed' : 'failed', JSON.stringify(result), now(), auditId);
+    `).run(result.ok ? 'completed' : 'failed', JSON.stringify(auditResult(definition.name, result)), now(), auditId);
     return { ...result, audit_id: auditId, risk: definition.risk };
   }
 
