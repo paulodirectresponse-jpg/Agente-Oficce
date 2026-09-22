@@ -115,5 +115,35 @@ describe('TaskRunManager', () => {
 
     database2.connection.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
+  
+  it('enforces one active writer per project across independent manager instances', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-lock-'));
+    const projectDir = fs.mkdtempSync(path.join(dataDir, 'proj-'));
+    const database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
+    const projects = new ProjectRepository(database.connection);
+    const conversations = new ConversationRepository(database.connection);
+    const project = projects.create({ root_path: projectDir });
+    const convId = conversations.ensureForProject(project.id);
+    const options = { database: database.connection, adapterRegistry: adapterRegistry.getMap(), maxAutoAttempts: 3, maxAgentSwitches: 3 };
+    const first = new TaskRunManager(options);
+    const second = new TaskRunManager(options);
+    const taskA = first.createTask({ projectId: project.id, conversationId: convId, title: 'Writer A' });
+    const taskB = second.createTask({ projectId: project.id, conversationId: convId, title: 'Writer B' });
+
+    const active = await first.startRun(taskA.id, 'kimi', 'Context A', projectDir);
+    await expect(second.startRun(taskB.id, 'kimi', 'Context B', projectDir)).rejects.toThrow('WRITER_LOCK_ACTIVE');
+    expect(database.connection.prepare('SELECT COUNT(*) AS count FROM project_run_locks WHERE project_id = ?').get(project.id))
+      .toEqual({ count: 1 });
+
+    await first.completeRun(active.runId, true, 'done');
+    const next = await second.startRun(taskB.id, 'kimi', 'Context B', projectDir);
+    for await (const event of next.events) expect(event.type).toBeTruthy();
+    await second.completeRun(next.runId, true, 'done');
+    expect(database.connection.prepare('SELECT COUNT(*) AS count FROM project_run_locks WHERE project_id = ?').get(project.id))
+      .toEqual({ count: 0 });
+
+    database.connection.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
   });
+});
 });
