@@ -10,6 +10,7 @@ import { UsageTracker } from '../agent-office/usageTracker.js';
 import { ProviderConfigRepository } from '../agent-office/providerConfig.js';
 import { DevelopmentSecretStore } from '../agent-office/secretStore.js';
 import { getAgentOfficeConfig, ensureAgentOfficeDataDir } from '../agent-office/config.js';
+import { getProjectRootSetting, setProjectRootSetting } from '../agent-office/appSettings.js';
 import { v2DataRouter } from './v2DataRoutes.js';
 import { chatRouter } from './chatRoutes.js';
 
@@ -43,6 +44,29 @@ agentOfficeRouter.get('/agent-office/health', (_request, response) => {
   }
 });
 
+// Project root setting
+agentOfficeRouter.get('/agent-office/settings/project-root', (_request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    response.json({ ok: true, data: getProjectRootSetting(database.connection) });
+  } finally {
+    database.connection.close();
+  }
+});
+
+agentOfficeRouter.put('/agent-office/settings/project-root', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const setting = setProjectRootSetting(database.connection, String(request.body?.path || ''));
+    response.json({ ok: true, data: setting });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'PROJECT_ROOT_SAVE_FAILED';
+    response.status(400).json({ ok: false, error: { code, message: code } });
+  } finally {
+    database.connection.close();
+  }
+});
+
 // Projects
 agentOfficeRouter.get('/agent-office/projects', (_request, response) => {
   try {
@@ -56,15 +80,33 @@ agentOfficeRouter.get('/agent-office/projects', (_request, response) => {
 });
 
 agentOfficeRouter.post('/agent-office/projects', (request, response) => {
+  const database = openAgentOfficeDatabase();
   try {
-    const database = openAgentOfficeDatabase();
-    const project = new ProjectRepository(database.connection).create({ name: request.body?.name, root_path: String(request.body?.root_path || '') });
-    database.connection.close();
+    const repository = new ProjectRepository(database.connection);
+    const explicitRoot = typeof request.body?.root_path === 'string' && request.body.root_path.trim();
+    const project = explicitRoot
+      ? repository.create({ name: request.body?.name, root_path: request.body.root_path.trim() })
+      : repository.createInDefaultRoot(String(request.body?.name || ''));
     response.status(201).json({ ok: true, data: project });
   } catch (error) {
     const code = error instanceof Error ? error.message : 'PROJECT_CREATE_FAILED';
-    const status = code === 'PROJECT_PATH_NOT_FOUND' || code === 'PROJECT_PATH_NOT_DIRECTORY' ? 400 : code === 'PROJECT_ALREADY_EXISTS' ? 409 : 500;
-    response.status(status).json({ ok: false, error: { code, message: code === 'PROJECT_PATH_NOT_FOUND' ? 'Project folder does not exist.' : code === 'PROJECT_PATH_NOT_DIRECTORY' ? 'Project path is not a folder.' : code === 'PROJECT_ALREADY_EXISTS' ? 'This project folder is already registered.' : 'Unable to create project.' } });
+    const status = code === 'PROJECT_ALREADY_EXISTS' || code === 'PROJECT_FOLDER_ALREADY_EXISTS'
+      ? 409
+      : code.startsWith('PROJECT_')
+        ? 400
+        : 500;
+    const messages: Record<string, string> = {
+      PROJECT_PATH_NOT_FOUND: 'Project folder does not exist.',
+      PROJECT_PATH_NOT_DIRECTORY: 'Project path is not a folder.',
+      PROJECT_ALREADY_EXISTS: 'This project folder is already registered.',
+      PROJECT_FOLDER_ALREADY_EXISTS: 'A folder with this project name already exists inside the default root.',
+      PROJECT_ROOT_NOT_CONFIGURED: 'Configure the default project root first.',
+      PROJECT_NAME_REQUIRED: 'Project name is required.',
+      PROJECT_NAME_INVALID: 'Project name cannot be used as a folder name.',
+    };
+    response.status(status).json({ ok: false, error: { code, message: messages[code] ?? 'Unable to create project.' } });
+  } finally {
+    database.connection.close();
   }
 });
 
