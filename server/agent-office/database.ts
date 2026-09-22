@@ -438,6 +438,40 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_project_run_locks_run ON project_run_locks(run_id);
     `,
   },
+  {
+    version: 9,
+    sql: `
+      CREATE TABLE IF NOT EXISTS capability_definitions (
+        key TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        parent_key TEXT REFERENCES capability_definitions(key) ON DELETE SET NULL,
+        description TEXT NOT NULL DEFAULT '',
+        version INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','deprecated')),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK(parent_key IS NULL OR parent_key <> key)
+      );
+      CREATE TABLE IF NOT EXISTS agent_capabilities (
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        capability_key TEXT NOT NULL REFERENCES capability_definitions(key) ON DELETE CASCADE,
+        declared_score REAL NOT NULL DEFAULT 0 CHECK(declared_score BETWEEN 0 AND 1),
+        verified_score REAL CHECK(verified_score IS NULL OR verified_score BETWEEN 0 AND 1),
+        confidence REAL NOT NULL DEFAULT 0 CHECK(confidence BETWEEN 0 AND 1),
+        evidence_count INTEGER NOT NULL DEFAULT 0 CHECK(evidence_count >= 0),
+        source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','seed','learned')),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(agent_id, capability_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_capability_domain ON capability_definitions(domain, status, key);
+      CREATE INDEX IF NOT EXISTS idx_capability_parent ON capability_definitions(parent_key);
+      CREATE INDEX IF NOT EXISTS idx_agent_capability_key ON agent_capabilities(capability_key, enabled, agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_capability_agent ON agent_capabilities(agent_id, enabled);
+    `,
+  },
 ];
 
 function assertMigrationPlan(): void {
