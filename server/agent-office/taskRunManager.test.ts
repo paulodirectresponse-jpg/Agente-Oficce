@@ -117,7 +117,8 @@ describe('TaskRunManager', () => {
 
     database2.connection.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
-  
+  });
+
   it('enforces one active writer per project across independent manager instances', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-lock-'));
     const projectDir = fs.mkdtempSync(path.join(dataDir, 'proj-'));
