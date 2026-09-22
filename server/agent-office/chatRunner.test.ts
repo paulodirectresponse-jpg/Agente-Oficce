@@ -59,7 +59,7 @@ function sse(chunks: Array<Record<string, unknown>>): Response {
 
 function addProviderModelAgent(
   f: ReturnType<typeof fixture>,
-  input: { providerId: string; agentId: string; role: string; sort: number; streaming?: boolean },
+  input: { providerId: string; agentId: string; role: string; sort: number; streaming?: boolean; tools?: boolean },
 ) {
   if (!f.providers.get(input.providerId)) {
     f.providers.create({
