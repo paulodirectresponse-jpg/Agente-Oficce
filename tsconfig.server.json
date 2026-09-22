@@ -6,16 +6,15 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"],
-      "@server/*": ["server/*"]
-    }
+    "rootDir": "server",
+    "outDir": "dist/server",
+    "sourceMap": false,
+    "declaration": false,
+    "noEmit": false
   },
-  "include": ["server", "vite.config.ts"]
+  "include": ["server/**/*.ts"]
 }

@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AgentId, Project } from './types.js';
 import { WorkspaceView } from './WorkspaceView.js';
 import { TasksView } from './TasksView.js';
 import { UsageView } from './UsageView.js';
 import { SettingsView } from './SettingsView.js';
 import { OfficeView } from './OfficeView.js';
+import { api } from './api.js';
 import './App.css';
 
 type ViewKey = 'workspace' | 'tasks' | 'usage' | 'settings' | 'office';
+type RuntimeState = 'checking' | 'online' | 'offline';
 
 const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: 'workspace', label: 'Workspace' },
@@ -21,11 +23,38 @@ export function AgentOfficeApp() {
   const [view, setView] = useState<ViewKey>('workspace');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [manualAgent, setManualAgent] = useState<AgentId | null>(null);
+  const [runtimeState, setRuntimeState] = useState<RuntimeState>('checking');
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+
+    const check = () => {
+      api.health()
+        .then(() => {
+          if (active) setRuntimeState('online');
+        })
+        .catch(() => {
+          if (active) setRuntimeState('offline');
+        });
+    };
+
+    check();
+    timer = window.setInterval(check, 5000);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
         <div className="app-brand">Agent Office</div>
+        <div className={`runtime-status ${runtimeState}`}>
+          <span className="runtime-dot" />
+          {runtimeState === 'online' ? 'Runtime local online' : runtimeState === 'offline' ? 'Runtime local offline' : 'Iniciando runtime…'}
+        </div>
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
@@ -38,6 +67,11 @@ export function AgentOfficeApp() {
         ))}
       </aside>
       <main className="app-main">
+        {runtimeState === 'offline' && (
+          <div className="runtime-banner">
+            O backend local não respondeu. A interface continua disponível; recursos de dados ficarão ativos assim que o runtime iniciar.
+          </div>
+        )}
         {view === 'workspace' && (
           <WorkspaceView activeProject={activeProject} onSelectProject={setActiveProject} />
         )}

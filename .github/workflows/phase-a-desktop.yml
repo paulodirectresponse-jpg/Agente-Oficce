@@ -1,0 +1,182 @@
+name: Phase A Desktop Gate
+
+on:
+  push:
+    branches:
+      - feat/experience-v2-universal-api
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  windows-desktop:
+    runs-on: windows-2022
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build client and server
+        run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Tauri desktop build
+        run: npm run tauri:build
+
+      - name: Smoke bundled backend runtime directly
+        shell: pwsh
+        run: |
+          $runtime = Resolve-Path "src-tauri/resources/runtime/node-runtime.exe"
+          $server = Resolve-Path "src-tauri/resources/runtime/server/index.js"
+          $data = Join-Path $env:RUNNER_TEMP "agent-office-runtime-smoke"
+          New-Item -ItemType Directory -Path $data -Force | Out-Null
+
+          $env:AGENT_OFFICE_DESKTOP = "1"
+          $env:AGENT_OFFICE_DATA_DIR = $data
+          $env:HOST = "127.0.0.1"
+          $env:PORT = "39001"
+
+          $stdout = Join-Path $data "stdout.log"
+          $stderr = Join-Path $data "stderr.log"
+          $backend = Start-Process -FilePath $runtime -ArgumentList @($server) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          $healthy = $false
+          for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Milliseconds 500
+            try {
+              $response = Invoke-RestMethod "http://127.0.0.1:39001/api/agent-office/health" -TimeoutSec 2
+              if ($response.ok -eq $true) {
+                $healthy = $true
+                break
+              }
+            } catch {}
+          }
+
+          if (-not $healthy) {
+            Write-Host "--- stdout ---"
+            if (Test-Path $stdout) { Get-Content $stdout }
+            Write-Host "--- stderr ---"
+            if (Test-Path $stderr) { Get-Content $stderr }
+            Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue
+            throw "Bundled backend runtime failed direct health smoke"
+          }
+
+          Write-Host "Bundled backend direct health smoke passed (PID $($backend.Id))"
+          Stop-Process -Id $backend.Id -Force
+
+      - name: Smoke installed desktop runtime lifecycle
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "MSI was not generated" }
+
+          $install = Start-Process msiexec.exe -ArgumentList @(
+            "/i", "`"$($msi.FullName)`"", "/qn", "/norestart"
+          ) -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "MSI installation failed with code $($install.ExitCode)"
+          }
+
+          $roots = @(
+            "$env:ProgramFiles",
+            "$env:LOCALAPPDATA"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          $exe = $null
+          foreach ($root in $roots) {
+            $exe = Get-ChildItem -Path $root -Filter "agent-office.exe" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if ($exe) { break }
+          }
+
+          if (-not $exe) {
+            throw "Installed Agent Office executable was not found"
+          }
+
+          Write-Host "Installed executable: $($exe.FullName)"
+          $app = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 10
+
+          $app.Refresh()
+          if ($app.HasExited) {
+            throw "Installed Agent Office exited during startup (code $($app.ExitCode))"
+          }
+
+          $backend = Get-CimInstance Win32_Process |
+            Where-Object { $_.Name -ieq "node-runtime.exe" } |
+            Sort-Object CreationDate -Descending |
+            Select-Object -First 1
+
+          if (-not $backend) {
+            Write-Host "--- Agent Office children ---"
+            Get-CimInstance Win32_Process |
+              Where-Object { $_.ParentProcessId -eq $app.Id } |
+              Format-Table ProcessId, ParentProcessId, Name, CommandLine
+
+            Write-Host "--- Installed files ---"
+            Get-ChildItem "C:\\Program Files\\Agent Office" -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+              Select-Object FullName, Length |
+              Format-Table -AutoSize
+
+            Write-Host "--- backend.log ---"
+            Get-ChildItem "$env:APPDATA" -Filter "backend.log" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+              ForEach-Object {
+                Write-Host $_.FullName
+                Get-Content $_.FullName
+              }
+
+            throw "Bundled backend process did not start after MSI installation"
+          }
+
+          $db = Get-ChildItem -Path "$env:APPDATA" -Filter "agent-office.sqlite" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $db) {
+            throw "Frontend/backend health handshake did not initialize SQLite"
+          }
+
+          Write-Host "Desktop process: $($app.Id); backend process: $($backend.ProcessId)"
+          Write-Host "SQLite: $($db.FullName)"
+
+          $closed = $app.CloseMainWindow()
+          if (-not $closed) {
+            throw "Could not request graceful desktop shutdown"
+          }
+          if (-not $app.WaitForExit(10000)) {
+            throw "Desktop app did not exit after close request"
+          }
+
+          Start-Sleep -Seconds 2
+          if (Get-Process -Id $backend.ProcessId -ErrorAction SilentlyContinue) {
+            throw "Bundled backend remained orphaned after desktop exit"
+          }
+
+      - name: Verify MSI exists
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "MSI was not generated" }
+          if ($msi.Length -le 0) { throw "MSI is empty" }
+          Write-Host "MSI: $($msi.FullName) ($($msi.Length) bytes)"
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-office-phase-a-msi
+          path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error

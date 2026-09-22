@@ -10,6 +10,7 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
+    "desktop:prepare-runtime": "node scripts/prepare-desktop-runtime.mjs",
     "preview": "npm run build && node dist/server/index.js",
     "lint": "tsc --noEmit",
     "test": "vitest run",
