@@ -233,11 +233,18 @@ export interface AnalyticsSnapshot {
     steps:number; completed_steps:number; failed_steps:number; blocked_steps:number; step_success_rate:number|null;
     attempts:number; retry_attempts:number; retry_rate:number|null; timed_out:number; budget_exceeded:number; replans:number;
     average_attempt_duration_ms:number|null; tool_calls:number; tool_failures:number; approvals:number; approvals_pending:number; approvals_denied:number;
+    workforces: {
+      total:number; completed:number; failed:number; cancelled:number; active:number;
+      average_duration_ms:number|null; average_resources:number;
+      resource_kinds:{agent:number;subagent:number;team:number};
+    };
   };
   orchestrator: {
     total:number; routed:number; failed:number; success_rate:number|null;
     levels:{deterministic:number;fast:number;deep:number;fallback:number};
-    fallback_events:number; fallback_rate:number|null; input_tokens:number; output_tokens:number; average_duration_ms:number|null;
+    fallback_events:number; fallback_runs:number; fallback_rate:number|null;
+    execution_outcome:{linked:number;completed:number;failed:number;cancelled:number;running:number;success_rate:number|null};
+    input_tokens:number; output_tokens:number; average_duration_ms:number|null;
   };
   providers: AnalyticsProvider[];
   tools: AnalyticsTool[];
