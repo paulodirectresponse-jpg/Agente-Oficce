@@ -23,6 +23,7 @@ import {
   toolRegistry,
 } from '../agent-office/toolRegistry.js';
 import { getFullAccessToolHealth } from '../agent-office/fullAccessTools.js';
+import { ProviderFallbackRepository, ProviderResilienceManager } from '../agent-office/providerResilience.js';
 
 export const v2DataRouter = Router();
 
@@ -264,6 +265,65 @@ v2DataRouter.post('/providers/:providerId/discover-models', async (request, resp
     response.json({ ok: true, data: models });
   } catch (error) {
     const code = codeOf(error, 'MODEL_DISCOVERY_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+
+v2DataRouter.get('/providers/:providerId/runtime', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const provider = new ProviderRepositoryV2(database.connection).get(request.params.providerId);
+    if (!provider) {
+      response.status(404).json({ ok: false, error: { code: 'PROVIDER_NOT_FOUND', message: 'Provider not found.' } });
+      return;
+    }
+    const manager = new ProviderResilienceManager(database.connection);
+    response.json({
+      ok: true,
+      data: {
+        runtime: manager.snapshot(provider),
+        models: manager.modelStates(provider.id),
+      },
+    });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.get('/providers/:providerId/fallbacks', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    response.json({ ok: true, data: new ProviderFallbackRepository(database.connection).listAll(request.params.providerId) });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.put('/providers/:providerId/fallbacks', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const provider = new ProviderRepositoryV2(database.connection).get(request.params.providerId);
+    if (!provider) {
+      response.status(404).json({ ok: false, error: { code: 'PROVIDER_NOT_FOUND', message: 'Provider not found.' } });
+      return;
+    }
+    const items = Array.isArray(request.body?.fallbacks) ? request.body.fallbacks : [];
+    const normalized = items.slice(0, 10).map((item: any) => ({
+      source_model: typeof item?.source_model === 'string' && item.source_model.trim() ? item.source_model.trim() : null,
+      target_provider_id: String(item?.target_provider_id || '').trim(),
+      target_model: typeof item?.target_model === 'string' && item.target_model.trim() ? item.target_model.trim() : null,
+    })).filter((item: any) => item.target_provider_id);
+    for (const item of normalized) {
+      const target = new ProviderRepositoryV2(database.connection).get(item.target_provider_id);
+      if (!target) throw new Error('FALLBACK_PROVIDER_NOT_FOUND');
+    }
+    const data = new ProviderFallbackRepository(database.connection).replace(provider.id, normalized);
+    response.json({ ok: true, data });
+  } catch (error) {
+    const code = codeOf(error, 'PROVIDER_FALLBACK_SAVE_FAILED');
     response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
   } finally {
     database.connection.close();
