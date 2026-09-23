@@ -67,7 +67,7 @@ v3OrchestratorRouter.get('/runs', (req,res) => {
   const db=openAgentOfficeDatabase();
   try {
     const limit=Math.max(1,Math.min(250,Number(req.query.limit)||100));
-    const rows=db.connection.prepare('SELECT * FROM orchestration_runs ORDER BY created_at DESC LIMIT ?').all(limit) as any[];
+    const rows=db.connection.prepare(`SELECT o.*,p.name provider_name,m.model_id effective_model_id,m.display_name model_name FROM orchestration_runs o LEFT JOIN providers p ON p.id=o.provider_id LEFT JOIN provider_models m ON m.id=o.model_id ORDER BY o.created_at DESC LIMIT ?`).all(limit) as any[];
     res.json({ok:true,data:rows.map(parseRun)});
   } finally { db.connection.close(); }
 });
@@ -75,7 +75,7 @@ v3OrchestratorRouter.get('/runs', (req,res) => {
 v3OrchestratorRouter.get('/runs/:projectId', (req,res) => {
   const db=openAgentOfficeDatabase();
   try {
-    const rows=db.connection.prepare('SELECT * FROM orchestration_runs WHERE project_id=? ORDER BY created_at DESC LIMIT 100').all(req.params.projectId) as any[];
+    const rows=db.connection.prepare(`SELECT o.*,p.name provider_name,m.model_id effective_model_id,m.display_name model_name FROM orchestration_runs o LEFT JOIN providers p ON p.id=o.provider_id LEFT JOIN provider_models m ON m.id=o.model_id WHERE o.project_id=? ORDER BY o.created_at DESC LIMIT 100`).all(req.params.projectId) as any[];
     res.json({ok:true,data:rows.map(parseRun)});
   } finally { db.connection.close(); }
 });
