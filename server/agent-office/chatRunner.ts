@@ -1113,16 +1113,9 @@ export class ChatRunnerService {
     const { rootRun, childRun, binding, stage, previousText, isFinal, signal } = input;
     if (signal?.aborted) throw new ChatRunCancelledError();
     const state = stateForStage(stage);
-    this.states.upsert({
-      agent_id: binding.agent.id,
-      project_id: rootRun.project_id,
-      run_id: rootRun.id,
-      state: 'thinking',
-      activity: 'Preparando contexto',
-      progress: 0.05,
-    });
-    this.emit(rootRun, 'agent.state', `${binding.agent.name} está pensando`, {
-      agent_id: binding.agent.id,
+    this.setWorkerState(binding, rootRun.project_id, rootRun.id, 'thinking', 'Preparando contexto', 0.05);
+    this.emit(rootRun, 'worker.state', `${binding.agent.name} está pensando`, {
+      ...this.workerPayload(binding),
       state: 'thinking',
       activity: 'Preparando contexto',
       stage,
@@ -1144,25 +1137,25 @@ export class ChatRunnerService {
       max_output_tokens: binding.model.max_output_tokens ?? undefined,
       metadata: {
         run_id: childRun.id,
-        agent_id: binding.agent.id,
+        ...this.workerPayload(binding),
         tools_enabled: toolsEnabled,
       },
     };
 
-    this.states.upsert({
-      agent_id: binding.agent.id,
-      project_id: rootRun.project_id,
-      run_id: rootRun.id,
+    this.setWorkerState(
+      binding,
+      rootRun.project_id,
+      rootRun.id,
       state,
-      activity: stage === 'reviewer' ? 'Revisando resposta' : stage === 'planner' ? 'Planejando resposta' : 'Respondendo',
-      progress: 0.2,
-    });
-    this.emit(rootRun, 'agent.state', stage === 'reviewer'
+      stage === 'reviewer' ? 'Revisando resposta' : stage === 'planner' ? 'Planejando resposta' : 'Respondendo',
+      0.2,
+    );
+    this.emit(rootRun, 'worker.state', stage === 'reviewer'
       ? `${binding.agent.name} está revisando`
       : stage === 'planner'
         ? `${binding.agent.name} está planejando`
         : `${binding.agent.name} está respondendo`, {
-      agent_id: binding.agent.id,
+      ...this.workerPayload(binding),
       state,
       stage,
       provider_id: binding.provider.id,
@@ -1227,7 +1220,7 @@ export class ChatRunnerService {
       } catch (error) {
         if (deltaCount > 0) throw error;
         this.emit(rootRun, 'response.streaming_fallback', `${binding.agent.name}: fallback sem streaming`, {
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           stage,
           reason: error instanceof Error ? error.message : 'stream_failed',
         }, 'warning');
@@ -1256,7 +1249,7 @@ export class ChatRunnerService {
       effectiveModel = result.model_id ?? effectiveModel;
       if (text) {
         this.hub.publish(rootRun.id, 'response.delta', {
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           child_run_id: childRun.id,
           stage,
           text,
@@ -1269,10 +1262,11 @@ export class ChatRunnerService {
     const assistantMessage = this.messages.create({
       conversation_id: rootRun.conversation_id,
       role: 'assistant',
-      agent_id: binding.agent.id,
+      agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
       content: text,
       metadata: {
         source: 'chat_v2',
+        ...this.workerPayload(binding),
         root_run_id: rootRun.id,
         child_run_id: childRun.id,
         stage,
@@ -1296,6 +1290,7 @@ export class ChatRunnerService {
       output_tokens: usage?.output_tokens ?? null,
       metadata: {
         ...childRun.metadata,
+        ...this.workerPayload(binding),
         message_id: assistantMessage.id,
         finish_reason: finishReason ?? null,
         duration_ms: duration,
@@ -1308,17 +1303,18 @@ export class ChatRunnerService {
 
     const effectivePricingModel = this.providers.listModels(effectiveProvider, true)
       .find((candidate) => candidate.model_id === effectiveModel) ?? binding.model;
-    this.usage.recordRunUsage(binding.agent.id, effectiveProvider, {
-      input_tokens: usage?.input_tokens,
-      output_tokens: usage?.output_tokens,
-      cost_usd: estimateCostUsd(effectivePricingModel, usage),
-      request_count: requestCount,
-      duration_ms: duration,
-    });
+    this.recordWorkerUsage(
+      binding,
+      effectiveProvider,
+      usage,
+      estimateCostUsd(effectivePricingModel, usage),
+      requestCount,
+      duration,
+    );
 
     if (usage) {
       this.emit(rootRun, 'usage.updated', `Uso atualizado: ${binding.agent.name}`, {
-        agent_id: binding.agent.id,
+        ...this.workerPayload(binding),
         provider_id: binding.provider.id,
         model_id: binding.model.id,
         usage,
@@ -1329,7 +1325,7 @@ export class ChatRunnerService {
     }
 
     this.emit(rootRun, 'response.completed', `${binding.agent.name} concluiu a resposta`, {
-      agent_id: binding.agent.id,
+      ...this.workerPayload(binding),
       child_run_id: childRun.id,
       message_id: assistantMessage.id,
       stage,
