@@ -142,8 +142,11 @@ describe('Block 2 provider resilience', () => {
       expect(result.text).toBe('fallback ok');
       expect(calls.some(url => url.includes('primary.example'))).toBe(true);
       expect(calls.some(url => url.includes('secondary.example'))).toBe(true);
-      expect(new ProviderResilienceManager(f.database.connection).snapshot(f.providers.get('primary-fallback')!).operational_status).toMatch(/degraded|unavailable/);
-      expect(new ProviderResilienceManager(f.database.connection).snapshot(f.providers.get('secondary-fallback')!).operational_status).toBe('healthy');
+      const manager = new ProviderResilienceManager(f.database.connection);
+      expect(manager.modelStates('primary-fallback')).toEqual(expect.arrayContaining([
+        expect.objectContaining({ model_id: 'main-model', operational_status: 'degraded' }),
+      ]));
+      expect(manager.snapshot(f.providers.get('secondary-fallback')!).operational_status).toBe('healthy');
     } finally { f.cleanup(); }
   });
 
@@ -173,4 +176,89 @@ describe('Block 2 provider resilience', () => {
       expect(new ProviderResilienceManager(f.database.connection).snapshot(f.providers.get('auth-primary')!).operational_status).toBe('auth_error');
     } finally { f.cleanup(); }
   });
+  it('automatically fails over to another enabled model on the same provider after HTTP 502', async () => {
+    const f = fixture();
+    try {
+      const provider = f.providers.create({
+        id: 'same-provider',
+        name: 'Same Provider',
+        protocol_driver: 'openai_chat',
+        base_url: 'https://same.example',
+        auth_driver: 'none',
+        protocol_config: { retry_attempts: 0 },
+      });
+      f.providers.createModel(provider.id, { model_id: 'model-a', display_name: 'Model A', enabled: true, is_default: true });
+      f.providers.createModel(provider.id, { model_id: 'model-b', display_name: 'Model B', enabled: true, is_default: false });
+
+      const seenModels: string[] = [];
+      const fetchImpl: typeof fetch = async (_input, init) => {
+        const body = JSON.parse(String(init?.body || '{}')) as { model?: string };
+        seenModels.push(String(body.model || ''));
+        if (body.model === 'model-a') {
+          return new Response(JSON.stringify({ error: { message: 'service_unavailable' } }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: 'recovered on model-b' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 3, completion_tokens: 4 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      };
+
+      const engine = new UniversalProviderEngine(f.database.connection, new EmptySecrets(), fetchImpl);
+      const result = await engine.complete(provider.id, {
+        model: 'model-a',
+        messages: [{ role: 'user', content: 'hello' }],
+      });
+
+      expect(result.text).toBe('recovered on model-b');
+      expect(result.model_id).toBe('model-b');
+      expect(seenModels).toEqual(['model-a', 'model-b']);
+
+      const manager = new ProviderResilienceManager(f.database.connection);
+      expect(manager.modelStates(provider.id)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ model_id: 'model-a', operational_status: 'degraded' }),
+        expect.objectContaining({ model_id: 'model-b', operational_status: 'healthy' }),
+      ]));
+      expect(manager.snapshot(provider).operational_status).toBe('healthy');
+    } finally { f.cleanup(); }
+  });
+
+  it('does not switch models inside the same provider on authentication errors', async () => {
+    const f = fixture();
+    try {
+      const provider = f.providers.create({
+        id: 'same-provider-auth',
+        name: 'Same Provider Auth',
+        protocol_driver: 'openai_chat',
+        base_url: 'https://same-auth.example',
+        auth_driver: 'none',
+        protocol_config: { retry_attempts: 0 },
+      });
+      f.providers.createModel(provider.id, { model_id: 'model-a', enabled: true, is_default: true });
+      f.providers.createModel(provider.id, { model_id: 'model-b', enabled: true, is_default: false });
+
+      const seenModels: string[] = [];
+      const fetchImpl: typeof fetch = async (_input, init) => {
+        const body = JSON.parse(String(init?.body || '{}')) as { model?: string };
+        seenModels.push(String(body.model || ''));
+        return new Response(JSON.stringify({ error: { message: 'bad auth' } }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      };
+
+      const engine = new UniversalProviderEngine(f.database.connection, new EmptySecrets(), fetchImpl);
+      await expect(engine.complete(provider.id, {
+        model: 'model-a',
+        messages: [{ role: 'user', content: 'hello' }],
+      })).rejects.toMatchObject({ status: 401 });
+
+      expect(seenModels).toEqual(['model-a']);
+      expect(new ProviderResilienceManager(f.database.connection).snapshot(provider).operational_status).toBe('auth_error');
+    } finally { f.cleanup(); }
+  });
+
+
 });
