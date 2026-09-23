@@ -22,9 +22,8 @@
   {
     "id": "routing-security",
     "message": "Revise a segurança e autenticação deste fluxo.",
-    "expected_mode": "direct_agent",
-    "expected_agent": "security-agent",
-    "max_workers": 1,
+    "expected_mode": "dynamic_team",
+    "max_workers": 2,
     "required_capabilities": [
       "software.testing",
       "security"
