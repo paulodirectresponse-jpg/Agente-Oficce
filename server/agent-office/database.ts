@@ -805,7 +805,8 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         updated_at TEXT NOT NULL,
         PRIMARY KEY(provider_id, model_id)
       );
-    `,  },
+    `,
+  },
   {
     version: 15,
     sql: `
@@ -823,6 +824,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_orchestration_events_project ON orchestration_events(project_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_orchestration_events_run ON orchestration_events(orchestration_run_id,created_at ASC);
     `,
+  },
 ];
 
 function assertMigrationPlan(): void {
