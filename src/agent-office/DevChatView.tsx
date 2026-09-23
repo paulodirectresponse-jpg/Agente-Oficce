@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentProfile, ChatRun, ChatRunReceipt, ChatStreamEnvelope, Conversation, Project, Team, ToolApproval, WorkspaceSnapshot } from './types.js';
+import type { AgentProfile, ChatRun, ChatStreamEnvelope, Conversation, Project, Team, ToolApproval, WorkspaceSnapshot } from './types.js';
 import { api } from './api.js';
 import { Workbench } from './dev-chat/Workbench.js';
 
@@ -8,7 +8,7 @@ const EVENTS=['run.created','worker.state','agent.state','response.delta','respo
 
 function time(value:string){return new Date(value).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
 function terminal(status?:string){return status==='completed'||status==='failed'||status==='cancelled'}
-function humanError(value:unknown){const text=value instanceof Error?value.message:String(value||'Falha na execução.');return text.replace(/^CHAT_/,'').replaceAll('_',' ').toLowerCase()}
+function humanError(value:unknown){const text=value instanceof Error?value.message:String(value||'Falha na execução.');return text.replace(/^CHAT_/,'').replace(/_/g,' ').toLowerCase()}
 function workerKey(data:Record<string,unknown>){if(typeof data.subagent_id==='string')return 'subagent:'+data.subagent_id;if(typeof data.agent_id==='string')return 'agent:'+data.agent_id;return 'system'}
 
 export function DevChatView({project}:{project:Project|null}){
