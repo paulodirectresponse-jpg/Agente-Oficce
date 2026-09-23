@@ -917,6 +917,18 @@ export class ChatRunnerService {
     throw new Error('TOOL_APPROVAL_TIMEOUT');
   }
 
+  private consumeWorkspaceOrientations(runId: string): string[] {
+    const rows = this.database.prepare(
+      "SELECT id,message FROM workspace_run_commands WHERE chat_run_id=? AND command_type='orient' AND status='pending' ORDER BY created_at"
+    ).all(runId) as Array<{id:string;message:string}>;
+    if (!rows.length) return [];
+    const timestamp = new Date().toISOString();
+    const ids = rows.map((row) => row.id);
+    const placeholders = ids.map(() => '?').join(',');
+    this.database.prepare(`UPDATE workspace_run_commands SET status='applied',applied_at=? WHERE id IN (${placeholders})`).run(timestamp, ...ids);
+    return rows.map((row) => row.message);
+  }
+
   private async runToolAwareCompletion(input: {
     rootRun: ChatRun;
     childRun: ChatRun;
@@ -937,6 +949,11 @@ export class ChatRunnerService {
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
+      const orientations = this.consumeWorkspaceOrientations(rootRun.id);
+      if (orientations.length) {
+        messages.push({ role: 'system', content: 'User orientation received during execution:\n' + orientations.map((item) => '- ' + item).join('\n') });
+        this.hub.publish(rootRun.id, 'run.oriented', { messages: orientations });
+      }
       const result = await this.engine.complete(binding.provider.id, {
         model: binding.model.model_id,
         messages,
@@ -1131,6 +1148,12 @@ export class ChatRunnerService {
       previousText,
       toolsEnabled,
     );
+
+    const orientations = this.consumeWorkspaceOrientations(rootRun.id);
+    if (orientations.length) {
+      messages.push({ role: 'system', content: 'User orientation received during execution:\n' + orientations.map((item) => '- ' + item).join('\n') });
+      this.hub.publish(rootRun.id, 'run.oriented', { messages: orientations });
+    }
 
     const completionInput: UniversalCompletionInput = {
       model: binding.model.model_id,
