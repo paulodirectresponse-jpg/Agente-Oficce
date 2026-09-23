@@ -6,6 +6,7 @@ import { Workbench } from './dev-chat/Workbench.js';
 import { V2Drawer, V2EmptyState, V2Status, V2Tabs } from './shell/V2Primitives.js';
 import { MessageContent } from './conversation/MessageContent.js';
 import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
+import { VoiceInputButton } from './conversation/VoiceInputButton.js';
 
 type ActiveAction='orient'|'enqueue'|'interrupt';
 type WorkMode='conversation'|'sala';
@@ -262,7 +263,7 @@ export function TrabalhoView({project}:{project:Project|null}){
               <textarea value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={isRunning?'Dê uma orientação ou peça outra coisa…':'Peça algo ao Agent Office…'} rows={3}/>
               <div className="work-v2-composer-footer">
                 <span>{isRunning?'A execução continua enquanto você conversa.':'Pronto para iniciar.'}</span>
-                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);addPendingFiles(next);e.currentTarget.value=''}}/></label><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
+                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);addPendingFiles(next);e.currentTarget.value=''}}/></label><VoiceInputButton disabled={sending} onTranscript={text=>setMessage(current=>current.trim()?current.trimEnd()+' '+text:text)}/><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
               </div>
               {error&&<div className="work-v2-error" role="alert">{error}</div>}
             </form>
