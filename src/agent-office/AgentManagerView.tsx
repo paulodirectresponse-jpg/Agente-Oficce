@@ -68,10 +68,10 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [toolDefinitions, setToolDefinitions] = useState<ToolDefinitionV2[]>([]);
   const [toolPolicy, setToolPolicy] = useState<Omit<AgentToolPolicy, 'agent_id' | 'updated_at'>>({
-    enabled: false,
+    enabled: true,
     allowed_tools: [],
-    approval_mode: 'safe',
-    max_tool_steps: 12,
+    approval_mode: 'auto',
+    max_tool_steps: 200,
   });
   const [subagentIds, setSubagentIds] = useState<string[]>([]);
   const [participatingTeams, setParticipatingTeams] = useState<Team[]>([]);
@@ -138,7 +138,13 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
         setParticipatingTeams(teams);
       })
       .catch(() => {
-        setToolPolicy((current) => ({ ...current, enabled: false }));
+        setToolPolicy((current) => ({
+          ...current,
+          enabled: true,
+          allowed_tools: toolDefinitions.map((tool) => tool.name),
+          approval_mode: 'auto',
+          max_tool_steps: 200,
+        }));
         setSubagentIds([]);
         setParticipatingTeams([]);
       });
@@ -178,10 +184,10 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     });
     setShowAdvanced(false);
     setToolPolicy({
-      enabled: false,
-      allowed_tools: toolDefinitions.filter((tool) => tool.default_enabled).map((tool) => tool.name),
-      approval_mode: 'safe',
-      max_tool_steps: 12,
+      enabled: true,
+      allowed_tools: toolDefinitions.map((tool) => tool.name),
+      approval_mode: 'auto',
+      max_tool_steps: 200,
     });
     setSubagentIds([]);
     setNotice(null);
@@ -467,86 +473,28 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               </span>
             </label>
 
-            <div className="agent-tool-card">
+            <div className="agent-tool-card full-access-card">
               <div className="binding-title">
                 <div>
-                  <strong>Ferramentas do agente</strong>
-                  <span>Quando ativadas, o agente pode agir dentro da pasta do projeto.</span>
+                  <strong>Full Access</strong>
+                  <span>Este agente recebe automaticamente todas as ferramentas disponíveis no Runtime do Agent Office.</span>
                 </div>
-                <label className="compact-switch">
-                  <input
-                    type="checkbox"
-                    checked={toolPolicy.enabled}
-                    onChange={(event) => setToolPolicy((current) => ({ ...current, enabled: event.target.checked }))}
-                  />
-                  <span>{toolPolicy.enabled ? 'Ativas' : 'Desligadas'}</span>
-                </label>
+                <span className="full-access-badge">Sempre ativo</span>
               </div>
 
-              {toolPolicy.enabled && (
-                <>
-                  <div className="tool-chip-grid">
-                    {toolDefinitions.map((tool) => {
-                      const checked = toolPolicy.allowed_tools.includes(tool.name);
-                      return (
-                        <label key={tool.name} className={`tool-chip risk-${tool.risk} ${checked ? 'selected' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(event) => {
-                              setToolPolicy((current) => ({
-                                ...current,
-                                allowed_tools: event.target.checked
-                                  ? [...new Set([...current.allowed_tools, tool.name])]
-                                  : current.allowed_tools.filter((name) => name !== tool.name),
-                              }));
-                            }}
-                          />
-                          <span>
-                            <strong>{tool.name}</strong>
-                            <small>{tool.risk}</small>
-                          </span>
-                        </label>
-                      );
-                    })}
+              <div className="tool-chip-grid">
+                {toolDefinitions.map((tool) => (
+                  <div key={tool.name} className={`tool-chip risk-${tool.risk} selected locked`}>
+                    <span>
+                      <strong>{tool.name}</strong>
+                      <small>{tool.risk}</small>
+                    </span>
                   </div>
-                  <p className="tool-safety-note">
-                    O modo seguro mantém operações destrutivas bloqueadas e exige aprovação para comandos mais sensíveis.
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="agent-advanced-field agent-tool-advanced">
-              <div className="manager-form-grid">
-                <div className="manager-field">
-                  <label>Política de aprovação</label>
-                  <select
-                    value={toolPolicy.approval_mode}
-                    onChange={(event) => setToolPolicy((current) => ({
-                      ...current,
-                      approval_mode: event.target.value as 'safe' | 'manual' | 'auto',
-                    }))}
-                  >
-                    <option value="safe">Seguro · comandos sensíveis pedem aprovação</option>
-                    <option value="manual">Manual · escrita/execução pedem aprovação</option>
-                    <option value="auto">Automático · tudo permitido pela lista executa</option>
-                  </select>
-                </div>
-                <div className="manager-field">
-                  <label>Máximo de passos com ferramentas</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={toolPolicy.max_tool_steps}
-                    onChange={(event) => setToolPolicy((current) => ({
-                      ...current,
-                      max_tool_steps: Math.max(1, Math.min(40, Number(event.target.value) || 12)),
-                    }))}
-                  />
-                </div>
+                ))}
               </div>
+              <p className="tool-safety-note">
+                Arquivos, PowerShell, Git, GitHub, navegador, Computer Use, processos e deploy ficam disponíveis quando o recurso correspondente existe no computador. Todas as ações continuam auditadas.
+              </p>
             </div>
 
             <div className="agent-advanced-field agent-hierarchy-card">

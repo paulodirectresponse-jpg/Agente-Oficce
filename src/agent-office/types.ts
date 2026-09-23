@@ -338,3 +338,11 @@ export interface TeamVersion {
   snapshot: Record<string, unknown>;
   created_at: string;
 }
+
+
+export interface RuntimeToolHealth {
+  id: string;
+  label: string;
+  status: 'healthy' | 'degraded' | 'unavailable' | 'unconfigured' | string;
+  detail: string;
+}

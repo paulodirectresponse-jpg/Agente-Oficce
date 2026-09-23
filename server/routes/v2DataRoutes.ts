@@ -22,6 +22,7 @@ import {
   AgentToolPolicyRepository,
   toolRegistry,
 } from '../agent-office/toolRegistry.js';
+import { getFullAccessToolHealth } from '../agent-office/fullAccessTools.js';
 
 export const v2DataRouter = Router();
 
@@ -548,6 +549,30 @@ v2DataRouter.put('/projects/:projectId/agents/:agentId/state', (request, respons
 // Phase H — permissioned tools and future agent hierarchy.
 v2DataRouter.get('/tools/definitions', (_request, response) => {
   response.json({ ok: true, data: toolRegistry.listDefinitions() });
+});
+
+v2DataRouter.get('/tools/health', async (request, response) => {
+  try {
+    const projectRoot = typeof request.query.project_root === 'string' && request.query.project_root.trim()
+      ? request.query.project_root.trim()
+      : process.cwd();
+    response.json({ ok: true, data: await getFullAccessToolHealth(projectRoot) });
+  } catch (error) {
+    const code = codeOf(error, 'TOOL_HEALTH_FAILED');
+    response.status(500).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  }
+});
+
+v2DataRouter.post('/tools/health/test', async (request, response) => {
+  try {
+    const projectRoot = typeof request.body?.project_root === 'string' && request.body.project_root.trim()
+      ? request.body.project_root.trim()
+      : process.cwd();
+    response.json({ ok: true, data: await getFullAccessToolHealth(projectRoot, true) });
+  } catch (error) {
+    const code = codeOf(error, 'TOOL_HEALTH_FAILED');
+    response.status(500).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  }
 });
 
 v2DataRouter.get('/agents/:agentId/tool-policy', (request, response) => {

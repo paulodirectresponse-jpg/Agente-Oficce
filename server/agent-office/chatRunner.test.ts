@@ -59,7 +59,7 @@ function sse(chunks: Array<Record<string, unknown>>): Response {
 
 function addProviderModelAgent(
   f: ReturnType<typeof fixture>,
-  input: { providerId: string; agentId: string; role: string; sort: number; streaming?: boolean },
+  input: { providerId: string; agentId: string; role: string; sort: number; streaming?: boolean; tools?: boolean },
 ) {
   if (!f.providers.get(input.providerId)) {
     f.providers.create({
@@ -75,7 +75,7 @@ function addProviderModelAgent(
     model = f.providers.createModel(input.providerId, {
       model_id: 'model',
       display_name: 'Model',
-      capabilities: { text: true, streaming: input.streaming !== false },
+      capabilities: { text: true, streaming: input.streaming !== false, tools: input.tools === true },
       is_default: true,
     });
   }
@@ -335,6 +335,7 @@ describe('ChatRunnerService', () => {
       agentId: 'builder-tools',
       role: 'Backend Engineer',
       sort: 1,
+      tools: true,
     });
     new AgentToolPolicyRepository(f.database.connection).save({
       agent_id: agent.id,

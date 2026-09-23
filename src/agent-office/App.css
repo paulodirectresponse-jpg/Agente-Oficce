@@ -3552,3 +3552,108 @@ textarea {
   opacity: 0.45;
   cursor: default;
 }
+
+
+.runtime-status-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.runtime-status-header h3 {
+  margin-bottom: 6px;
+}
+
+.runtime-health-summary {
+  min-width: 96px;
+  border: 1px solid #263246;
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+  background: #0a0f16;
+}
+
+.runtime-health-summary strong {
+  display: block;
+  font-size: 20px;
+}
+
+.runtime-health-summary span {
+  color: #7c8a9e;
+  font-size: 11px;
+}
+
+.runtime-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 14px 0 18px;
+}
+
+.runtime-tool-card {
+  border: 1px solid #263246;
+  border-radius: 9px;
+  padding: 12px;
+  background: #0a0f16;
+}
+
+.runtime-tool-card > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.runtime-tool-card small {
+  display: block;
+  margin-top: 7px;
+  color: #7c8a9e;
+  line-height: 1.35;
+}
+
+.runtime-tool-status {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #9aa8bb;
+}
+
+.runtime-tool-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #64748b;
+}
+
+.runtime-tool-card.status-healthy .runtime-tool-dot { background: #22c55e; }
+.runtime-tool-card.status-degraded .runtime-tool-dot { background: #f59e0b; }
+.runtime-tool-card.status-unavailable .runtime-tool-dot { background: #ef4444; }
+.runtime-tool-card.status-unconfigured .runtime-tool-dot { background: #64748b; }
+
+.full-access-card {
+  border-color: #22543d;
+  background: linear-gradient(180deg, rgba(34,197,94,.06), rgba(14,20,29,1));
+}
+
+.full-access-badge {
+  border: 1px solid #2f855a;
+  color: #86efac;
+  background: rgba(34,197,94,.08);
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tool-chip.locked {
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .runtime-status-header {
+    flex-direction: column;
+  }
+}

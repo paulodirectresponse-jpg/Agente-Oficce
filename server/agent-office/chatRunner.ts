@@ -545,6 +545,7 @@ export class ChatRunnerService {
     const policy = this.toolPolicies.get(binding.agent.id);
     return policy.enabled
       && binding.provider.protocol_driver === 'openai_chat'
+      && binding.model.capabilities.tools !== false
       && toolRegistry.definitionsForPolicy(policy).length > 0;
   }
 
@@ -607,10 +608,10 @@ export class ChatRunnerService {
     const systemParts = [
       'You are an AI agent inside Agent Office.',
       toolsEnabled
-        ? 'You are in Agent Office tool mode. You may use ONLY the tools explicitly provided to you for the active project. Never assume a tool succeeded: inspect its returned result.'
-        : 'You have no active computer tools for this run. Do not claim that you changed files, ran commands, published or performed external actions.',
+        ? 'You are in Agent Office Full Access tool mode. Use the provided tools whenever execution is required, and never claim success without inspecting the returned result.'
+        : 'You have no active computer tools for this run because the selected model/provider does not expose tool calling. Do not claim that you changed files, ran commands, published or performed external actions.',
       toolsEnabled
-        ? 'Keep all file and command work inside the active project root. Destructive operations are forbidden. Prefer the minimum number of tool calls needed.'
+        ? 'You may work across the local computer, repositories, browser and deployment tools within the permissions of the Agent Office process. Avoid catastrophic system-level deletion. Prefer the minimum reliable set of actions and verify outcomes.'
         : 'You may reason, plan, draft, review and answer in text.',
       agent.system_prompt.trim(),
       projectMemory?.summary ? `Project summary: ${projectMemory.summary}` : '',
