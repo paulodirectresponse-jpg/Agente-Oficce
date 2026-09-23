@@ -156,6 +156,19 @@ After review:
 
 ## Verification log
 
+### 2026-09-23 — ChatGPT (review checkpoint B: native viewport room)
+
+**Completed**
+- Sala now uses the available Trabalho viewport instead of page-level growth.
+- Office scene and shared chat share a fixed-height grid; transcript scrolls internally and composer remains visible.
+- Added height-aware behavior for 768/900/1080-class desktop windows without reducing core controls to microscopic sizes.
+- Added width guardrails for denser agent layouts.
+
+**Verification**
+- Layout rules explicitly cover constrained-height and constrained-width desktop states.
+- Full CI/release gate pending the final hardening checkpoint.
+
+
 ### 2026-09-23 — ChatGPT (review checkpoint A: conversation + activity)
 
 **Completed**
