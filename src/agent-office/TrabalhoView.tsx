@@ -20,6 +20,16 @@ function stateLabel(status?:string){
   if(status==='cancelled')return'Cancelado';
   return'Pronto';
 }
+function eventLabel(event:string){
+  const labels:Record<string,string>={
+    'run.created':'Execução iniciada','worker.state':'Estado atualizado','agent.state':'Agent atualizado',
+    'response.delta':'Resposta em andamento','response.completed':'Resposta concluída','handoff.created':'Trabalho repassado',
+    'usage.updated':'Uso atualizado','tool.started':'Ação iniciada','tool.completed':'Ação concluída',
+    'tool.approval_required':'Aprovação necessária','run.oriented':'Orientação recebida',
+    'run.completed':'Execução concluída','run.failed':'Execução com problema','run.cancelled':'Execução cancelada'
+  };
+  return labels[event]??'Atividade';
+}
 
 export function TrabalhoView({project}:{project:Project|null}){
   const [snapshot,setSnapshot]=useState<WorkspaceSnapshot|null>(null);
@@ -45,6 +55,7 @@ export function TrabalhoView({project}:{project:Project|null}){
   const lastSequenceRef=useRef<Record<string,number>>({});
   const transcriptRef=useRef<HTMLDivElement|null>(null);
   const dispatchingCommandRef=useRef<string|null>(null);
+  const autoOpenedPreviewRef=useRef<string|null>(null);
 
   const activeRun=snapshot?.active_run??null;
   const latestRun=snapshot?.latest_run??null;
@@ -100,10 +111,19 @@ export function TrabalhoView({project}:{project:Project|null}){
 
   useEffect(()=>{
     sourceRef.current?.close();connectedRunRef.current=null;lastSequenceRef.current={};
-    setLiveEvents([]);setStreaming({});setSnapshot(null);setConversation(null);setRuns([]);setMode('conversation');setInspectorOpen(false);setActivityOpen(false);
+    setLiveEvents([]);setStreaming({});setSnapshot(null);setConversation(null);setRuns([]);setMode('conversation');setInspectorOpen(false);setActivityOpen(false);autoOpenedPreviewRef.current=null;
     void refresh();
     return()=>sourceRef.current?.close();
   },[project?.id,refresh]);
+
+  useEffect(()=>{
+    const preview=snapshot?.preview;
+    if(mode!=='conversation'||!preview||preview.status!=='healthy'||!preview.url)return;
+    const key=preview.id+':'+(preview.updated_at??preview.url);
+    if(autoOpenedPreviewRef.current===key)return;
+    autoOpenedPreviewRef.current=key;
+    setInspectorOpen(true);
+  },[mode,snapshot?.preview?.id,snapshot?.preview?.status,snapshot?.preview?.url,snapshot?.preview?.updated_at]);
 
   useEffect(()=>{if(activeRun?.id)void connect(activeRun.id)},[activeRun?.id,connect]);
   useEffect(()=>{if(!project)return;const timer=window.setInterval(()=>void refresh(),2500);return()=>window.clearInterval(timer)},[project?.id,refresh]);
@@ -252,7 +272,7 @@ export function TrabalhoView({project}:{project:Project|null}){
 
       <section className="work-v2-activity-section"><h3>Execuções recentes</h3><div className="work-v2-run-list">{runs.slice(0,20).map(run=><button type="button" key={run.id} className={inspectRunId===run.id?'active':''} onClick={()=>{setSelectedRunId(run.id);setInspectorOpen(true)}}><span>{run.status==='completed'?'✓':run.status==='failed'?'!':run.status==='cancelled'?'×':'●'}</span><div><strong>{stateLabel(run.status)}</strong><small>{new Date(run.started_at).toLocaleString('pt-BR')}</small></div></button>)}{!runs.length&&<span className="muted">Nenhuma execução ainda.</span>}</div></section>
 
-      {liveEvents.length>0&&<section className="work-v2-activity-section"><h3>Agora</h3><div className="work-v2-event-list">{liveEvents.slice(0,20).map(event=><div key={event.run_id+':'+event.sequence}><span>{shortTime(event.timestamp)}</span><strong>{event.event.replaceAll('.',' ')}</strong></div>)}</div></section>}
+      {liveEvents.length>0&&<section className="work-v2-activity-section"><h3>Agora</h3><div className="work-v2-event-list">{liveEvents.slice(0,20).map(event=><div key={event.run_id+':'+event.sequence}><span>{shortTime(event.timestamp)}</span><strong>{eventLabel(event.event)}</strong></div>)}</div></section>}
     </V2Drawer>
   </div>;
 }
