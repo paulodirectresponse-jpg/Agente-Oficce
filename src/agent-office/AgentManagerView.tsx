@@ -74,8 +74,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     approval_mode: 'auto',
     max_tool_steps: 200,
   });
-  const [subagentIds, setSubagentIds] = useState<string[]>([]);
-  const [participatingTeams, setParticipatingTeams] = useState<Team[]>([]);
+  const [ownedTeam, setOwnedTeam] = useState<Team | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,18 +131,16 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
     });
     void Promise.all([
       api.getAgentToolPolicyV2(selected.id),
-      api.listSubagentsV2(selected.id),
-      api.listAgentTeamsV3(selected.id),
+      api.getOwnedTeamV3(selected.id),
     ])
-      .then(([policy, relations, teams]) => {
+      .then(([policy, team]) => {
         setToolPolicy({
           enabled: policy.enabled,
           allowed_tools: policy.allowed_tools,
           approval_mode: policy.approval_mode,
           max_tool_steps: policy.max_tool_steps,
         });
-        setSubagentIds(relations.map((relation) => relation.child_agent_id));
-        setParticipatingTeams(teams);
+        setOwnedTeam(team);
       })
       .catch(() => {
         setToolPolicy((current) => ({
@@ -153,8 +150,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
           approval_mode: 'auto',
           max_tool_steps: 200,
         }));
-        setSubagentIds([]);
-        setParticipatingTeams([]);
+        setOwnedTeam(null);
       });
     setNotice(null);
     setError(null);
@@ -197,7 +193,6 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
       approval_mode: 'auto',
       max_tool_steps: 200,
     });
-    setSubagentIds([]);
     setNotice(null);
     setError(null);
   };
@@ -254,7 +249,6 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
         : await api.createAgentV2(payload);
 
       await api.saveAgentToolPolicyV2(saved.id, toolPolicy);
-      await api.saveSubagentsV2(saved.id, subagentIds.filter((id) => id !== saved.id));
 
       setIsCreating(false);
       setSelectedId(saved.id);
@@ -262,6 +256,27 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
       setNotice('Agente salvo e disponível no escritório.');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao salvar agente.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createTeamForSelected = async () => {
+    if (!selected) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      const team = await api.createOwnedTeamV3(selected.id, {
+        name: `${selected.name} Team`,
+        slug: slugify(`${selected.slug || selected.name}-team`),
+        purpose: `Equipe permanente do agente ${selected.name}.`,
+        max_parallelism: 3,
+        max_delegation_depth: 2,
+        allow_external_borrowing: true,
+      });
+      setOwnedTeam(team);
+      setNotice('Equipe criada. Adicione os subagentes na aba Equipes.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao criar equipe.');
     } finally {
       setBusy(false);
     }
@@ -514,48 +529,39 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
               </p>
             </div>
 
-            <div className="agent-advanced-field agent-hierarchy-card">
+            <div className="agent-hierarchy-card agent-team-summary-card">
               <div className="binding-title">
                 <div>
-                  <strong>Participa de equipes</strong>
-                  <span>Membership de Team é independente da hierarquia direta de subagentes.</span>
+                  <strong>Equipe deste agente</strong>
+                  <span>Uma equipe permanente pertence ao agente principal e contém apenas seus subagentes.</span>
                 </div>
+                {ownedTeam && <span className="team-version-badge">v{ownedTeam.current_version}</span>}
               </div>
-              <div className="subagent-grid">
-                {participatingTeams.map((team) => (
-                  <span key={team.id} className="subagent-chip selected">
-                    <span>{team.name} · v{team.current_version}</span>
-                  </span>
-                ))}
-                {!participatingTeams.length && <span className="manager-empty-small">Este agente não participa de nenhuma equipe permanente.</span>}
-              </div>
-            </div>
-
-            <div className="agent-advanced-field agent-hierarchy-card">
-              <div className="binding-title">
-                <div>
-                  <strong>Equipe / subagentes</strong>
-                  <span>Fundação hierárquica: este agente pode supervisionar outros agentes no futuro.</span>
+              {ownedTeam ? (
+                <>
+                  <div className="agent-owned-team-summary">
+                    <span className="agent-manager-avatar">{selected?.name?.slice(0,1).toUpperCase() || 'A'}</span>
+                    <div>
+                      <strong>{ownedTeam.name}</strong>
+                      <small>{ownedTeam.members.length} subagentes · {ownedTeam.enabled ? 'ativa' : 'desativada'}</small>
+                    </div>
+                  </div>
+                  <div className="subagent-grid">
+                    {ownedTeam.members.map((member) => (
+                      <span key={member.agent_id} className="subagent-chip selected">
+                        <span>{agents.find((agent) => agent.id === member.agent_id)?.name ?? member.agent_id}</span>
+                      </span>
+                    ))}
+                    {!ownedTeam.members.length && <span className="manager-empty-small">Nenhum subagente. Configure a equipe na aba Equipes.</span>}
+                  </div>
+                  <p className="tool-safety-note">O owner não é duplicado como membro. Workforces temporárias podem requisitar outros agentes sem alterar esta equipe.</p>
+                </>
+              ) : (
+                <div className="agent-team-empty">
+                  <span>Este agente ainda trabalha sozinho.</span>
+                  <button type="button" className="manager-primary" onClick={() => void createTeamForSelected()} disabled={busy || !selected}>Criar equipe deste agente</button>
                 </div>
-              </div>
-              <div className="subagent-grid">
-                {agents
-                  .filter((agent) => agent.id !== selected?.id)
-                  .map((agent) => (
-                    <label key={agent.id} className={`subagent-chip ${subagentIds.includes(agent.id) ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={subagentIds.includes(agent.id)}
-                        onChange={(event) => {
-                          setSubagentIds((current) => event.target.checked
-                            ? [...new Set([...current, agent.id])]
-                            : current.filter((id) => id !== agent.id));
-                        }}
-                      />
-                      <span>{agent.name}</span>
-                    </label>
-                  ))}
-              </div>
+              )}
             </div>
 
             <button type="button" className="manager-advanced-toggle" onClick={() => setShowAdvanced((value) => !value)}>
