@@ -360,7 +360,6 @@ v2DataRouter.post('/providers/:providerId/models', (request, response) => {
       enabled: body.enabled !== false,
       is_default: body.is_default === true,
     });
-    new CapabilityRepository(database.connection).inferAgent(created.id);
     response.status(201).json({ ok: true, data: created });
   } catch (error) {
     const code = codeOf(error, 'PROVIDER_MODEL_CREATE_FAILED');
@@ -477,6 +476,7 @@ v2DataRouter.post('/agents', (request, response) => {
       idle_after_seconds: Number.isFinite(Number(body.idle_after_seconds)) ? Number(body.idle_after_seconds) : 300,
       metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
     });
+    new CapabilityRepository(database.connection).inferAgent(created.id);
     response.status(201).json({ ok: true, data: created });
   } catch (error) {
     const code = codeOf(error, 'AGENT_CREATE_FAILED');
