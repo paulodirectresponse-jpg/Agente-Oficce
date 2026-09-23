@@ -86,7 +86,7 @@ export function AgentOperationsPanel({
         capability_key: cap.capability_key,
         declared_score: cap.declared_score,
         enabled: cap.enabled,
-        source: cap.source === 'learned' ? 'manual' as const : cap.source,
+        source: 'manual' as const,
       }));
       await api.saveAgentCapabilitiesV3(agent.id, payload);
       await load();
