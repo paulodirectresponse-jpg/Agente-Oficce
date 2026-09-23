@@ -117,8 +117,8 @@ export function OrchestratorView({ providers }: { providers: UniversalProvider[]
         <div className={'orchestrator-health ' + healthClass(status?.principal?.status)}>
           <span className="engine-dot" />
           <div>
-            <strong>{status?.principal?.model_name || 'Não configurado'}</strong>
-            <span>{status?.principal?.provider_name || 'Selecione o controlador principal'}</span>
+            <strong>{status?.last_effective?.model_name || status?.principal?.model_name || 'Não configurado'}</strong>
+            <span>{status?.last_effective?.provider_name || status?.principal?.provider_name || 'Selecione o controlador principal'}</span>
           </div>
         </div>
       </div>
@@ -193,7 +193,7 @@ export function OrchestratorView({ providers }: { providers: UniversalProvider[]
                 <span>{status?.principal?.fallback_count ?? 0} fallback(s) configurado(s) no provider principal. A cadeia é administrada em Providers e reutilizada aqui automaticamente.</span>
               </div>
 
-              <button type="button" className="btn btn-primary" disabled={busy || !draft.principal.provider_id || !draft.principal.model_id} onClick={save}>
+              <button type="button" className="btn btn-primary" disabled={busy || (draft.enabled && (!draft.principal.provider_id || !draft.principal.model_id))} onClick={save}>
                 {busy ? 'Salvando…' : 'Salvar Orquestrador'}
               </button>
               {notice && <p className="success-text">{notice}</p>}
