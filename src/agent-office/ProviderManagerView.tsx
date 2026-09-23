@@ -4,6 +4,8 @@ import type {
   ProviderModel,
   ProviderPreset,
   UniversalProvider,
+  ProviderRuntimeStatus,
+  ProviderFallback,
 } from './types.js';
 import { api } from './api.js';
 
@@ -28,6 +30,11 @@ interface ProviderDraft {
   retry_backoff_ms: number;
   max_concurrent_requests: number;
   min_request_interval_ms: number;
+  rpm_limit: number;
+  tpm_limit: number;
+  cooldown_seconds: number;
+  circuit_failure_threshold: number;
+  circuit_reset_seconds: number;
   enabled: boolean;
 }
 
@@ -47,6 +54,11 @@ const EMPTY_DRAFT: ProviderDraft = {
   retry_backoff_ms: 500,
   max_concurrent_requests: 2,
   min_request_interval_ms: 0,
+  rpm_limit: 0,
+  tpm_limit: 0,
+  cooldown_seconds: 30,
+  circuit_failure_threshold: 5,
+  circuit_reset_seconds: 60,
   enabled: true,
 };
 
@@ -76,6 +88,10 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
   const [selectedId, setSelectedId] = useState<string | null>(providers[0]?.id ?? null);
   const [draft, setDraft] = useState<ProviderDraft>(EMPTY_DRAFT);
   const [models, setModels] = useState<ProviderModel[]>([]);
+  const [runtime, setRuntime] = useState<ProviderRuntimeStatus | null>(null);
+  const [fallbacks, setFallbacks] = useState<ProviderFallback[]>([]);
+  const [fallbackProviderId, setFallbackProviderId] = useState('');
+  const [fallbackModel, setFallbackModel] = useState('');
   const [secret, setSecret] = useState('');
   const [newModel, setNewModel] = useState('');
   const [newModelName, setNewModelName] = useState('');
@@ -124,9 +140,26 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
       retry_backoff_ms: typeof selected.protocol_config.retry_backoff_ms === 'number' ? selected.protocol_config.retry_backoff_ms : 500,
       max_concurrent_requests: typeof selected.protocol_config.max_concurrent_requests === 'number' ? selected.protocol_config.max_concurrent_requests : 2,
       min_request_interval_ms: typeof selected.protocol_config.min_request_interval_ms === 'number' ? selected.protocol_config.min_request_interval_ms : 0,
+      rpm_limit: typeof selected.protocol_config.rpm_limit === 'number' ? selected.protocol_config.rpm_limit : 0,
+      tpm_limit: typeof selected.protocol_config.tpm_limit === 'number' ? selected.protocol_config.tpm_limit : 0,
+      cooldown_seconds: typeof selected.protocol_config.cooldown_seconds === 'number' ? selected.protocol_config.cooldown_seconds : 30,
+      circuit_failure_threshold: typeof selected.protocol_config.circuit_failure_threshold === 'number' ? selected.protocol_config.circuit_failure_threshold : 5,
+      circuit_reset_seconds: typeof selected.protocol_config.circuit_reset_seconds === 'number' ? selected.protocol_config.circuit_reset_seconds : 60,
       enabled: selected.enabled,
     });
-    void api.listProviderModelsV2(selected.id).then(setModels).catch(() => setModels([]));
+    void Promise.all([
+      api.listProviderModelsV2(selected.id),
+      api.getProviderRuntimeV2(selected.id),
+      api.listProviderFallbacksV2(selected.id),
+    ]).then(([loadedModels, loadedRuntime, loadedFallbacks]) => {
+      setModels(loadedModels);
+      setRuntime(loadedRuntime);
+      setFallbacks(loadedFallbacks);
+    }).catch(() => {
+      setModels([]);
+      setRuntime(null);
+      setFallbacks([]);
+    });
     setSecret('');
     setNotice(null);
     setError(null);
@@ -164,6 +197,11 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
       base.retry_backoff_ms = typeof preset.protocol_config?.retry_backoff_ms === 'number' ? preset.protocol_config.retry_backoff_ms : 500;
       base.max_concurrent_requests = typeof preset.protocol_config?.max_concurrent_requests === 'number' ? preset.protocol_config.max_concurrent_requests : 2;
       base.min_request_interval_ms = typeof preset.protocol_config?.min_request_interval_ms === 'number' ? preset.protocol_config.min_request_interval_ms : 0;
+      base.rpm_limit = typeof preset.protocol_config?.rpm_limit === 'number' ? preset.protocol_config.rpm_limit : 0;
+      base.tpm_limit = typeof preset.protocol_config?.tpm_limit === 'number' ? preset.protocol_config.tpm_limit : 0;
+      base.cooldown_seconds = typeof preset.protocol_config?.cooldown_seconds === 'number' ? preset.protocol_config.cooldown_seconds : 30;
+      base.circuit_failure_threshold = typeof preset.protocol_config?.circuit_failure_threshold === 'number' ? preset.protocol_config.circuit_failure_threshold : 5;
+      base.circuit_reset_seconds = typeof preset.protocol_config?.circuit_reset_seconds === 'number' ? preset.protocol_config.circuit_reset_seconds : 60;
     }
     setSelectedId(null);
     setDraft(base);
@@ -191,6 +229,11 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
         retry_backoff_ms: Math.max(100, draft.retry_backoff_ms),
         max_concurrent_requests: Math.max(1, Math.min(20, draft.max_concurrent_requests)),
         min_request_interval_ms: Math.max(0, draft.min_request_interval_ms),
+        rpm_limit: Math.max(0, draft.rpm_limit),
+        tpm_limit: Math.max(0, draft.tpm_limit),
+        cooldown_seconds: Math.max(1, draft.cooldown_seconds),
+        circuit_failure_threshold: Math.max(1, draft.circuit_failure_threshold),
+        circuit_reset_seconds: Math.max(1, draft.circuit_reset_seconds),
       };
       let saved: UniversalProvider;
       if (selected) {
@@ -364,6 +407,59 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
     }
   };
 
+
+  const refreshRuntime = async () => {
+    if (!selected) return;
+    try {
+      setRuntime(await api.getProviderRuntimeV2(selected.id));
+    } catch {
+      setRuntime(null);
+    }
+  };
+
+  const addFallback = async () => {
+    if (!selected || !fallbackProviderId) return;
+    setBusy('fallback');
+    try {
+      const next = [
+        ...fallbacks.map((item) => ({
+          source_model: item.source_model,
+          target_provider_id: item.target_provider_id,
+          target_model: item.target_model,
+        })),
+        { target_provider_id: fallbackProviderId, target_model: fallbackModel || null },
+      ];
+      const saved = await api.saveProviderFallbacksV2(selected.id, next);
+      setFallbacks(saved);
+      setFallbackProviderId('');
+      setFallbackModel('');
+      setNotice('Fallback adicionado.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao salvar fallback.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const removeFallback = async (fallbackId: string) => {
+    if (!selected) return;
+    setBusy('fallback');
+    try {
+      const next = fallbacks
+        .filter((item) => item.id !== fallbackId)
+        .map((item) => ({
+          source_model: item.source_model,
+          target_provider_id: item.target_provider_id,
+          target_model: item.target_model,
+        }));
+      setFallbacks(await api.saveProviderFallbacksV2(selected.id, next));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Falha ao remover fallback.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const removeProvider = async () => {
     if (!selected || !window.confirm(`Excluir o provider "${selected.name}"? Os agentes vinculados ficarão sem provider/modelo.`)) return;
     setBusy('delete');
@@ -417,6 +513,31 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
         </aside>
 
         <section className="manager-detail">
+          {selected && runtime && (
+            <div className="manager-card provider-runtime-card">
+              <div className="manager-card-header compact">
+                <div>
+                  <span className="office-kicker">Runtime</span>
+                  <h2>Saúde operacional</h2>
+                </div>
+                <span className={`provider-health ${runtime.runtime.operational_status === 'healthy' ? 'online' : runtime.runtime.operational_status === 'unavailable' ? 'offline' : 'unknown'}`}>
+                  {runtime.runtime.operational_status}
+                </span>
+              </div>
+              <div className="provider-runtime-grid">
+                <div><strong>{runtime.runtime.active_requests}</strong><span>ativas</span></div>
+                <div><strong>{runtime.runtime.queued_requests}</strong><span>na fila</span></div>
+                <div><strong>{runtime.runtime.rpm_used}{runtime.runtime.rpm_limit ? ` / ${runtime.runtime.rpm_limit}` : ''}</strong><span>RPM</span></div>
+                <div><strong>{runtime.runtime.tpm_used}{runtime.runtime.tpm_limit ? ` / ${runtime.runtime.tpm_limit}` : ''}</strong><span>TPM</span></div>
+                <div><strong>{runtime.runtime.circuit_state}</strong><span>circuit</span></div>
+                <div><strong>{runtime.runtime.consecutive_failures}</strong><span>falhas seguidas</span></div>
+              </div>
+              {runtime.runtime.cooldown_until && <p className="provider-runtime-warning">Cooldown até {new Date(runtime.runtime.cooldown_until).toLocaleTimeString('pt-BR')}.</p>}
+              {runtime.runtime.last_error && <p className="provider-runtime-error">{runtime.runtime.last_error}</p>}
+              <button type="button" className="manager-advanced-toggle" onClick={() => void refreshRuntime()}>Atualizar runtime</button>
+            </div>
+          )}
+
           <div className={`manager-card ${showAdvanced ? 'show-advanced' : 'simple-mode'}`}>
             <div className="manager-card-header">
               <div>
@@ -506,6 +627,26 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
                   <label>Intervalo mínimo (ms)</label>
                   <input type="number" min={0} value={draft.min_request_interval_ms} onChange={(event) => setDraft({ ...draft, min_request_interval_ms: Number(event.target.value) || 0 })} />
                 </div>
+                <div className="manager-field">
+                  <label>RPM máximo · 0 = ilimitado</label>
+                  <input type="number" min={0} value={draft.rpm_limit} onChange={(event) => setDraft({ ...draft, rpm_limit: Math.max(0, Number(event.target.value) || 0) })} />
+                </div>
+                <div className="manager-field">
+                  <label>TPM máximo · 0 = ilimitado</label>
+                  <input type="number" min={0} value={draft.tpm_limit} onChange={(event) => setDraft({ ...draft, tpm_limit: Math.max(0, Number(event.target.value) || 0) })} />
+                </div>
+                <div className="manager-field">
+                  <label>Cooldown após rate limit (s)</label>
+                  <input type="number" min={1} value={draft.cooldown_seconds} onChange={(event) => setDraft({ ...draft, cooldown_seconds: Math.max(1, Number(event.target.value) || 30) })} />
+                </div>
+                <div className="manager-field">
+                  <label>Falhas para abrir circuito</label>
+                  <input type="number" min={1} value={draft.circuit_failure_threshold} onChange={(event) => setDraft({ ...draft, circuit_failure_threshold: Math.max(1, Number(event.target.value) || 5) })} />
+                </div>
+                <div className="manager-field">
+                  <label>Reteste do circuito (s)</label>
+                  <input type="number" min={1} value={draft.circuit_reset_seconds} onChange={(event) => setDraft({ ...draft, circuit_reset_seconds: Math.max(1, Number(event.target.value) || 60) })} />
+                </div>
               </div>
               <small>GETs de health/discovery têm retry conservador automático. Gerações POST só repetem se você permitir acima.</small>
             </div>
@@ -582,6 +723,46 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
             {notice && <div className="manager-notice success">{notice}</div>}
             {error && <div className="manager-notice error">{error}</div>}
           </div>
+
+          {selected && (
+            <div className="manager-card">
+              <div className="manager-card-header compact">
+                <div>
+                  <span className="office-kicker">Resiliência</span>
+                  <h2>Fallback chain</h2>
+                </div>
+                <span className="overview-count">{fallbacks.length}</span>
+              </div>
+              <p className="muted">Usada somente para falhas recuperáveis como 429, timeout, indisponibilidade e circuito aberto.</p>
+              <div className="model-add-row">
+                <select value={fallbackProviderId} onChange={(event) => setFallbackProviderId(event.target.value)}>
+                  <option value="">Escolha o provider fallback</option>
+                  {providers.filter((provider) => provider.id !== selected.id && provider.enabled).map((provider) => (
+                    <option key={provider.id} value={provider.id}>{provider.name}</option>
+                  ))}
+                </select>
+                <input value={fallbackModel} onChange={(event) => setFallbackModel(event.target.value)} placeholder="Modelo opcional · vazio usa padrão" />
+                <button type="button" onClick={addFallback} disabled={!fallbackProviderId || busy === 'fallback'}>Adicionar</button>
+              </div>
+              <div className="model-list">
+                {fallbacks.map((fallback, index) => {
+                  const target = providers.find((provider) => provider.id === fallback.target_provider_id);
+                  return (
+                    <div key={fallback.id} className="model-row">
+                      <div className="model-row-main">
+                        <strong>{index + 1}. {target?.name ?? fallback.target_provider_id}</strong>
+                        <span>{fallback.target_model || 'modelo padrão'}</span>
+                      </div>
+                      <div className="model-row-actions">
+                        <button type="button" className="danger-link" onClick={() => void removeFallback(fallback.id)}>Remover</button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!fallbacks.length && <div className="manager-empty-small">Sem fallback configurado.</div>}
+              </div>
+            </div>
+          )}
 
           {selected && (
             <div className="manager-card">
