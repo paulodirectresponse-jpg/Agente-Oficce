@@ -96,6 +96,18 @@ export class TeamService {
   listWorkforces(limit=100){return (this.db.prepare('SELECT id FROM dynamic_team_instances ORDER BY created_at DESC LIMIT ?').all(Math.max(1,Math.min(250,limit))) as any[]).map(r=>this.getDynamic(r.id)).filter(Boolean)}
   createWorkforce(input:DynamicTeamInput){return this.createDynamic(input)}
   getWorkforce(id:string){return this.getDynamic(id)}
+  resolveWorkforceWorkers(workforceId:string){
+    const wf=this.getDynamic(workforceId);if(!wf)throw new Error('WORKFORCE_NOT_FOUND');
+    const agents=new Set<string>(wf.members.filter((m:any)=>m.enabled).map((m:any)=>m.agent_id));
+    const subs=new Set<string>(wf.subagents.filter((m:any)=>m.enabled).map((m:any)=>m.subagent_id));
+    for(const resource of wf.teams.filter((m:any)=>m.enabled)){
+      const snapshot=resource.snapshot??{};
+      const owner=snapshot?.team?.owner_agent_id;if(typeof owner==='string')agents.add(owner);
+      for(const sub of snapshot?.subagents??[])if(sub?.enabled!==false&&typeof sub?.id==='string')subs.add(sub.id);
+      for(const member of snapshot?.members??[])if(member?.enabled!==false&&typeof member?.agent_id==='string')agents.add(member.agent_id);
+    }
+    return{agent_ids:[...agents],subagent_ids:[...subs]};
+  }
   bindWorkforceToChat(workforceId:string,chatRunId:string){
     if(!this.db.prepare('SELECT 1 FROM chat_runs WHERE id=?').get(chatRunId))throw new Error('CHAT_RUN_NOT_FOUND');
     const t=now();const changed=this.db.prepare("UPDATE dynamic_team_instances SET chat_run_id=?,lifecycle_status='active',started_at=COALESCE(started_at,?),updated_at=? WHERE id=?").run(chatRunId,t,t,workforceId).changes;
