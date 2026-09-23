@@ -6,11 +6,12 @@ Update it **before every work session ends**.
 
 ## Current state
 
-- Overall: NOT STARTED
+- Overall: READY TO START
 - Current macro phase: Phase 1 — Foundation + Trabalho
 - Current checkpoint: Shell V2
 - Implementation branch: `ux-v2-redesign`
-- Last verified remote commit: not started yet
+- Baseline from main: `c153ea4e61b3456ef18c435afaa83a360bb14fca`
+- Last implementation checkpoint: none yet
 - Blocked: no
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
 
@@ -25,7 +26,7 @@ Update it **before every work session ends**.
 
 ## In progress
 
-None yet.
+Implementation branch created and ready for Kimi Code.
 
 ## Next exact action
 
