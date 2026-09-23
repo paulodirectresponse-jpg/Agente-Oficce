@@ -1,0 +1,44 @@
+[
+  {
+    "id": "routing-simple-frontend",
+    "message": "Corrija o layout React desta interface.",
+    "expected_mode": "direct_agent",
+    "expected_agent": "frontend-agent",
+    "max_workers": 1,
+    "required_capabilities": [
+      "software.frontend.react"
+    ]
+  },
+  {
+    "id": "routing-simple-backend",
+    "message": "Implemente uma API backend para este recurso.",
+    "expected_mode": "direct_agent",
+    "expected_agent": "backend-agent",
+    "max_workers": 1,
+    "required_capabilities": [
+      "software.backend"
+    ]
+  },
+  {
+    "id": "routing-security",
+    "message": "Revise a segurança e autenticação deste fluxo.",
+    "expected_mode": "direct_agent",
+    "expected_agent": "security-agent",
+    "max_workers": 1,
+    "required_capabilities": [
+      "software.testing",
+      "security"
+    ]
+  },
+  {
+    "id": "routing-complex-team",
+    "message": "Planeje e implemente uma integração completa com frontend React, backend API e revise todos os testes antes de finalizar.",
+    "expected_mode": "dynamic_team",
+    "max_workers": 3,
+    "required_capabilities": [
+      "software.frontend.react",
+      "software.backend",
+      "software.testing"
+    ]
+  }
+]
