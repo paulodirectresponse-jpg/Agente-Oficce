@@ -72,14 +72,14 @@ export class OrchestratorGateway {
       } else if(this.llm&&settings.enabled&&((settings.principal.provider_id&&settings.principal.model_id)||!this.llm.requires_configured_model)){
         try{
           level='fast';event('orchestrator.analyzing','Análise Fast iniciada','O modelo de orquestração está classificando a solicitação.');
-          const fastRaw=unwrap(await this.llm.decide('fast',{message:input.message,domains:[...new Set(defs.map(x=>x.domain))],constraints:{no_secrets:true,no_filesystem:true,no_tools:true}}));
+          const fastRaw=unwrap(await this.llm.decide('fast',{message:input.message,domains:[...new Set(defs.map(x=>x.domain))],constraints:{no_secrets:true,no_filesystem:true,no_tools:true,capability_keys:[...keys]}}));
           lastTelemetry=fastRaw.telemetry;inputTokens+=fastRaw.telemetry?.input_tokens||0;outputTokens+=fastRaw.telemetry?.output_tokens||0;
           decision=validateDecision(fastRaw.decision,keys)??undefined;
           if(lastTelemetry?.fallback_used)event('orchestrator.fallback','Fallback do Orquestrador utilizado',`${lastTelemetry.requested_provider_id}/${lastTelemetry.requested_model_id} → ${lastTelemetry.provider_id}/${lastTelemetry.model_id}`,{},'warning');
           const needsDeep=!decision||decision.confidence<settings.fast_confidence_threshold||decision.complexity==='high'||(settings.deep_for_high_risk&&decision.risk==='high');
           if(needsDeep){
             level='deep';event('orchestrator.analyzing','Análise Deep iniciada','A solicitação exige análise mais profunda.',{fast_confidence:decision?.confidence??0});
-            const deepRaw=unwrap(await this.llm.decide('deep',{message:input.message,domains:[...new Set(defs.map(x=>x.domain))],constraints:{no_secrets:true,no_filesystem:true,no_tools:true}}));
+            const deepRaw=unwrap(await this.llm.decide('deep',{message:input.message,domains:[...new Set(defs.map(x=>x.domain))],constraints:{no_secrets:true,no_filesystem:true,no_tools:true,capability_keys:[...keys]}}));
             lastTelemetry=deepRaw.telemetry;inputTokens+=deepRaw.telemetry?.input_tokens||0;outputTokens+=deepRaw.telemetry?.output_tokens||0;
             const deep=validateDecision(deepRaw.decision,keys);
             if(deep&&deep.confidence>=settings.deep_confidence_threshold)decision=deep;
