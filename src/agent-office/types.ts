@@ -492,6 +492,7 @@ export interface AgentOverview {
   provider_name: string | null;
   model_name: string | null;
   last_effective_model: string | null;
+  latest_run_id: string | null;
   capabilities: AgentCapabilityV3[];
   performance: AgentPerformanceSummary;
   recent_activity: Array<{type:string;severity:string;title:string;detail:string;payload:Record<string,unknown>;created_at:string}>;
