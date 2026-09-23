@@ -784,6 +784,10 @@ class GoogleGeminiDriver implements ProtocolDriver {
           capabilities: {
             text: methods.includes('generateContent') || methods.includes('streamGenerateContent'),
             streaming: methods.includes('streamGenerateContent'),
+            image: true,
+            audio: true,
+            video: true,
+            pdf: true,
           },
           context_window: typeof object.inputTokenLimit === 'number' ? object.inputTokenLimit : null,
           max_output_tokens: typeof object.outputTokenLimit === 'number' ? object.outputTokenLimit : null,
