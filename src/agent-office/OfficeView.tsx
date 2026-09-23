@@ -7,11 +7,13 @@ import type {
   ChatStreamEnvelope,
   Conversation,
   Project,
+  ResourceFile,
   ToolApproval,
   UniversalProvider,
 } from './types.js';
 import { api } from './api.js';
 import { MessageContent } from './conversation/MessageContent.js';
+import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
 import { OfficeMap } from './room/OfficeMap.js';
 
 type OfficeFocus = 'office' | 'chat';
@@ -157,6 +159,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [activity, setActivity] = useState<ActivityEventV2[]>([]);
   const [message, setMessage] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [target, setTarget] = useState('auto');
   const [sending, setSending] = useState(false);
   const [currentRun, setCurrentRun] = useState<ChatRunReceipt | null>(null);
@@ -459,10 +462,12 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!project || !message.trim() || sending) return;
+    if (!project || (!message.trim() && !pendingFiles.length) || sending) return;
 
-    const text = message.trim();
+    const text = message.trim() || 'Analise os arquivos anexados.';
+    const files = pendingFiles.slice();
     setMessage('');
+    setPendingFiles([]);
     setSending(true);
     setRunStatus('running');
     setError(null);
@@ -471,11 +476,13 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     setLastHandoff(null);
 
     try {
+      const uploaded: ResourceFile[] = files.length ? await Promise.all(files.map((file) => api.uploadResource(project.id, file, 'chat'))) : [];
       const receipt = await api.startChatRun({
         project_id: project.id,
         conversation_id: conversation?.conversation_id,
         message: text,
         target,
+        attachment_ids: uploaded.map((file) => file.id),
       });
       setCurrentRun(receipt);
       setConversation((current) => current
@@ -489,6 +496,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               agent_id: null,
               content: text,
               created_at: new Date().toISOString(),
+              metadata: { attachments: uploaded, attachment_ids: uploaded.map((file) => file.id) },
             },
           ],
         }
@@ -499,6 +507,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       setRunStatus('failed');
       setError(reason instanceof Error ? reason.message : 'Falha ao iniciar o chat.');
       setMessage(text);
+      setPendingFiles(files);
     }
   };
 
@@ -573,6 +582,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <span>{formatTime(item.created_at)}</span>
                     </div>
                     <MessageContent content={item.content}/>
+                    {Array.isArray((item as any).metadata?.attachments)&&<div className="work-v2-attachments">{(item as any).metadata.attachments.map((file:ResourceFile)=><StoredAttachmentCard key={file.id} file={file}/>)}</div>}
                   </div>
                 </div>
               );
@@ -601,7 +611,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
             <div ref={chatEndRef} />
           </div>
 
-          <form className="chat-composer" onSubmit={submit}>
+          <form className="chat-composer" onSubmit={submit} onDragOver={(event)=>{event.preventDefault();event.dataTransfer.dropEffect='copy'}} onDrop={(event)=>{event.preventDefault();setPendingFiles(cur=>[...cur,...Array.from(event.dataTransfer.files??[])].slice(0,12))}}>
+            {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><PendingAttachmentCard key={file.name+'-'+index} file={file} onRemove={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}/>)}</div>}
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -625,6 +636,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                 <span>local-first</span>
               </div>
               <div className="composer-actions">
+                <label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={event=>{setPendingFiles(cur=>[...cur,...Array.from(event.target.files??[])].slice(0,12));event.currentTarget.value=''}}/></label>
                 <select value={target} onChange={(event) => setTarget(event.target.value)} disabled={sending}>
                   <option value="auto">Auto</option>
                   <option value="team">Team</option>
@@ -638,7 +650,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <option key={agent.id} value={agent.id}>{agent.name}</option>
                     ))}
                 </select>
-                <button type="submit" className="send-button" disabled={sending || !message.trim()}>
+                <button type="submit" className="send-button" disabled={sending || (!message.trim()&&!pendingFiles.length)}>
                   {sending ? '•••' : '➤'}
                 </button>
               </div>
