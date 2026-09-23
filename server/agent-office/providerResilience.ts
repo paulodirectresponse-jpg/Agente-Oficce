@@ -142,7 +142,8 @@ export class ProviderFallbackRepository {
 }
 
 export class ProviderResilienceManager {
-  private readonly states = new Map<string, WindowState>();
+  private static readonly sharedStates = new Map<string, WindowState>();
+  private readonly states = ProviderResilienceManager.sharedStates;
 
   constructor(private readonly database: Database) {}
 
