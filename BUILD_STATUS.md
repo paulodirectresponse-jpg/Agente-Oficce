@@ -125,8 +125,18 @@ Uma release não pode ser considerada pronta se ocorrer:
 ## Roadmap V3 histórico
 Os documentos em `docs/v3/` continuam úteis como blueprint de arquitetura, mas a numeração V3.7–V3.11 não representa o release train atual de Blocos 1–11. Funcionalidades desses documentos só devem ser marcadas DONE quando existirem no código e tiverem gate próprio.
 
+## UX V2
+- arquitetura de informação: APPROVED
+- direção visual Calm Control Room: APPROVED
+- contrato: `DESIGN.md`
+- plano de implementação: `docs/plans/UX_V2_IMPLEMENTATION_PLAN.md`
+- handoff/status: `docs/plans/UX_V2_IMPLEMENTATION_STATUS.md`
+- implementação: 3 macro fases
+- branch de implementação: `ux-v2-redesign`
+- continuidade: checkpoints obrigatórios commitados e enviados ao GitHub
+
 ## Próximo passo exato
-1. realizar o pente fino completo de produto/UX e testes manuais dos Blocos 1–11;
-2. corrigir bugs/inconsistências encontrados sem reabrir arquitetura já validada sem necessidade;
-3. executar o Production Release Gate manual antes de uma distribuição formal/tag;
-4. manter `main` como única fonte de verdade.
+1. iniciar Phase 1 — Foundation + Trabalho em `ux-v2-redesign`;
+2. manter backend Blocks 1–11 como base funcional;
+3. atualizar e enviar o status a cada checkpoint;
+4. não mergear a implementação em `main` antes de revisão.
