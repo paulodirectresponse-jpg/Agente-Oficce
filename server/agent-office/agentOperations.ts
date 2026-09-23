@@ -56,8 +56,8 @@ export class AgentOperationsService {
     const allowed=new Set(['accepted','rework_requested','rejected','quality_failure','execution_success','operational_failure','cancelled','validation_passed']);
     if(!allowed.has(input.event_type))throw new Error('AGENT_PERFORMANCE_EVENT_INVALID');
     const source=input.source??'system';
-    if(input.run_id && source==='user' && ['accepted','rework_requested','rejected'].includes(input.event_type)){
-      this.db.prepare(`DELETE FROM agent_performance_events WHERE agent_id=? AND run_id=? AND source='user' AND event_type IN ('accepted','rework_requested','rejected')`).run(input.agent_id,input.run_id);
+    if(input.run_id && ['user','orchestrator'].includes(source) && ['accepted','rework_requested','rejected'].includes(input.event_type)){
+      this.db.prepare(`DELETE FROM agent_performance_events WHERE agent_id=? AND run_id=? AND source IN ('user','orchestrator') AND event_type IN ('accepted','rework_requested','rejected')`).run(input.agent_id,input.run_id);
     } else if(input.run_id && source==='system') {
       const duplicate=this.db.prepare('SELECT 1 FROM agent_performance_events WHERE agent_id=? AND run_id=? AND source=? AND event_type=? LIMIT 1').get(input.agent_id,input.run_id,source,input.event_type);
       if(duplicate)return;
