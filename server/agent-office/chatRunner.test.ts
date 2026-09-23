@@ -475,4 +475,30 @@ describe('ChatRunnerService', () => {
     f.cleanup();
   });
 
+  it('applies persisted Workspace orientation to an active run before the next model turn', async () => {
+    const f = fixture();
+    addProviderModelAgent(f, { providerId: 'orientation-provider', agentId: 'orientation-agent', role: 'Backend Engineer', sort: 1, streaming: false });
+    let body: any = null;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: 'Adjusted' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 4, completion_tokens: 1 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    const service = new ChatRunnerService(f.database.connection, f.secrets, f.hub, fetchImpl);
+    const prepared = service.prepare({ project_id: 'project-1', message: 'Start implementation', target: 'orientation-agent' });
+    const timestamp = new Date().toISOString();
+    f.database.connection.prepare(`
+      INSERT INTO workspace_run_commands(id,project_id,chat_run_id,execution_plan_id,command_type,message,target,status,created_at)
+      VALUES('orientation','project-1',?,NULL,'orient','Focus on tests first','auto','pending',?)
+    `).run(prepared.run.id, timestamp);
+    await service.execute(prepared);
+    const messages = body.messages as Array<{ role: string; content: string }>;
+    expect(messages.some((message) => message.role === 'system' && message.content.includes('Focus on tests first'))).toBe(true);
+    expect(f.database.connection.prepare('SELECT status FROM workspace_run_commands WHERE id=?').get('orientation')).toEqual({ status: 'applied' });
+    expect(f.hub.snapshot(prepared.run.id).some((event) => event.event === 'run.oriented')).toBe(true);
+    f.cleanup();
+  });
+
 });

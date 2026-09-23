@@ -40,6 +40,8 @@ export interface Message {
   agent_id: string | null;
   content: string;
   created_at: string;
+  metadata?: Record<string, unknown>;
+  metadata_json?: string;
 }
 
 export interface Conversation {
@@ -210,6 +212,7 @@ export interface ChatRunReceipt {
   run_id: string;
   conversation_id: string;
   selected_agents: string[];
+  selected_subagents?: string[];
   mode: 'single' | 'team';
   status: 'running';
   tools_enabled: boolean;
@@ -615,4 +618,103 @@ export interface Workforce {
   resources: WorkforceResource[];
   created_at: string;
   updated_at: string;
+}
+
+
+export interface WorkspaceFileEntry {
+  name: string;
+  path: string;
+  kind: 'directory'|'file';
+  size: number | null;
+  modified_at: string;
+}
+export interface WorkspaceFileContent {
+  path: string;
+  content: string;
+  size: number;
+  modified_at: string;
+}
+export interface WorkspaceGitStatus {
+  enabled: boolean;
+  branch: string | null;
+  head: string | null;
+  files: Array<{ status: string; path: string }>;
+}
+export interface WorkspaceGitDiff {
+  diff: string;
+  additions: number;
+  deletions: number;
+}
+export interface PreviewSession {
+  id: string;
+  project_id: string;
+  chat_run_id: string | null;
+  command: string;
+  port: number | null;
+  url: string | null;
+  status: 'starting'|'healthy'|'failed'|'stopped';
+  stdout: string;
+  stderr: string;
+  started_at: string;
+  updated_at: string;
+  stopped_at: string | null;
+  running?: boolean;
+}
+export interface WorkspaceCommand {
+  id: string;
+  project_id: string;
+  chat_run_id: string | null;
+  execution_plan_id: string | null;
+  command_type: 'orient'|'enqueue'|'interrupt';
+  message: string;
+  target: string;
+  status: 'pending'|'applied'|'dispatched'|'cancelled';
+  created_at: string;
+  applied_at: string | null;
+}
+export interface WorkspacePlan {
+  id: string;
+  project_id: string;
+  status: string;
+  goal: string;
+  version: number;
+  budget: Record<string, unknown>;
+  steps: Array<{
+    id: string;
+    key: string;
+    title: string;
+    goal: string;
+    status: string;
+    resume_state: string;
+    assigned_agent_id: string | null;
+    assigned_team_id?: string | null;
+    assigned_dynamic_team_id?: string | null;
+    required_capabilities: Array<Record<string, unknown>>;
+    required_tools: string[];
+  }>;
+  dependencies: Array<Record<string, unknown>>;
+  attempts: Array<Record<string, unknown>>;
+  replans: Array<Record<string, unknown>>;
+}
+export interface WorkspaceSnapshot {
+  project: Project;
+  active_run: ChatRun | null;
+  latest_run: ChatRun | null;
+  active_plan: WorkspacePlan | null;
+  workforce: Workforce | null;
+  pending_approvals: ToolApproval[];
+  pending_commands: WorkspaceCommand[];
+  preview: PreviewSession | null;
+  usage: { input_tokens: number; output_tokens: number } | null;
+  git: WorkspaceGitStatus;
+}
+export interface WorkspaceRunInspection {
+  run: ChatRun;
+  tools: ToolAuditEvent[];
+  activities: ActivityEventV2[];
+  files_changed: string[];
+  workforce: Workforce | null;
+  plan: WorkspacePlan | null;
+  artifacts: Array<{ id:string;plan_id:string;step_id:string|null;type:string;uri:string|null;payload:Record<string,unknown>;created_at:string }>;
+  baseline: Record<string, unknown> | null;
 }

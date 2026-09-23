@@ -19,6 +19,7 @@ import { v3GapAnalysisRouter } from './v3GapAnalysisRoutes.js';
 import { v3ExecutionGraphRouter } from './v3ExecutionGraphRoutes.js';
 import { v3DurableExecutionRouter } from './v3DurableExecutionRoutes.js';
 import { v3TeamsRouter } from './v3TeamsRoutes.js';
+import { v3WorkspaceRouter } from './v3WorkspaceRoutes.js';
 
 export const agentOfficeRouter = Router();
 
@@ -30,6 +31,7 @@ agentOfficeRouter.use('/agent-office/v3/orchestration', v3GapAnalysisRouter);
 agentOfficeRouter.use('/agent-office/v3/execution', v3ExecutionGraphRouter);
 agentOfficeRouter.use('/agent-office/v3/durable', v3DurableExecutionRouter);
 agentOfficeRouter.use('/agent-office/v3', v3TeamsRouter);
+agentOfficeRouter.use('/agent-office/v3/workspace', v3WorkspaceRouter);
 agentOfficeRouter.use('/agent-office/chat', chatRouter);
 
 // Health check - validates local SQLite foundation
