@@ -60,7 +60,7 @@ export interface UniversalCompletionResult {
 export type UniversalStreamEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'usage'; usage: UniversalUsage }
-  | { type: 'completed'; finish_reason?: string }
+  | { type: 'completed'; finish_reason?: string; provider_id?: string; model_id?: string }
   | { type: 'error'; message: string };
 
 export interface DiscoveredModel {
@@ -1204,7 +1204,8 @@ export class UniversalProviderEngine {
         for await (const event of driver.stream(provider, response)) {
           if (event.type === 'usage') tokenTotal += (event.usage.input_tokens ?? 0) + (event.usage.output_tokens ?? 0);
           if (event.type === 'text_delta') emitted = true;
-          yield event;
+          if (event.type === 'completed') yield { ...event, provider_id: provider.id, model_id: candidate.model };
+          else yield event;
         }
         this.resilience.recordSuccess(provider, candidate.model, Math.max(0, tokenTotal - this.estimatedTokens(input)));
         return;
