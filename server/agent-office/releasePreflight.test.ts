@@ -21,7 +21,7 @@ describe('Block 10 release preflight',()=>{
         {id:'computer',status:'healthy',detail:'ok'},
       ]});
       expect(report.ready).toBe(true);
-      expect(report.migration_version).toBe(22);
+      expect(report.migration_version).toBe(23);
       expect(report.checks.find(x=>x.id==='runtime.github')).toMatchObject({status:'warn',blocking:false});
       expect(report.checks.filter(x=>x.blocking).every(x=>x.status==='pass')).toBe(true);
     }finally{
