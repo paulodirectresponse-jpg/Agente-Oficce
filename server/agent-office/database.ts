@@ -1192,6 +1192,36 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
     `,
   },
 
+  {
+    version: 22,
+    sql: `
+      ALTER TABLE usage_snapshots ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+      ALTER TABLE usage_snapshots ADD COLUMN run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL;
+      ALTER TABLE usage_snapshots ADD COLUMN model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL;
+      ALTER TABLE usage_snapshots ADD COLUMN cost_kind TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(cost_kind IN ('reported','estimated','unknown'));
+
+      ALTER TABLE subagent_usage_snapshots ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+      ALTER TABLE subagent_usage_snapshots ADD COLUMN run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL;
+      ALTER TABLE subagent_usage_snapshots ADD COLUMN model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL;
+      ALTER TABLE subagent_usage_snapshots ADD COLUMN cost_kind TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(cost_kind IN ('reported','estimated','unknown'));
+
+      CREATE INDEX IF NOT EXISTS idx_usage_project_created
+        ON usage_snapshots(project_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_usage_run
+        ON usage_snapshots(run_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_usage_provider_model
+        ON usage_snapshots(provider,model_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_subagent_usage_project_created
+        ON subagent_usage_snapshots(project_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_subagent_usage_run
+        ON subagent_usage_snapshots(run_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_subagent_usage_provider_model
+        ON subagent_usage_snapshots(provider_id,model_id,created_at DESC);
+    `,
+  },
+
 ];
 
 function assertMigrationPlan(): void {
