@@ -8,6 +8,7 @@ import { chatRunControls } from '../agent-office/runtimeControls.js';
 import { ChatRunRepository } from '../agent-office/v2DataModel.js';
 import { OrchestratorGateway } from '../agent-office/orchestratorGateway.js';
 import { UniversalOrchestratorLLM } from '../agent-office/orchestratorRuntime.js';
+import { TeamService } from '../agent-office/teamService.js';
 
 export const chatRouter = Router();
 
@@ -67,9 +68,9 @@ chatRouter.post('/runs', async (request, response) => {
         ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
       }
     } else if (decision.target_mode === 'dynamic_team' && decision.target_team_id) {
-      selectedAgentIds = (database.connection.prepare(
-        'SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? AND enabled=1 ORDER BY priority,created_at'
-      ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
+      const workers = new TeamService(database.connection).resolveWorkforceWorkers(decision.target_team_id);
+      selectedAgentIds = workers.agent_ids;
+      selectedSubagentIds = workers.subagent_ids;
     } else if (decision.candidate_scope.length) {
       selectedAgentIds = decision.candidate_scope;
     }
@@ -96,12 +97,22 @@ chatRouter.post('/runs', async (request, response) => {
     });
 
     const receipt = service.receipt(prepared);
+    const workforceId = decision.target_mode === 'dynamic_team' ? decision.target_team_id : undefined;
+    if (workforceId) new TeamService(database.connection).bindWorkforceToChat(workforceId, prepared.run.id);
     const signal = chatRunControls.register(prepared.run.id);
     void service.execute(prepared, signal)
       .catch(() => undefined)
       .finally(() => {
-        chatRunControls.finish(prepared.run.id);
-        database.connection.close();
+        try {
+          if (workforceId) {
+            const run = new ChatRunRepository(database.connection).get(prepared.run.id);
+            const terminal = run?.status === 'completed' ? 'completed' : run?.status === 'cancelled' ? 'cancelled' : 'failed';
+            new TeamService(database.connection).finishWorkforce(workforceId, terminal);
+          }
+        } finally {
+          chatRunControls.finish(prepared.run.id);
+          database.connection.close();
+        }
       });
 
     response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id } });

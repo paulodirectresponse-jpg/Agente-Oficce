@@ -17,9 +17,14 @@ export interface TeamInput {
   proposal_policy?:'manual'|'approval_required'|'disabled'; metadata?:Record<string,unknown>; policy?:TeamPolicyInput;
 }
 export interface TeamMemberInput {agent_id:string;role_name?:string;priority?:number;enabled?:boolean;metadata?:Record<string,unknown>}
+export type WorkerKind='agent'|'subagent'|'team';
+export interface WorkerRef {
+  kind:WorkerKind; id:string; reason?:string; capability_keys?:string[]; score?:number;
+}
 export interface DynamicTeamInput {
-  orchestration_run_id?:string|null; execution_plan_id?:string|null; purpose?:string; lead_agent_id?:string|null;
-  member_ids:string[]; subagent_ids?:string[]; max_parallelism?:number; max_delegation_depth?:number; allow_external_borrowing?:boolean; policy?:TeamPolicyInput;
+  orchestration_run_id?:string|null; execution_plan_id?:string|null; chat_run_id?:string|null; purpose?:string; lead_agent_id?:string|null;
+  member_ids?:string[]; subagent_ids?:string[]; team_ids?:string[]; resources?:WorkerRef[];
+  max_parallelism?:number; max_delegation_depth?:number; allow_external_borrowing?:boolean; policy?:TeamPolicyInput; metadata?:Record<string,unknown>;
 }
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const parse=<T>(v:string|undefined|null,f:T):T=>{try{return v?JSON.parse(v):f}catch{return f}};
@@ -88,9 +93,31 @@ export class TeamService {
     this.db.prepare('INSERT INTO team_room_entries(id,team_id,agent_id,subagent_id,entry_type,content,payload_json,created_at)VALUES(?,?,?,?,?,?,?,?)').run(entry.id,entry.team_id,entry.agent_id,entry.subagent_id,entry.entry_type,entry.content,JSON.stringify(entry.payload),entry.created_at);return entry;
   }
 
-  listWorkforces(limit=100){return (this.db.prepare('SELECT * FROM dynamic_team_instances ORDER BY created_at DESC LIMIT ?').all(Math.max(1,Math.min(250,limit))) as any[]).map(r=>this.getDynamic(r.id))}
+  listWorkforces(limit=100){return (this.db.prepare('SELECT id FROM dynamic_team_instances ORDER BY created_at DESC LIMIT ?').all(Math.max(1,Math.min(250,limit))) as any[]).map(r=>this.getDynamic(r.id)).filter(Boolean)}
   createWorkforce(input:DynamicTeamInput){return this.createDynamic(input)}
   getWorkforce(id:string){return this.getDynamic(id)}
+  resolveWorkforceWorkers(workforceId:string){
+    const wf=this.getDynamic(workforceId);if(!wf)throw new Error('WORKFORCE_NOT_FOUND');
+    const agents=new Set<string>(wf.members.filter((m:any)=>m.enabled).map((m:any)=>m.agent_id));
+    const subs=new Set<string>(wf.subagents.filter((m:any)=>m.enabled).map((m:any)=>m.subagent_id));
+    for(const resource of wf.teams.filter((m:any)=>m.enabled)){
+      const snapshot=resource.snapshot??{};
+      const owner=snapshot?.team?.owner_agent_id;if(typeof owner==='string')agents.add(owner);
+      for(const sub of snapshot?.subagents??[])if(sub?.enabled!==false&&typeof sub?.id==='string')subs.add(sub.id);
+      for(const member of snapshot?.members??[])if(member?.enabled!==false&&typeof member?.agent_id==='string')agents.add(member.agent_id);
+    }
+    return{agent_ids:[...agents],subagent_ids:[...subs]};
+  }
+  bindWorkforceToChat(workforceId:string,chatRunId:string){
+    if(!this.db.prepare('SELECT 1 FROM chat_runs WHERE id=?').get(chatRunId))throw new Error('CHAT_RUN_NOT_FOUND');
+    const t=now();const changed=this.db.prepare("UPDATE dynamic_team_instances SET chat_run_id=?,lifecycle_status='active',started_at=COALESCE(started_at,?),updated_at=? WHERE id=?").run(chatRunId,t,t,workforceId).changes;
+    if(!changed)throw new Error('WORKFORCE_NOT_FOUND');return this.getDynamic(workforceId)!;
+  }
+  finishWorkforce(workforceId:string,status:'completed'|'failed'|'cancelled'){
+    const t=now(),legacy=status==='completed'?'completed':'cancelled';
+    const changed=this.db.prepare('UPDATE dynamic_team_instances SET status=?,lifecycle_status=?,completed_at=?,updated_at=? WHERE id=?').run(legacy,status,t,t,workforceId).changes;
+    if(!changed)throw new Error('WORKFORCE_NOT_FOUND');return this.getDynamic(workforceId)!;
+  }
 
   createPermanent(input:TeamInput,actor='user:manual'){
     const type=input.type??'permanent';if(type!=='permanent'&&type!=='system')throw new Error('TEAM_TYPE_INVALID');
@@ -165,16 +192,53 @@ export class TeamService {
   }
 
   createDynamic(input:DynamicTeamInput){
-    const members=[...new Set(Array.isArray(input.member_ids)?input.member_ids:[])],subagentIds=[...new Set(Array.isArray(input.subagent_ids)?input.subagent_ids:[])];
-    if(!members.length&&!subagentIds.length)throw new Error('DYNAMIC_TEAM_MEMBERS_REQUIRED');
-    const ops=new AgentOperationsService(this.db),subs=new SubagentService(this.db);for(const a of members){if(!ops.isEligible(a))throw new Error('DYNAMIC_TEAM_MEMBER_UNAVAILABLE')}for(const s of subagentIds){if(!subs.isEligible(s))throw new Error('DYNAMIC_TEAM_SUBAGENT_UNAVAILABLE')}
-    if(input.lead_agent_id&&!members.includes(input.lead_agent_id))throw new Error('DYNAMIC_TEAM_LEAD_MUST_BE_MEMBER');
+    const resources:WorkerRef[]=[
+      ...(input.resources??[]),
+      ...(input.member_ids??[]).map(id=>({kind:'agent' as const,id})),
+      ...(input.subagent_ids??[]).map(id=>({kind:'subagent' as const,id})),
+      ...(input.team_ids??[]).map(id=>({kind:'team' as const,id})),
+    ];
+    const dedup=new Map<string,WorkerRef>();for(const r of resources)if(r?.id&&['agent','subagent','team'].includes(r.kind))dedup.set(`${r.kind}:${r.id}`,r);
+    const refs=[...dedup.values()];if(!refs.length)throw new Error('DYNAMIC_TEAM_MEMBERS_REQUIRED');
+    const ops=new AgentOperationsService(this.db),subs=new SubagentService(this.db);
+    for(const r of refs){
+      if(r.kind==='agent'&&!ops.isEligible(r.id))throw new Error('DYNAMIC_TEAM_MEMBER_UNAVAILABLE');
+      if(r.kind==='subagent'&&!subs.isEligible(r.id))throw new Error('DYNAMIC_TEAM_SUBAGENT_UNAVAILABLE');
+      if(r.kind==='team'){const team=this.get(r.id);if(!team||!team.enabled||!team.owner_agent_id)throw new Error('DYNAMIC_TEAM_PERMANENT_TEAM_UNAVAILABLE')}
+    }
+    const agents=refs.filter(r=>r.kind==='agent').map(r=>r.id);
+    if(input.lead_agent_id&&!agents.includes(input.lead_agent_id))throw new Error('DYNAMIC_TEAM_LEAD_MUST_BE_MEMBER');
     if(input.execution_plan_id&&!this.db.prepare('SELECT 1 FROM execution_plans WHERE id=?').get(input.execution_plan_id))throw new Error('EXECUTION_PLAN_NOT_FOUND');
     if(input.orchestration_run_id&&!this.db.prepare('SELECT 1 FROM orchestration_runs WHERE id=?').get(input.orchestration_run_id))throw new Error('ORCHESTRATION_RUN_NOT_FOUND');
+    if(input.chat_run_id&&!this.db.prepare('SELECT 1 FROM chat_runs WHERE id=?').get(input.chat_run_id))throw new Error('CHAT_RUN_NOT_FOUND');
     const teamId='dyn-'+id(),t=now(),policy=normalizePolicy(input.policy);
-    const tx=this.db.transaction(()=>{this.db.prepare(`INSERT INTO dynamic_team_instances(id,orchestration_run_id,execution_plan_id,purpose,lead_agent_id,max_parallelism,max_delegation_depth,allow_external_borrowing,policy_json,status,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?,?,'active',?,?)`).run(teamId,input.orchestration_run_id??null,input.execution_plan_id??null,input.purpose??'',input.lead_agent_id??null,Math.max(1,Math.floor(input.max_parallelism??3)),Math.max(0,Math.floor(input.max_delegation_depth??2)),input.allow_external_borrowing?1:0,JSON.stringify(policy),t,t);const ins=this.db.prepare("INSERT INTO dynamic_team_members(dynamic_team_id,agent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");for(const a of members)ins.run(teamId,a,t);const sin=this.db.prepare("INSERT INTO workforce_subagent_members(dynamic_team_id,subagent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");for(const s of subagentIds)sin.run(teamId,s,t)});tx.immediate();return this.getDynamic(teamId)!;
+    const tx=this.db.transaction(()=>{
+      this.db.prepare(`INSERT INTO dynamic_team_instances(id,orchestration_run_id,execution_plan_id,chat_run_id,purpose,lead_agent_id,max_parallelism,max_delegation_depth,allow_external_borrowing,policy_json,status,lifecycle_status,started_at,metadata_json,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,'active','active',?,?,?,?)`).run(teamId,input.orchestration_run_id??null,input.execution_plan_id??null,input.chat_run_id??null,input.purpose??'',input.lead_agent_id??null,Math.max(1,Math.floor(input.max_parallelism??3)),Math.max(0,Math.floor(input.max_delegation_depth??2)),input.allow_external_borrowing?1:0,JSON.stringify(policy),t,JSON.stringify(input.metadata??{}),t,t);
+      const ains=this.db.prepare("INSERT INTO dynamic_team_members(dynamic_team_id,agent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");
+      const sins=this.db.prepare("INSERT INTO workforce_subagent_members(dynamic_team_id,subagent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");
+      const tins=this.db.prepare("INSERT INTO workforce_team_members(dynamic_team_id,team_id,team_version_id,snapshot_json,reason,priority,enabled,created_at)VALUES(?,?,?,?,?,0,1,?)");
+      const rins=this.db.prepare("INSERT INTO workforce_resource_metadata(dynamic_team_id,worker_kind,worker_id,reason,capability_keys_json,source_team_id,source_owner_id,score,metadata_json,created_at)VALUES(?,?,?,?,?,?,?,?,?,?)");
+      for(const r of refs){
+        if(r.kind==='agent')ains.run(teamId,r.id,t);
+        else if(r.kind==='subagent')sins.run(teamId,r.id,t);
+        else{
+          const version=this.db.prepare('SELECT id,snapshot_json FROM team_versions WHERE team_id=? ORDER BY version DESC LIMIT 1').get(r.id) as any;if(!version)throw new Error('TEAM_VERSION_NOT_FOUND');
+          tins.run(teamId,r.id,version.id,version.snapshot_json,r.reason??'',t);
+        }
+        const sub=r.kind==='subagent'?subs.get(r.id):null,team=r.kind==='team'?this.get(r.id):null;
+        rins.run(teamId,r.kind,r.id,r.reason??'',JSON.stringify(r.capability_keys??[]),sub?.team_id??(r.kind==='team'?r.id:null),sub?.owner_agent_id??team?.owner_agent_id??null,r.score??null,'{}',t);
+      }
+    });tx.immediate();return this.getDynamic(teamId)!;
   }
-  getDynamic(teamId:string){const row=this.db.prepare('SELECT * FROM dynamic_team_instances WHERE id=?').get(teamId) as any;if(!row)return null;const members=(this.db.prepare('SELECT * FROM dynamic_team_members WHERE dynamic_team_id=? ORDER BY priority DESC,agent_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),metadata:parse(x.metadata_json,{})}));const subagents=(this.db.prepare('SELECT * FROM workforce_subagent_members WHERE dynamic_team_id=? ORDER BY priority DESC,subagent_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),metadata:parse(x.metadata_json,{})}));return{...row,allow_external_borrowing:Boolean(row.allow_external_borrowing),policy:parse(row.policy_json,{}),members,subagents}}
+  getDynamic(teamId:string){
+    const row=this.db.prepare('SELECT * FROM dynamic_team_instances WHERE id=?').get(teamId) as any;if(!row)return null;
+    const members=(this.db.prepare('SELECT * FROM dynamic_team_members WHERE dynamic_team_id=? ORDER BY priority DESC,agent_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),metadata:parse(x.metadata_json,{})}));
+    const subagents=(this.db.prepare('SELECT * FROM workforce_subagent_members WHERE dynamic_team_id=? ORDER BY priority DESC,subagent_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),metadata:parse(x.metadata_json,{})}));
+    const teams=(this.db.prepare('SELECT * FROM workforce_team_members WHERE dynamic_team_id=? ORDER BY priority DESC,team_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),snapshot:parse(x.snapshot_json,{})}));
+    const resources=(this.db.prepare('SELECT * FROM workforce_resource_metadata WHERE dynamic_team_id=? ORDER BY worker_kind,worker_id').all(teamId) as any[]).map(x=>({...x,capability_keys:parse(x.capability_keys_json,[]),metadata:parse(x.metadata_json,{})}));
+    return{...row,allow_external_borrowing:Boolean(row.allow_external_borrowing),policy:parse(row.policy_json,{}),metadata:parse(row.metadata_json,{}),members,subagents,teams,resources}
+  }
   snapshotForExecution(planId:string,stepId:string,kind:TeamKind,teamId:string){
     const existing=this.db.prepare('SELECT * FROM execution_team_snapshots WHERE step_id=?').get(stepId) as any;if(existing)return{...existing,snapshot:parse(existing.snapshot_json,{})};
     let snapshot:any,versionId:string|null=null;

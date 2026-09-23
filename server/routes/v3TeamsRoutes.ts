@@ -45,6 +45,9 @@ v3TeamsRouter.post('/teams/:id/room/entries',(req,res)=>withDb(res,db=>res.statu
 v3TeamsRouter.get('/workforces',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).listWorkforces(Number(req.query.limit)||100)})));
 v3TeamsRouter.post('/workforces',(req,res)=>withDb(res,db=>res.status(201).json({ok:true,data:new TeamService(db).createWorkforce(req.body??{})})));
 v3TeamsRouter.get('/workforces/:id',(req,res)=>withDb(res,db=>{const x=new TeamService(db).getWorkforce(req.params.id);if(!x){res.status(404).json({ok:false,error:{code:'WORKFORCE_NOT_FOUND',message:'WORKFORCE_NOT_FOUND'}});return}res.json({ok:true,data:x})}));
+v3TeamsRouter.post('/workforces/:id/delegations/validate',(req,res)=>withDb(res,db=>res.json({ok:true,data:new DelegationService(db).validateWorker({...req.body,workforce_id:req.params.id})})));
+v3TeamsRouter.post('/workforces/:id/delegations',(req,res)=>withDb(res,db=>res.status(201).json({ok:true,data:new DelegationService(db).delegateWorker({...req.body,workforce_id:req.params.id})})));
+v3TeamsRouter.post('/workforce-delegations/:id/return',(req,res)=>withDb(res,db=>res.json({ok:true,data:{returned:new DelegationService(db).returnedWorker(req.params.id)}})));
 
 v3TeamsRouter.post('/dynamic-teams',(req,res)=>withDb(res,db=>res.status(201).json({ok:true,data:new TeamService(db).createDynamic(req.body??{})})));
 v3TeamsRouter.get('/dynamic-teams/:id',(req,res)=>withDb(res,db=>{const x=new TeamService(db).getDynamic(req.params.id);if(!x){res.status(404).json({ok:false,error:{code:'DYNAMIC_TEAM_NOT_FOUND',message:'DYNAMIC_TEAM_NOT_FOUND'}});return}res.json({ok:true,data:x})}));
