@@ -193,7 +193,8 @@ export class OrchestratorGateway {
 
   private policyValidate(d:RoutingDecision,keys:Set<string>):RoutingDecision{
     const req=d.required_capabilities.filter(x=>keys.has(x.key));
-    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&/^[a-z0-9_.:-]{1,100}$/i.test(x.trim())).map(x=>x.trim()))];
+    const registered=new Set(toolRegistry.listDefinitions().map(x=>x.name));
+    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&registered.has(x.trim())).map(x=>x.trim()))];
     const scope=d.candidate_scope.filter(agent=>this.agentEligible(agent));
     const subs=new SubagentService(this.db);
     const resources=(d.workforce_resources??[]).filter(r=>{
