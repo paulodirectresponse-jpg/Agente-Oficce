@@ -24,6 +24,7 @@ import {
 import { chatEventHub, type ChatEventHub } from './chatEventHub.js';
 import { ChatRunCancelledError } from './runtimeControls.js';
 import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
+import { AgentOperationsService } from './agentOperations.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -206,6 +207,7 @@ export class ChatRunnerService {
   private readonly usage: UsageTracker;
   private readonly engine: UniversalProviderEngine;
   private readonly toolPolicies: AgentToolPolicyRepository;
+  private readonly agentOps: AgentOperationsService;
 
   constructor(
     private readonly database: Database,
@@ -224,6 +226,7 @@ export class ChatRunnerService {
     this.usage = new UsageTracker(database);
     this.engine = new UniversalProviderEngine(database, secrets, fetchImpl);
     this.toolPolicies = new AgentToolPolicyRepository(database);
+    this.agentOps = new AgentOperationsService(database);
   }
 
   prepare(input: PrepareChatRunInput): PreparedChatRun {
@@ -369,7 +372,26 @@ export class ChatRunnerService {
             signal,
           });
           stageResults.push(result);
+          this.agentOps.recordPerformance({
+            agent_id: binding.agent.id,
+            run_id: childRun.id,
+            project_id: rootRun.project_id,
+            event_type: 'execution_success',
+            source: 'system',
+            detail: 'Agent execution completed successfully.',
+          });
         } catch (error) {
+          const cancelledStage = signal?.aborted
+            || error instanceof ChatRunCancelledError
+            || (error instanceof Error && error.message === 'CHAT_RUN_CANCELLED');
+          this.agentOps.recordPerformance({
+            agent_id: binding.agent.id,
+            run_id: childRun.id,
+            project_id: rootRun.project_id,
+            event_type: cancelledStage ? 'cancelled' : 'operational_failure',
+            source: 'system',
+            detail: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED',
+          });
           if (childRun.id !== rootRun.id) {
             const cancelled = signal?.aborted
               || error instanceof ChatRunCancelledError
@@ -466,6 +488,7 @@ export class ChatRunnerService {
   private availableBindings(): AgentBinding[] {
     const result: AgentBinding[] = [];
     for (const agent of this.agents.list(false)) {
+      if (agent.paused || !this.agentOps.isEligible(agent.id)) continue;
       if (!agent.provider_id || !agent.model_id) continue;
       const provider = this.providers.get(agent.provider_id);
       const model = this.providers.getModel(agent.model_id);
@@ -478,6 +501,8 @@ export class ChatRunnerService {
   private requireBinding(agentId: string): AgentBinding {
     const agent = this.agents.get(agentId) ?? this.agents.getBySlug(agentId);
     if (!agent || !agent.enabled) throw new Error('CHAT_AGENT_NOT_FOUND');
+    if (agent.paused) throw new Error('CHAT_AGENT_PAUSED');
+    if (!this.agentOps.isEligible(agent.id)) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
     if (!agent.provider_id || !agent.model_id) throw new Error('CHAT_AGENT_NOT_CONFIGURED');
     const provider = this.providers.get(agent.provider_id);
     const model = this.providers.getModel(agent.model_id);
@@ -718,7 +743,7 @@ export class ChatRunnerService {
     stage: 'planner' | 'responder' | 'reviewer';
     messages: UniversalMessage[];
     signal?: AbortSignal;
-  }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number }> {
+  }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number; effective_provider: string; effective_model: string }> {
     const { rootRun, childRun, binding, stage, signal } = input;
     const policy = this.toolPolicies.get(binding.agent.id);
     const definitions = toolRegistry.definitionsForPolicy(policy);
@@ -726,6 +751,8 @@ export class ChatRunnerService {
     let usage: UniversalUsage | undefined;
     let requestCount = 0;
     let toolSteps = 0;
+    let effectiveProvider = binding.provider.id;
+    let effectiveModel = binding.model.model_id;
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
@@ -748,6 +775,8 @@ export class ChatRunnerService {
 
       requestCount += 1;
       usage = this.mergeUsage(usage, result.usage);
+      effectiveProvider = result.provider_id ?? effectiveProvider;
+      effectiveModel = result.model_id ?? effectiveModel;
 
       if (!result.tool_calls?.length) {
         if (result.text) {
@@ -765,6 +794,8 @@ export class ChatRunnerService {
           finish_reason: result.finish_reason,
           request_count: requestCount,
           tool_steps: toolSteps,
+          effective_provider: effectiveProvider,
+          effective_model: effectiveModel,
         };
       }
 
@@ -966,6 +997,8 @@ export class ChatRunnerService {
     let deltaCount = 0;
     let requestCount = 1;
     let toolSteps = 0;
+    let effectiveProvider = binding.provider.id;
+    let effectiveModel = binding.model.model_id;
 
     if (toolsEnabled) {
       const toolResult = await this.runToolAwareCompletion({
@@ -981,11 +1014,19 @@ export class ChatRunnerService {
       finishReason = toolResult.finish_reason;
       requestCount = toolResult.request_count;
       toolSteps = toolResult.tool_steps;
+      effectiveProvider = toolResult.effective_provider;
+      effectiveModel = toolResult.effective_model;
     } else {
     const streamingSupported = binding.model.capabilities.streaming !== false;
     if (streamingSupported) {
       try {
-        for await (const event of this.engine.stream(binding.provider.id, completionInput, { signal })) {
+        for await (const event of this.engine.stream(binding.provider.id, completionInput, {
+          signal,
+          onResolvedModel: (providerId, modelId) => {
+            effectiveProvider = providerId;
+            effectiveModel = modelId;
+          },
+        })) {
           if (event.type === 'text_delta') {
             text += event.text;
             deltaCount += 1;
@@ -1014,6 +1055,8 @@ export class ChatRunnerService {
         text = result.text;
         usage = result.usage;
         finishReason = result.finish_reason;
+        effectiveProvider = result.provider_id ?? effectiveProvider;
+        effectiveModel = result.model_id ?? effectiveModel;
         if (text) {
           this.hub.publish(rootRun.id, 'response.delta', {
             agent_id: binding.agent.id,
@@ -1029,6 +1072,8 @@ export class ChatRunnerService {
       text = result.text;
       usage = result.usage;
       finishReason = result.finish_reason;
+      effectiveProvider = result.provider_id ?? effectiveProvider;
+      effectiveModel = result.model_id ?? effectiveModel;
       if (text) {
         this.hub.publish(rootRun.id, 'response.delta', {
           agent_id: binding.agent.id,
@@ -1054,6 +1099,8 @@ export class ChatRunnerService {
         provider_id: binding.provider.id,
         model_id: binding.model.id,
         model: binding.model.model_id,
+        effective_provider: effectiveProvider,
+        effective_model: effectiveModel,
         finish_reason: finishReason ?? null,
         final: isFinal,
         tools_enabled: toolsEnabled,
@@ -1074,13 +1121,17 @@ export class ChatRunnerService {
         duration_ms: duration,
         tools_enabled: toolsEnabled,
         tool_steps: toolSteps,
+        effective_provider: effectiveProvider,
+        effective_model: effectiveModel,
       },
     });
 
-    this.usage.recordRunUsage(binding.agent.id, binding.provider.id, {
+    const effectivePricingModel = this.providers.listModels(effectiveProvider, true)
+      .find((candidate) => candidate.model_id === effectiveModel) ?? binding.model;
+    this.usage.recordRunUsage(binding.agent.id, effectiveProvider, {
       input_tokens: usage?.input_tokens,
       output_tokens: usage?.output_tokens,
-      cost_usd: estimateCostUsd(binding.model, usage),
+      cost_usd: estimateCostUsd(effectivePricingModel, usage),
       request_count: requestCount,
       duration_ms: duration,
     });

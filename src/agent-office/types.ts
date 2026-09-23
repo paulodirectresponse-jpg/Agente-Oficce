@@ -118,6 +118,7 @@ export interface AgentProfile {
   model_id: string | null;
   system_prompt: string;
   enabled: boolean;
+  paused: boolean;
   sort_order: number;
   idle_after_seconds: number;
   metadata: Record<string, unknown>;
@@ -437,4 +438,62 @@ export interface OrchestrationEvent {
   id: string; orchestration_run_id: string | null; project_id: string; event_type: string;
   severity: 'debug'|'info'|'warning'|'error'; title: string; detail: string;
   payload: Record<string, unknown>; created_at: string;
+}
+
+
+export interface AgentCapabilityV3 {
+  agent_id: string;
+  capability_key: string;
+  declared_score: number;
+  verified_score: number | null;
+  confidence: number;
+  evidence_count: number;
+  source: 'manual' | 'seed' | 'learned';
+  enabled: boolean;
+  updated_at: string;
+}
+export interface CapabilityDefinitionV3 {
+  key: string;
+  label: string;
+  domain: string;
+  parent_key: string | null;
+  description: string;
+  version: number;
+  status: 'active' | 'deprecated';
+  metadata: Record<string, unknown>;
+}
+export type AgentReadiness = 'inactive'|'paused'|'incomplete'|'ready'|'busy'|'queued'|'provider_degraded'|'provider_unavailable'|'model_unavailable'|'error';
+export interface AgentPerformanceSummary {
+  assertiveness: number | null;
+  first_pass_rate: number | null;
+  rework_rate: number | null;
+  quality_signals: number;
+  execution_successes: number;
+  operational_failures: number;
+  cancellations: number;
+  total_runs: number;
+  completed_runs: number;
+  failed_runs: number;
+  success_rate: number | null;
+  average_duration_ms: number | null;
+  cost_usd: number | null;
+  input_tokens: number;
+  output_tokens: number;
+}
+export interface AgentOverview {
+  agent_id: string;
+  administrative_state: 'active'|'inactive'|'paused';
+  readiness: AgentReadiness;
+  readiness_reason: string;
+  current_state: string;
+  current_activity: string;
+  provider_status: string | null;
+  model_status: string | null;
+  provider_name: string | null;
+  model_name: string | null;
+  last_effective_model: string | null;
+  latest_run_id: string | null;
+  capabilities: AgentCapabilityV3[];
+  performance: AgentPerformanceSummary;
+  recent_activity: Array<{type:string;severity:string;title:string;detail:string;payload:Record<string,unknown>;created_at:string}>;
 }

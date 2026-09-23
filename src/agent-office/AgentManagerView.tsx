@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentProfile, AgentToolPolicy, ProviderModel, Team, ToolDefinitionV2, UniversalProvider } from './types.js';
+import type { AgentOverview, AgentProfile, AgentToolPolicy, ProviderModel, Team, ToolDefinitionV2, UniversalProvider } from './types.js';
+import { AgentOperationsPanel } from './AgentOperationsPanel.js';
 import { api } from './api.js';
 
 interface AgentManagerViewProps {
@@ -78,9 +79,16 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overviews, setOverviews] = useState<Map<string, AgentOverview>>(new Map());
 
   const selected = isCreating ? null : (agents.find((agent) => agent.id === selectedId) ?? null);
   const providerById = useMemo(() => new Map(providers.map((provider) => [provider.id, provider])), [providers]);
+
+  useEffect(() => {
+    void api.listAgentOverviewsV2()
+      .then((items) => setOverviews(new Map(items.map((item) => [item.agent_id, item]))))
+      .catch(() => setOverviews(new Map()));
+  }, [agents]);
 
   useEffect(() => {
     void api.listToolDefinitionsV2()
@@ -317,6 +325,11 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
           <div className="manager-list">
             {agents.slice().sort((a, b) => a.sort_order - b.sort_order).map((agent, index) => {
               const provider = agent.provider_id ? providerById.get(agent.provider_id) : undefined;
+              const overview = overviews.get(agent.id);
+              const readiness = overview?.readiness ?? (agent.enabled ? 'incomplete' : 'inactive');
+              const dotClass = readiness === 'ready' ? 'online'
+                : readiness === 'inactive' || readiness === 'provider_unavailable' || readiness === 'model_unavailable' || readiness === 'error' ? 'offline'
+                  : 'unknown';
               return (
                 <div key={agent.id} className={`agent-manager-list-item ${selectedId === agent.id ? 'active' : ''}`}>
                   <button
@@ -330,9 +343,12 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                     <span className={`agent-manager-avatar avatar-${index % 3}`}>{avatarLabel(agent.avatar_key)}</span>
                     <span className="manager-list-copy">
                       <strong>{agent.name}</strong>
-                      <small>{agent.role || 'AI Agent'} · {provider?.name ?? 'sem provider'}</small>
+                      <small>
+                        {agent.role || 'AI Agent'} · {provider?.name ?? 'sem provider'} · {readiness}
+                        {overview?.performance.assertiveness != null ? ` · ${overview.performance.assertiveness.toFixed(0)}% assert.` : ''}
+                      </small>
                     </span>
-                    <span className={`mini-status ${agent.enabled ? 'online' : 'offline'}`} />
+                    <span className={`mini-status ${dotClass}`} />
                   </button>
                   <div className="agent-order-actions">
                     <button type="button" title="Mover para cima" disabled={index === 0 || busy} onClick={() => move(agent, -1)}>↑</button>
@@ -346,6 +362,7 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
         </aside>
 
         <section className="manager-detail">
+          {selected && <AgentOperationsPanel agent={selected} onChanged={onChanged} />}
           <div className={`manager-card agent-editor-card ${showAdvanced ? 'show-advanced' : 'simple-mode'}`}>
             <div className="manager-card-header">
               <div>

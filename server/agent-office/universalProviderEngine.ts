@@ -40,6 +40,7 @@ export interface UniversalCompletionInput {
 
 export interface UniversalRequestOptions {
   signal?: AbortSignal;
+  onResolvedModel?: (providerId: string, modelId: string) => void;
 }
 
 export interface UniversalUsage {
@@ -1200,6 +1201,7 @@ export class UniversalProviderEngine {
         const driver = createProtocolDriver(provider.protocol_driver);
         const secret = await this.secret(provider);
         const response = await this.transport.request(provider, driver.prepareCompletion(provider, { ...input, model: candidate.model }, true), secret, options);
+        options.onResolvedModel?.(provider.id, candidate.model);
         let tokenTotal = 0;
         for await (const event of driver.stream(provider, response)) {
           if (event.type === 'usage') tokenTotal += (event.usage.input_tokens ?? 0) + (event.usage.output_tokens ?? 0);

@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3 } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -163,6 +163,14 @@ export const api = {
     const response = await fetchWithStartupRetry(`/api/agent-office/v2/models/${modelId}`, { method: 'DELETE' });
     if (!response.ok && response.status !== 204) throw new Error(`Request failed (${response.status})`);
   },
+  listAgentOverviewsV2: () => request<AgentOverview[]>('/api/agent-office/v2/agent-overviews'),
+  getAgentOverviewV2: (agentId: string) => request<AgentOverview>(`/api/agent-office/v2/agents/${agentId}/overview`),
+  recordAgentPerformanceV2: (agentId: string, input: { event_type: string; run_id?: string; project_id?: string; score?: number; source?: string; detail?: string }) =>
+    request<AgentOverview>(`/api/agent-office/v2/agents/${agentId}/performance-events`, { method: 'POST', body: JSON.stringify(input) }),
+  listCapabilitiesV3: () => request<CapabilityDefinitionV3[]>('/api/agent-office/v3/capabilities'),
+  listAgentCapabilitiesV3: (agentId: string) => request<AgentCapabilityV3[]>(`/api/agent-office/v3/agents/${agentId}/capabilities`),
+  saveAgentCapabilitiesV3: (agentId: string, capabilities: Array<{ capability_key: string; declared_score?: number; enabled?: boolean; source?: 'manual'|'seed'|'learned' }>) =>
+    request<AgentCapabilityV3[]>(`/api/agent-office/v3/agents/${agentId}/capabilities`, { method: 'PUT', body: JSON.stringify({ capabilities }) }),
   listAgentsV2: () => request<AgentProfile[]>('/api/agent-office/v2/agents'),
   createAgentV2: (input: Partial<AgentProfile> & { name: string; slug: string }) =>
     request<AgentProfile>('/api/agent-office/v2/agents', {

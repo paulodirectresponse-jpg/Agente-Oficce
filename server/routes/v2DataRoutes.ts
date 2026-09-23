@@ -24,6 +24,7 @@ import {
 } from '../agent-office/toolRegistry.js';
 import { getFullAccessToolHealth } from '../agent-office/fullAccessTools.js';
 import { ProviderFallbackRepository, ProviderResilienceManager } from '../agent-office/providerResilience.js';
+import { AgentOperationsService } from '../agent-office/agentOperations.js';
 
 export const v2DataRouter = Router();
 
@@ -399,6 +400,50 @@ v2DataRouter.delete('/models/:modelId', (request, response) => {
 });
 
 // Agents
+v2DataRouter.get('/agent-overviews', (_request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    response.json({ ok: true, data: new AgentOperationsService(database.connection).list() });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.get('/agents/:agentId/overview', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    response.json({ ok: true, data: new AgentOperationsService(database.connection).overview(request.params.agentId) });
+  } catch (error) {
+    const code = codeOf(error, 'AGENT_OVERVIEW_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
+v2DataRouter.post('/agents/:agentId/performance-events', (request, response) => {
+  const database = openAgentOfficeDatabase();
+  try {
+    const body = request.body ?? {};
+    new AgentOperationsService(database.connection).recordPerformance({
+      agent_id: request.params.agentId,
+      run_id: typeof body.run_id === 'string' ? body.run_id : null,
+      project_id: typeof body.project_id === 'string' ? body.project_id : null,
+      event_type: String(body.event_type || ''),
+      score: body.score == null ? null : Number(body.score),
+      source: typeof body.source === 'string' ? body.source : 'user',
+      detail: typeof body.detail === 'string' ? body.detail : '',
+      metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
+    });
+    response.status(201).json({ ok: true, data: new AgentOperationsService(database.connection).overview(request.params.agentId) });
+  } catch (error) {
+    const code = codeOf(error, 'AGENT_PERFORMANCE_EVENT_FAILED');
+    response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
+  } finally {
+    database.connection.close();
+  }
+});
+
 v2DataRouter.get('/agents', (request, response) => {
   const database = openAgentOfficeDatabase();
   try {
@@ -458,7 +503,7 @@ v2DataRouter.patch('/agents/:agentId', (request, response) => {
   try {
     const body = request.body ?? {};
     const patch: Record<string, unknown> = {};
-    for (const key of ['name', 'slug', 'role', 'description', 'avatar_key', 'provider_id', 'model_id', 'system_prompt', 'enabled', 'sort_order', 'idle_after_seconds', 'metadata']) {
+    for (const key of ['name', 'slug', 'role', 'description', 'avatar_key', 'provider_id', 'model_id', 'system_prompt', 'enabled', 'paused', 'sort_order', 'idle_after_seconds', 'metadata']) {
       if (Object.prototype.hasOwnProperty.call(body, key)) patch[key] = body[key];
     }
     const updated = new AgentRepositoryV2(database.connection).update(request.params.agentId, patch);
