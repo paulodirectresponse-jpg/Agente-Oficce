@@ -24,15 +24,36 @@ export interface UsageSummary {
 export class UsageTracker {
   constructor(private readonly database: Database) {}
 
-  record(input: { agentId: string; provider: string; source: 'provider' | 'local' | 'run'; raw?: Record<string, unknown>; normalized?: NormalizedUsage }): void {
-    this.database.prepare('INSERT INTO usage_snapshots (id, agent_id, provider, source, raw_json, normalized_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+  record(input: {
+    agentId: string;
+    provider: string;
+    source: 'provider' | 'local' | 'run';
+    raw?: Record<string, unknown>;
+    normalized?: NormalizedUsage;
+    projectId?: string | null;
+    runId?: string | null;
+    modelId?: string | null;
+    costKind?: 'reported' | 'estimated' | 'unknown';
+  }): void {
+    this.database.prepare(`
+      INSERT INTO usage_snapshots (
+        id, agent_id, provider, source, raw_json, normalized_json, created_at,
+        project_id, run_id, model_id, cost_kind
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       crypto.randomUUID(), input.agentId, input.provider, input.source,
       JSON.stringify(input.raw ?? {}), JSON.stringify(input.normalized ?? {}), new Date().toISOString(),
+      input.projectId ?? null, input.runId ?? null, input.modelId ?? null, input.costKind ?? (input.normalized?.cost_usd == null ? 'unknown' : 'estimated'),
     );
   }
 
-  recordRunUsage(agentId: string, provider: string, normalized: NormalizedUsage): void {
-    this.record({ agentId, provider, source: 'run', normalized });
+  recordRunUsage(
+    agentId: string,
+    provider: string,
+    normalized: NormalizedUsage,
+    trace: { projectId?: string | null; runId?: string | null; modelId?: string | null; costKind?: 'reported' | 'estimated' | 'unknown' } = {},
+  ): void {
+    this.record({ agentId, provider, source: 'run', normalized, ...trace });
   }
 
   summarize(agentId: string, windowDays = 30): UsageSummary {
