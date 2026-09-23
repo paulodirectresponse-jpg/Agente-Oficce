@@ -67,7 +67,7 @@ export class TeamService {
     const svc=new SubagentService(this.db),current=svc.get(subagentId);if(!current||current.team_id!==teamId)throw new Error('SUBAGENT_NOT_FOUND');
     svc.remove(subagentId);this.bumpVersion(teamId);this.appendRoomEntry(teamId,{entry_type:'activity',content:'Subagent removido.',payload:{subagent_id:subagentId}});return true;
   }
-  listSubagents(teamId:string){if(!this.get(teamId))throw new Error('TEAM_NOT_FOUND');return new SubagentService(this.db).list(teamId)}
+  listSubagents(teamId:string){if(!this.db.prepare('SELECT 1 FROM teams WHERE id=?').get(teamId))throw new Error('TEAM_NOT_FOUND');return new SubagentService(this.db).list(teamId)}
 
   getRoom(teamId:string){
     if(!this.get(teamId))throw new Error('TEAM_NOT_FOUND');this.ensureRoom(teamId);
@@ -145,9 +145,9 @@ export class TeamService {
     if(team.owner_agent_id)for(const sub of subs.list(teamId))if(subs.isEligible(sub.id))specialists.push({id:sub.id,kind:'subagent',caps:subs.listCapabilities(sub.id).filter((c:any)=>c.enabled)});
     if(!team.owner_agent_id)for(const member of this.listMembers(teamId).filter(m=>m.enabled))if(ops.isEligible(member.agent_id))specialists.push({id:member.agent_id,kind:'agent',caps:this.caps.listAgent(member.agent_id).filter(c=>c.enabled)});
     const rows=new Map<string,{capability:string;coverage:boolean;specialists:string[];redundancy:number;tool_coverage:string[];confidence:number;evidence_count:number}>();
-    for(const member of specialists)for(const cap of member.caps){const score=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence);const cur=rows.get(cap.capability_key)??{capability:cap.capability_key,coverage:false,specialists:[],redundancy:0,tool_coverage:[],confidence:0,evidence_count:0};if(score>0){cur.coverage=true;cur.specialists.push(`${member.kind}:${member.id}`);cur.redundancy=cur.specialists.length;cur.confidence=Math.max(cur.confidence,cap.confidence);cur.evidence_count+=cap.evidence_count}rows.set(cap.capability_key,cur)}
+    for(const member of specialists)for(const cap of member.caps){const score=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence);const cur=rows.get(cap.capability_key)??{capability:cap.capability_key,coverage:false,specialists:[],redundancy:0,tool_coverage:[],confidence:0,evidence_count:0};if(score>0){cur.coverage=true;cur.specialists.push(member.kind==='agent'?member.id:`subagent:${member.id}`);cur.redundancy=cur.specialists.length;cur.confidence=Math.max(cur.confidence,cap.confidence);cur.evidence_count+=cap.evidence_count}rows.set(cap.capability_key,cur)}
     const missing=requirements.filter(r=>!specialists.some(m=>m.caps.some((c:any)=>this.capCovers(c,r,defs)))).map(r=>r.key);
-    return{team_id:teamId,active_members:specialists.map(m=>`${m.kind}:${m.id}`),capabilities:[...rows.values()].sort((a,b)=>a.capability.localeCompare(b.capability)),missing_capabilities:missing};
+    return{team_id:teamId,active_members:specialists.map(m=>m.kind==='agent'?m.id:`subagent:${m.id}`),capabilities:[...rows.values()].sort((a,b)=>a.capability.localeCompare(b.capability)),missing_capabilities:missing};
   }
 
   createDynamic(input:DynamicTeamInput){
