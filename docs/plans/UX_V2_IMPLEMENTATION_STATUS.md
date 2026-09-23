@@ -6,13 +6,16 @@ Update it **before every work session ends**.
 
 ## Current state
 
-- Overall: PHASE 1 DONE
-- Current macro phase: Phase 1 — Foundation + Trabalho — COMPLETE
-- Next macro phase: Phase 2 — Recompose the rest of the product
+- Overall: PHASE 2 DONE
+- Completed macro phases:
+  - Phase 1 — Foundation + Trabalho — COMPLETE
+  - Phase 2 — Recompose the rest of the product — COMPLETE
+- Next macro phase: Phase 3 — Product polish + release gate
 - Implementation branch: `ux-v2-redesign`
 - Baseline from main: `c153ea4e61b3456ef18c435afaa83a360bb14fca`
 - Phase 1 code gate SHA: `b384dc462560ee3cb1117d141e595abf560ed84a`
-- Phase 1 CI workflow: `35909526584` — PASS
+- Phase 2 code gate SHA: `92fcb65fa55a77ebea0fbe2acca217810881e6be`
+- Phase 2 CI workflow: `35913910720` — PASS
 - Blocked: no
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
 
@@ -27,32 +30,76 @@ Update it **before every work session ends**.
 - 3-phase implementation plan created.
 
 ### Phase 1 — Foundation + Trabalho
-- Shell V2 with primary navigation reduced to Trabalho / Equipe / Conexões / Configurações.
-- Compact Project Switcher with switch/new/all/settings actions.
-- Compact system status footer and System Center shell.
-- Legacy routes preserved under a quiet compatibility disclosure; nothing deleted prematurely.
-- Shared UX V2 primitives: tabs, status, empty state, drawer, page header.
-- Semantic Calm Control Room UX V2 tokens added to the current stylesheet.
-- New `TrabalhoView` is the primary workspace; old `DevChatView` remains compatibility-only.
-- Conversation-first layout with no permanent Run/Plan/Workforce column.
-- Compact execution summary in human language.
-- Activity/Execution drawer with steps, workers, recent runs and live activity.
-- Risk approvals remain explicit in the main conversation.
-- Queue/orient/interrupt behavior preserved with simplified user-facing language.
-- Contextual Inspector reuses the Workbench but hides empty tabs and humanizes labels.
-- Healthy Preview can open the Inspector contextually when it becomes useful.
-- Sala is a secondary mode inside Trabalho and preserves Agent Office's distinctive office visualization.
-- Permanent Event Stream removed from the primary work surface.
-- Responsive hardening: shrink-safe grid/flex, controlled prose wrapping, Inspector overlay at constrained widths, compact header behavior, sidebar/secondary surface handling and reduced-motion support.
+- Shell V2 with navigation reduced to Trabalho / Equipe / Conexões / Configurações.
+- Project Switcher and System Center entry.
+- Trabalho V2 conversation-first workspace.
+- Contextual Inspector and Activity drawer.
+- Sala as secondary mode.
+- Responsive/reflow foundation.
+- Legacy views preserved internally during parity migration.
+
+### Phase 2 — Recompose the rest of the product
+
+#### Equipe V2
+- Agents and permanent Teams/Subagents merged into one user-facing surface.
+- Simplified Agent creation/editing.
+- Agent detail organized into Geral / Inteligência / Equipe / Acesso / Atividade / Avançado.
+- Permanent hierarchy remains Agent → owned Team → Subagents.
+- No Agent → Agent hierarchy introduced.
+- Subagents can be created/removed directly from the owning Agent.
+- Full Access is summarized first; individual Tools are grouped behind disclosure.
+- Existing Agent activity/performance remains reachable contextually.
+
+#### Projects V2
+- Projects are accessed from the Project Switcher rather than permanent primary navigation.
+- Switcher actions support All Projects / New Project / Project settings.
+- Project detail reduced to Visão geral / Trabalho / Arquivos / Histórico / Configurações.
+- Files + Git + Artifacts recomposed under Arquivos.
+- Runs + Activity + Decisions + Blockers + temporary Workforces recomposed under Histórico/Trabalho.
+- Objective and latest result promoted to the overview.
+- Project lifecycle, name, workspace and final result moved to Configurações.
+- Existing persistent Project backend remains source of truth.
+
+#### Conexões V2
+- Providers and external Integrations merged into Conexões.
+- Top-level IA / Integrações split.
+- Provider experience organized into Geral / Modelos / Resiliência / Diagnóstico.
+- Provider model catalog is compact/searchable rather than a wall of cards.
+- Test connection and model discovery stay easy to reach.
+- Low-level provider configuration remains available behind an advanced disclosure for full parity.
+- Existing Integration Registry remains available under Integrações.
+- Local runtime capabilities are no longer presented as primary third-party connections.
+
+#### Configurações V2
+- Reorganized into Geral / Runtime / Orquestração / Avançado.
+- Project root moved to Geral.
+- Local tool health moved to Runtime.
+- Principal/Fast/Deep model selection and confidence controls moved to Orquestração.
+- Orchestrator model identifiers use canonical provider model IDs correctly.
+- Release Preflight and deep operational controls moved to Avançado.
+
+#### System Center V2
+- System Center is observational/diagnostic rather than a duplicate configuration screen.
+- Sections: Atividade / Uso & Custo / Saúde / Orquestração / Diagnóstico.
+- Health includes runtime, Providers, external Integrations and local Tools.
+- Orchestration shows recent routing outcomes/history without exposing tuning controls.
+- Configuration points users back to Configurações → Orquestração.
+- Analytics remains available under Uso & Custo.
+- Release diagnostics/preflight remain available under Diagnóstico.
+
+#### Navigation retirement
+- “Áreas antigas” was removed from the normal sidebar after parity.
+- Standalone Office / Chat / Orchestrator / Teams / Workforces / Integrations / Analytics routes remain only as internal compatibility code for now.
+- No old technical destination competes with the primary UX V2 navigation.
 
 ## Verification
 
-### Phase 1 final code gate — 2026-09-23
-Validated SHA: `b384dc462560ee3cb1117d141e595abf560ed84a`
-Workflow: `35909526584`
+### Phase 2 final code gate — 2026-09-23
+Validated SHA: `92fcb65fa55a77ebea0fbe2acca217810881e6be`
+Workflow: `35913910720`
 
 - Release version consistency: PASS
-- Unit and integration tests: PASS
+- Unit and integration tests: PASS (249 tests)
 - Deterministic benchmark: PASS
 - Release preflight: PASS
 - Typecheck: PASS
@@ -65,28 +112,30 @@ Workflow: `35909526584`
 - MSI artifact upload: PASS
 - Release diagnostics upload: PASS
 
-Backend architecture was not rewritten for UX V2.
+No Blocks 1–11 backend invariant was intentionally rewritten for UX V2.
 
 ## In progress
 
-None. Phase 1 is closed.
+None. Phase 2 is closed.
 
 ## Next exact action
 
-Start Phase 2 from the current remote `ux-v2-redesign` branch:
+Start Phase 3 — Product polish + release gate.
 
-1. build Equipe V2 by merging Agent management + owned Team/Subagents into the approved Agent detail structure;
-2. move Project Manager/detail into Project Switcher flows;
-3. build Conexões V2 with IA + Integrações;
-4. build full System Center + reorganized Settings;
-5. verify functional parity before retiring legacy navigation/routes;
-6. preserve all Blocks 1–11 backend invariants.
+Phase 3 must not introduce another major information architecture unless a concrete usability blocker is found.
 
-Recommended first Phase 2 checkpoint:
+Required focus:
 
-`ux: merge Agents and Teams into Equipe V2`
+1. full UX writing/Portuguese consistency pass;
+2. visual consistency against `DESIGN.md`;
+3. empty/loading/error/degraded/approval/destructive states;
+4. keyboard/focus/accessibility pass;
+5. 1366 / 1440 / 1920 / ultrawide verification;
+6. 200% zoom/text reflow;
+7. remove dead legacy UI/components/styles only after proving they are no longer needed;
+8. final release gate + MSI.
 
-Do not redo Shell V2 or Trabalho V2 unless testing reveals a concrete defect.
+Do not redo Phase 1 or Phase 2 architecture without a concrete defect.
 
 ## Known UX defects to eliminate
 
