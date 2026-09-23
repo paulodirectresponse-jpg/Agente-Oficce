@@ -250,6 +250,21 @@ export interface AnalyticsSnapshot {
   tools: AnalyticsTool[];
 }
 
+export interface ReleasePreflightCheck {
+  id: string;
+  label: string;
+  status: 'pass' | 'warn' | 'fail';
+  detail: string;
+  blocking: boolean;
+}
+
+export interface ReleasePreflightReport {
+  generated_at: string;
+  ready: boolean;
+  migration_version: number;
+  checks: ReleasePreflightCheck[];
+}
+
 export type TaskStatus =
   | 'queued'
   | 'running'

@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -96,6 +96,7 @@ export const api = {
     const query = params.toString();
     return request<AnalyticsSnapshot>(`/api/agent-office/v3/analytics${query ? `?${query}` : ''}`);
   },
+  getReleasePreflightV3: (activeTools = false) => request<ReleasePreflightReport>(`/api/agent-office/v3/release/preflight${activeTools ? '?active_tools=1' : ''}`),
   getProviderConfig: (providerId: string) =>
     request<ProviderConfig>(`/api/agent-office/providers/${providerId}/config`),
   saveProviderConfig: (providerId: string, config: ProviderConfig) =>

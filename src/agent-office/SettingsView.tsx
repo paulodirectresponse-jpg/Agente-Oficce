@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ProjectRootSetting, RuntimeToolHealth } from './types.js';
+import type { ProjectRootSetting, RuntimeToolHealth, ReleasePreflightReport } from './types.js';
 import { api } from './api.js';
 
 export function SettingsView() {
@@ -9,6 +9,8 @@ export function SettingsView() {
   const [testingTools, setTestingTools] = useState(false);
   const [toolHealth, setToolHealth] = useState<RuntimeToolHealth[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<ReleasePreflightReport | null>(null);
+  const [checkingRelease, setCheckingRelease] = useState(false);
 
   const healthyCount = useMemo(
     () => toolHealth.filter((tool) => tool.status === 'healthy').length,
@@ -39,6 +41,18 @@ export function SettingsView() {
       .then(setToolHealth)
       .catch((reason) => setMessage(reason instanceof Error ? reason.message : 'Falha ao carregar configurações.'));
   }, []);
+
+  const runPreflight = async () => {
+    setCheckingRelease(true);
+    setMessage(null);
+    try {
+      setPreflight(await api.getReleasePreflightV3(false));
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : 'Falha no preflight de release.');
+    } finally {
+      setCheckingRelease(false);
+    }
+  };
 
   const save = async () => {
     if (!path.trim()) return;
@@ -114,6 +128,31 @@ export function SettingsView() {
           Status: {setting?.configured ? 'configurada' : 'ainda não configurada'}.
         </p>
         {message && <p className="muted">{message}</p>}
+      </div>
+
+      <div className="panel release-preflight-panel">
+        <div className="runtime-status-header">
+          <div>
+            <h3>Release Preflight</h3>
+            <p className="muted">Validação local de banco, migrations e runtime crítico antes de considerar uma build pronta.</p>
+          </div>
+          {preflight && <div className="runtime-health-summary">
+            <strong>{preflight.ready ? 'READY' : 'BLOCKED'}</strong>
+            <span>migration {preflight.migration_version}</span>
+          </div>}
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => void runPreflight()} disabled={checkingRelease}>
+          {checkingRelease ? 'Validando…' : 'Executar preflight'}
+        </button>
+        {preflight && <div className="runtime-tool-grid release-preflight-grid">
+          {preflight.checks.map((check) => (
+            <div key={check.id} className={`runtime-tool-card status-${check.status === 'pass' ? 'healthy' : check.status === 'fail' ? 'unavailable' : 'degraded'}`}>
+              <div><span className="runtime-tool-dot" /><strong>{check.label}</strong></div>
+              <span className="runtime-tool-status">{check.status}{check.blocking ? ' · blocking' : ''}</span>
+              <small>{check.detail}</small>
+            </div>
+          ))}
+        </div>}
       </div>
 
       <div className="panel">

@@ -1,0 +1,188 @@
+name: Agent Office Release Gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release-windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Version consistency
+        run: npm run release:version
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Build client and server
+        run: npm run build
+
+      - name: Deterministic benchmark
+        run: npm run benchmark
+
+      - name: Stress benchmark
+        run: npm run benchmark:stress
+
+      - name: Release preflight
+        run: npm run release:preflight
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build current desktop MSI
+        run: npm run tauri:build
+
+      - name: Build previous desktop MSI
+        shell: pwsh
+        run: |
+          $previous = git rev-parse HEAD^
+          $previousDir = Join-Path $env:RUNNER_TEMP "agent-office-previous"
+          git worktree add --detach $previousDir $previous
+          Push-Location $previousDir
+          try {
+            npm ci
+            npm run tauri:build
+          } finally {
+            Pop-Location
+          }
+          $previousMsi = Get-ChildItem "$previousDir/src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $previousMsi) { throw "Previous MSI was not generated" }
+          "PREVIOUS_MSI=$($previousMsi.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upgrade MSI preserves local data
+        shell: pwsh
+        run: |
+          function Find-AgentOfficeExe {
+            $roots = @($env:ProgramFiles, $env:LOCALAPPDATA) | Where-Object { $_ -and (Test-Path $_) }
+            foreach ($root in $roots) {
+              $exe = Get-ChildItem -Path $root -Filter "agent-office.exe" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($exe) { return $exe.FullName }
+            }
+            return $null
+          }
+
+          function Start-AgentOfficeAndResolveBackend {
+            $exe = Find-AgentOfficeExe
+            if (-not $exe) { throw "Agent Office executable not found" }
+            $app = Start-Process -FilePath $exe -PassThru
+            $backend = $null
+            for ($i = 0; $i -lt 80; $i++) {
+              $backend = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -ieq "node-runtime.exe" -and $_.CommandLine -match "Agent Office.*runtime.*server.*index\.js" } |
+                Sort-Object CreationDate -Descending | Select-Object -First 1
+              if ($backend) { break }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $backend) { throw "Installed backend did not start" }
+            $listener = $null
+            for ($i = 0; $i -lt 30; $i++) {
+              $listener = Get-NetTCPConnection -OwningProcess $backend.ProcessId -State Listen -ErrorAction SilentlyContinue |
+                Where-Object { $_.LocalAddress -eq "127.0.0.1" -or $_.LocalAddress -eq "::1" } | Select-Object -First 1
+              if ($listener) { break }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $listener) { throw "Installed backend did not expose loopback port" }
+            $base = "http://127.0.0.1:$($listener.LocalPort)"
+            for ($i = 0; $i -lt 30; $i++) {
+              try {
+                $health = Invoke-RestMethod "$base/api/agent-office/health" -TimeoutSec 2
+                if ($health.ok -eq $true) { return @{ App=$app; Backend=$backend; Base=$base } }
+              } catch {}
+              Start-Sleep -Milliseconds 500
+            }
+            throw "Installed backend health failed"
+          }
+
+          function Stop-AgentOffice($runtime) {
+            $runtime.App.CloseMainWindow() | Out-Null
+            if (-not $runtime.App.WaitForExit(15000)) { Stop-Process -Id $runtime.App.Id -Force -ErrorAction SilentlyContinue }
+            Start-Sleep -Seconds 2
+            if (Get-Process -Id $runtime.Backend.ProcessId -ErrorAction SilentlyContinue) {
+              throw "Backend remained orphaned after desktop shutdown"
+            }
+          }
+
+          $installPrev = Start-Process msiexec.exe -ArgumentList @("/i", "`"$env:PREVIOUS_MSI`"", "/qn", "/norestart") -Wait -PassThru
+          if ($installPrev.ExitCode -ne 0) { throw "Previous MSI install failed: $($installPrev.ExitCode)" }
+
+          $old = Start-AgentOfficeAndResolveBackend
+          $root = Join-Path $env:RUNNER_TEMP "upgrade-projects"
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          Invoke-RestMethod "$($old.Base)/api/agent-office/settings/project-root" -Method Put -ContentType "application/json" -Body (@{path=$root}|ConvertTo-Json) | Out-Null
+          $project = Invoke-RestMethod "$($old.Base)/api/agent-office/projects" -Method Post -ContentType "application/json" -Body (@{name="Upgrade Sentinel"}|ConvertTo-Json)
+          $projectId = $project.data.id
+          Invoke-RestMethod "$($old.Base)/api/agent-office/projects/$projectId/messages" -Method Post -ContentType "application/json" -Body (@{role="user";content="persist-across-msi-upgrade"}|ConvertTo-Json) | Out-Null
+          Stop-AgentOffice $old
+
+          $currentMsi = Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $currentMsi) { throw "Current MSI missing" }
+          $upgrade = Start-Process msiexec.exe -ArgumentList @("/i", "`"$($currentMsi.FullName)`"", "/qn", "/norestart") -Wait -PassThru
+          if ($upgrade.ExitCode -ne 0) { throw "Current MSI upgrade failed: $($upgrade.ExitCode)" }
+
+          $new = Start-AgentOfficeAndResolveBackend
+          $projects = Invoke-RestMethod "$($new.Base)/api/agent-office/projects"
+          if (-not ($projects.data | Where-Object { $_.id -eq $projectId -and $_.name -eq "Upgrade Sentinel" })) {
+            throw "Project did not survive MSI upgrade"
+          }
+          $conversation = Invoke-RestMethod "$($new.Base)/api/agent-office/projects/$projectId/conversation"
+          if (-not ($conversation.data.messages | Where-Object { $_.content -eq "persist-across-msi-upgrade" })) {
+            throw "Conversation did not survive MSI upgrade"
+          }
+          $setting = Invoke-RestMethod "$($new.Base)/api/agent-office/settings/project-root"
+          if ($setting.data.path -ne $root) { throw "Project root setting did not survive MSI upgrade" }
+          $preflight = Invoke-RestMethod "$($new.Base)/api/agent-office/v3/release/preflight"
+          if ($preflight.data.migration_version -lt 22) { throw "Migration version did not survive/upgrade correctly" }
+          Stop-AgentOffice $new
+          Write-Host "MSI upgrade preservation gate passed."
+
+      - name: Fresh install current MSI
+        shell: pwsh
+        run: |
+          $currentMsi = Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          $uninstall = Start-Process msiexec.exe -ArgumentList @("/x", "`"$($currentMsi.FullName)`"", "/qn", "/norestart") -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstall before fresh-install gate failed: $($uninstall.ExitCode)" }
+          $install = Start-Process msiexec.exe -ArgumentList @("/i", "`"$($currentMsi.FullName)`"", "/qn", "/norestart") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Fresh install failed: $($install.ExitCode)" }
+          Write-Host "Fresh install gate passed."
+
+      - name: Generate release manifest
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          node scripts/release-manifest.mjs "$($msi.FullName)"
+
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          $manifest = Get-Content "artifacts/release/release-manifest.json" -Raw | ConvertFrom-Json
+          if (-not $manifest.artifact.sha256) { throw "MSI SHA-256 missing from release manifest" }
+          if ($manifest.preflight.ready -ne $true) { throw "Release manifest reports failed preflight" }
+          if ($manifest.benchmark.failed -ne 0) { throw "Release manifest reports benchmark failures" }
+          Write-Host "Release $($manifest.version) SHA-256 $($manifest.artifact.sha256)"
+
+      - name: Upload release gate artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-office-release-gate
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            artifacts/release/*.json
+          if-no-files-found: error

@@ -1,90 +1,123 @@
-# Testes e Release Gate
+# Testes, Benchmark e Release Gate
 
-## 1. Estratégia
-- unit;
-- integration;
-- E2E crítico;
-- manual smoke.
+## Princípio
+A release não é aprovada apenas porque a UI abre ou os testes unitários passam. O Agent Office usa gates cumulativos: invariantes, benchmark determinístico, preflight, build desktop e lifecycle instalado.
 
-## 2. Unit
-Cobrir:
-- router;
-- risk classifier;
-- context builder;
-- handoff builder;
-- usage normalization;
-- lock manager;
-- retry policy;
-- secret masking.
-
-## 3. Integration
-Cobrir:
+## Gate de PR
+Todo PR para `main` deve executar:
+- `npm ci`;
+- `npm run release:version`;
+- `npm test`;
+- `npm run benchmark`;
+- `npm run release:preflight`;
+- `npm run lint`;
+- `npm run build`;
+- Rust/Tauri build;
+- bundled backend smoke;
+- instalação real do MSI;
+- health do backend instalado;
 - SQLite;
-- process runner;
-- adapter mocks;
-- real adapter health check opcional;
-- crash recovery.
+- shutdown sem backend órfão;
+- release manifest;
+- upload do MSI e diagnostics.
 
-## 4. E2E obrigatório
-### E2E 1
-Criar projeto -> mandar mensagem -> criar task -> executar mock -> salvar.
+## Benchmark determinístico
+O benchmark padrão não usa provider pago.
 
-### E2E 2
-Kimi -> handoff -> Claude -> mesmo task state.
+Golden set atual:
+- routing;
+- capability matching;
+- Execution DAG;
+- recovery;
+- security/redaction.
 
-### E2E 3
-Restart app -> retomar conversation/task.
+Resultados são gravados em `artifacts/release/benchmark-results.json`.
 
-### E2E 4
-Agent falha 3 vezes -> blocked/escalation.
+O benchmark deve validar decisões estruturais e invariantes; não comparar “qualidade estética” de texto gerado.
 
-### E2E 5
-Codex Protected Mode impede uso automático.
+## Stress benchmark
+`npm run benchmark:stress` é separado do PR gate. Ele repete a suíte determinística e é executado no Production Release Gate.
 
-### E2E 6
-Cancelamento libera writer lock.
+Stress maior pode evoluir para dezenas de milhares de casos, mas não deve tornar cada PR inutilmente lento.
 
-## 5. Regressões obrigatórias
+## Release Preflight
+`npm run release:preflight` valida:
+- SQLite integrity;
+- foreign keys;
+- migration atual;
+- project root;
+- providers/models/agents disponíveis como warnings quando ausentes;
+- Files/Shell/Git como runtime crítico;
+- GitHub/Browser/Computer como recursos opcionais quando indisponíveis.
+
+Falha em check crítico bloqueia release. Recurso opcional ausente gera warning.
+
+## Versionamento
+`npm run release:version` exige igualdade entre:
+- `package.json`;
+- `package-lock.json`;
+- root package do lockfile;
+- `src-tauri/tauri.conf.json`.
+
+## Release manifest
+`npm run release:manifest -- <path-do-msi>` gera:
+- versão;
+- Git SHA;
+- migration;
+- workflow;
+- benchmark;
+- preflight;
+- tamanho do MSI;
+- SHA-256 do MSI.
+
+Arquivo: `artifacts/release/release-manifest.json`.
+
+## Production Release Gate
+Workflow: `Agent Office Release Gate`.
+
+Além do gate normal:
+- stress benchmark;
+- build da versão anterior;
+- instalação da versão anterior;
+- criação de Project, conversation e settings sentinela;
+- instalação da versão atual por cima;
+- verificação de preservação desses dados;
+- preflight após upgrade;
+- fresh-install gate;
+- release manifest + artifact digest.
+
+O workflow é manual/tag-driven para não dobrar o custo de build em todo PR.
+
+## Regressões obrigatórias
 - UTF-8/pt-BR;
 - caminhos Windows;
 - projeto com espaços;
-- projeto sem Git;
 - provider offline;
-- app reiniciado durante run;
-- API key inválida;
-- sessão expirada;
-- output muito longo;
-- stderr;
-- event duplication.
+- restart durante run;
+- cancelamento;
+- approvals;
+- recovery;
+- event duplication;
+- migration upgrade;
+- usage sem dupla contagem;
+- custo unknown não convertido para zero;
+- Team/Subagent invariants;
+- filesystem/secret protections.
 
-## 6. Definition of Done por task
-Uma task só está done se:
-- critérios atendidos;
-- testes relevantes rodados;
-- nenhum erro crítico aberto;
-- handoff/result salvo;
-- writer lock liberado;
-- UI atualizada;
-- logs disponíveis.
+## Release blockers
+Não liberar se houver:
+- data loss em migration/upgrade;
+- foreign-key corruption;
+- secret leak conhecido;
+- hierarchy/dependency cycle conhecido;
+- permission escalation conhecida;
+- duplicate destructive side effect conhecido;
+- recovery inconsistente;
+- benchmark estrutural crítico falhando;
+- versões divergentes;
+- MSI não instalável;
+- upgrade MSI perdendo Project/conversation/settings;
+- backend órfão após fechamento.
 
-## 7. Release Gate
-Antes de marcar V1:
-- build Windows;
-- app inicia em máquina limpa/teste;
-- migrations funcionam;
-- secrets persistem com segurança;
-- não há keys em logs;
-- E2E principal passa;
-- usuário consegue configurar cada agente;
-- um provider offline não derruba app;
-- chat e tasks sobrevivem restart.
-
-## 8. Não permitir
-- esconder testes quebrados;
-- comentar teste para passar;
-- remover validação para "resolver";
-- hardcode de path pessoal;
-- hardcode de API key;
-- catch vazio;
-- Promise rejeitada sem handler;
-- TODO crítico em fluxo principal.
+## Providers reais
+Smoke de provider pago é opcional e deve exigir autorização explícita de custo. O gate determinístico nunca depende disso.

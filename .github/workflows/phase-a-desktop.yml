@@ -25,8 +25,17 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Release version consistency
+        run: npm run release:version
+
       - name: Unit and integration tests
         run: npm test
+
+      - name: Deterministic benchmark
+        run: npm run benchmark
+
+      - name: Release preflight
+        run: npm run release:preflight
 
       - name: Typecheck
         run: npm run lint
@@ -220,9 +229,22 @@ jobs:
           if ($msi.Length -le 0) { throw "MSI is empty" }
           Write-Host "MSI: $($msi.FullName) ($($msi.Length) bytes)"
 
+      - name: Generate PR release manifest
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
+          node scripts/release-manifest.mjs "$($msi.FullName)"
+
       - name: Upload MSI
         uses: actions/upload-artifact@v4
         with:
           name: agent-office-desktop-msi
           path: src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
+
+      - name: Upload release diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-office-release-diagnostics
+          path: artifacts/release/*.json
           if-no-files-found: error
