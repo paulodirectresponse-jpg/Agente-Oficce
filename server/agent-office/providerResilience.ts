@@ -323,9 +323,14 @@ export class ProviderResilienceManager {
       state.circuitState = 'open';
       state.circuitOpenedAt = Date.now();
     }
-    const status = state.circuitState === 'open'
-      ? 'unavailable'
-      : state.cooldownUntil > Date.now() ? 'rate_limited' : 'degraded';
+    const httpStatus = Number(error?.status);
+    const status = httpStatus === 401 || httpStatus === 403
+      ? 'auth_error'
+      : httpStatus === 400 || error?.code === 'PROVIDER_SECRET_MISSING'
+        ? 'misconfigured'
+        : state.circuitState === 'open'
+          ? 'unavailable'
+          : state.cooldownUntil > Date.now() ? 'rate_limited' : 'degraded';
     this.persist(provider, state, status);
     this.database.prepare(`
       INSERT INTO provider_model_runtime_state (
