@@ -9,6 +9,7 @@ import { ChatRunRepository } from '../agent-office/v2DataModel.js';
 import { OrchestratorGateway } from '../agent-office/orchestratorGateway.js';
 import { UniversalOrchestratorLLM } from '../agent-office/orchestratorRuntime.js';
 import { TeamService } from '../agent-office/teamService.js';
+import { WorkspaceService } from '../agent-office/workspaceService.js';
 
 export const chatRouter = Router();
 
@@ -97,6 +98,7 @@ chatRouter.post('/runs', async (request, response) => {
     });
 
     const receipt = service.receipt(prepared);
+    new WorkspaceService(database.connection).captureBaseline(projectId, prepared.run.id);
     const workforceId = decision.target_mode === 'dynamic_team' ? decision.target_team_id : undefined;
     if (workforceId) new TeamService(database.connection).bindWorkforceToChat(workforceId, prepared.run.id);
     const signal = chatRunControls.register(prepared.run.id);
