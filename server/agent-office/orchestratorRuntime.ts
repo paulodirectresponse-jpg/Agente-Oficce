@@ -38,6 +38,7 @@ function extractJson(text:string):unknown{const t=text.trim().replace(/^\`\`\`(?
 function prompt(level:'fast'|'deep',input:{message:string;domains:string[];constraints:Record<string,unknown>}){return['You are Agent Office central routing control. Return ONLY strict JSON; never reveal hidden chain-of-thought.','Choose resources; do not execute the task.','target_mode: direct_agent | dynamic_team | existing_team | needs_gap_analysis.','Keys: target_mode, normalized_goal, required_capabilities, required_tools, complexity, risk, requires_plan, candidate_scope, quality_controls, explanation, confidence.','required_capabilities items use capability keys available to the Office. explanation is a short operational rationale.',`Level: ${level}`,`Domains: ${JSON.stringify(input.domains)}`,`Constraints: ${JSON.stringify(input.constraints)}`,`Request: ${input.message}`].join('\n')}
 
 export class UniversalOrchestratorLLM implements OrchestratorLLM{
+  readonly requires_configured_model=true;
   constructor(private db:Database){}
   private pick(level:'fast'|'deep'){const s=getOrchestratorSettings(this.db);if(!s.enabled)throw new Error('ORCHESTRATOR_AI_DISABLED');const x=level==='fast'?s.fast:s.deep;const r=x?.provider_id&&x.model_id?x:s.principal;if(!r.provider_id||!r.model_id)throw new Error('ORCHESTRATOR_MODEL_REQUIRED');return r}
   async decide(level:'fast'|'deep',input:{message:string;domains:string[];constraints:Record<string,unknown>}):Promise<OrchestratorLLMEnvelope>{
