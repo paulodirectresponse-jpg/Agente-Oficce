@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
+import { CapabilityRepository } from './capabilityCore.js';
 
 export interface SubagentInput {
   name:string;
@@ -48,6 +49,7 @@ export class SubagentService {
       input.provider_id??null,input.model_id??null,input.system_prompt??'',input.enabled===false?0:1,input.paused?1:0,
       Math.floor(input.sort_order??0),JSON.stringify(input.metadata??{}),t,t
     );
+    new CapabilityRepository(this.db).seed();
     this.inferCapabilities(sid);
     return this.get(sid)!;
   }
@@ -77,21 +79,8 @@ export class SubagentService {
   }
 
   readiness(subagentId:string){
-    const s=this.get(subagentId);if(!s)return{status:'missing',reason:'Subagent inexistente.'};
-    if(!s.enabled)return{status:'inactive',reason:'Subagent desativado.'};
-    if(s.paused)return{status:'paused',reason:'Subagent pausado.'};
-    if(!s.provider_id||!s.model_id)return{status:'incomplete',reason:'Configure provider e modelo.'};
-    const p=this.db.prepare('SELECT enabled,health_status FROM providers WHERE id=?').get(s.provider_id) as any;
-    const m=this.db.prepare('SELECT enabled,model_id FROM provider_models WHERE id=?').get(s.model_id) as any;
-    if(!p?.enabled)return{status:'provider_unavailable',reason:'Provider indisponível.'};
-    if(!m?.enabled)return{status:'model_unavailable',reason:'Modelo indisponível.'};
-    const pr=this.db.prepare('SELECT operational_status FROM provider_runtime_state WHERE provider_id=?').get(s.provider_id) as any;
-    const mr=this.db.prepare('SELECT operational_status FROM provider_model_runtime_state WHERE provider_id=? AND model_id=?').get(s.provider_id,m.model_id) as any;
-    const ps=String(pr?.operational_status??p.health_status??'unknown'),ms=String(mr?.operational_status??'unknown');
-    if(['auth_error','misconfigured','unavailable'].includes(ps))return{status:'provider_unavailable',reason:'Provider: '+ps};
-    if(['auth_error','misconfigured','unavailable'].includes(ms))return{status:'model_unavailable',reason:'Modelo: '+ms};
-    if(['degraded','rate_limited'].includes(ps)||['degraded','rate_limited'].includes(ms))return{status:'degraded',reason:`Runtime degradado: ${ps}/${ms}`};
-    return{status:'ready',reason:'Subagent pronto para execução.'};
+    const row=this.db.prepare('SELECT * FROM subagents WHERE id=?').get(subagentId) as any;
+    return row?this.readinessForRow(row):{status:'missing',reason:'Subagent inexistente.'};
   }
 
   isEligible(subagentId:string){return ['ready','degraded'].includes(this.readiness(subagentId).status)}
@@ -140,10 +129,23 @@ export class SubagentService {
   }
 
   private hydrate(row:any){
-    const ready=this.readinessRaw(row);
+    const ready=this.readinessForRow(row);
     return {...row,enabled:Boolean(row.enabled),paused:Boolean(row.paused),metadata:parse(row.metadata_json),readiness:ready.status,readiness_reason:ready.reason,capabilities:this.listCapabilities(row.id)};
   }
-  private readinessRaw(row:any){
-    if(!row.enabled)return{status:'inactive',reason:'Subagent desativado.'};if(row.paused)return{status:'paused',reason:'Subagent pausado.'};if(!row.provider_id||!row.model_id)return{status:'incomplete',reason:'Configure provider e modelo.'};return{status:'configured',reason:'Configuração disponível.'};
+  private readinessForRow(row:any){
+    if(!row.enabled)return{status:'inactive',reason:'Subagent desativado.'};
+    if(row.paused)return{status:'paused',reason:'Subagent pausado.'};
+    if(!row.provider_id||!row.model_id)return{status:'incomplete',reason:'Configure provider e modelo.'};
+    const p=this.db.prepare('SELECT enabled,health_status FROM providers WHERE id=?').get(row.provider_id) as any;
+    const m=this.db.prepare('SELECT enabled,model_id FROM provider_models WHERE id=?').get(row.model_id) as any;
+    if(!p?.enabled)return{status:'provider_unavailable',reason:'Provider indisponível.'};
+    if(!m?.enabled)return{status:'model_unavailable',reason:'Modelo indisponível.'};
+    const pr=this.db.prepare('SELECT operational_status FROM provider_runtime_state WHERE provider_id=?').get(row.provider_id) as any;
+    const mr=this.db.prepare('SELECT operational_status FROM provider_model_runtime_state WHERE provider_id=? AND model_id=?').get(row.provider_id,m.model_id) as any;
+    const ps=String(pr?.operational_status??p.health_status??'unknown'),ms=String(mr?.operational_status??'unknown');
+    if(['auth_error','misconfigured','unavailable'].includes(ps))return{status:'provider_unavailable',reason:'Provider: '+ps};
+    if(['auth_error','misconfigured','unavailable'].includes(ms))return{status:'model_unavailable',reason:'Modelo: '+ms};
+    if(['degraded','rate_limited'].includes(ps)||['degraded','rate_limited'].includes(ms))return{status:'degraded',reason:`Runtime degradado: ${ps}/${ms}`};
+    return{status:'ready',reason:'Subagent pronto para execução.'};
   }
 }
