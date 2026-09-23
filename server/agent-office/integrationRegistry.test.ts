@@ -6,6 +6,7 @@ import { openAgentOfficeDatabase } from './database.js';
 import { IntegrationRegistryService } from './integrationRegistry.js';
 import { GapAnalysisService } from './gapAnalysis.js';
 import { ToolRegistry, type AgentToolPolicy } from './toolRegistry.js';
+import { CapabilityMatcher } from './capabilityCore.js';
 import type { SecretStore } from './secretStore.js';
 
 class MemorySecrets implements SecretStore {
@@ -77,6 +78,16 @@ describe('Block 11 Integration Registry',()=>{
       expect(first).toMatchObject({ok:false,error:'TOOL_APPROVAL_REQUIRED',approval_required:true});
       expect(second.approval_id).toBe(first.approval_id);
       expect(f.db.connection.prepare("SELECT COUNT(*) n FROM tool_approvals WHERE tool_name='github_pr_merge'").get()).toEqual({n:1});
+    }finally{f.done()}
+  });
+
+  it('blocks a model that explicitly declares tool calling unsupported',()=>{
+    const f=fixture();
+    try{
+      f.db.connection.prepare("UPDATE provider_models SET capabilities_json='{\"tools\":false}' WHERE id='m1'").run();
+      const match=new CapabilityMatcher(f.db.connection).match([],['github_repo_list']).find(x=>x.agent_id==='a1');
+      expect(match?.eligible).toBe(false);
+      expect(match?.blockers).toContain('model:tool_calling_unsupported');
     }finally{f.done()}
   });
 
