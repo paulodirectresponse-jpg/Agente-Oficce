@@ -1124,7 +1124,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_preview_project_status
         ON preview_sessions(project_id,status,updated_at DESC);
     `,
-  }
+  },
   {
     version: 21,
     sql: `
