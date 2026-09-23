@@ -4,10 +4,9 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import type { Database } from 'better-sqlite3';
-import { openAgentOfficeDatabase } from './database.js';
 
 const MAX_LOG=256*1024;
-interface ActivePreview{child:ChildProcess;projectId:string;sessionId:string;port:number;url:string}
+interface ActivePreview{child:ChildProcess;projectId:string;sessionId:string;port:number;url:string;stdout:string;stderr:string;exitCode:number|null}
 const active=new Map<string,ActivePreview>();
 const bounded=(v:string)=>v.length>MAX_LOG?v.slice(-MAX_LOG)+'\n[truncated]':v;
 const now=()=>new Date().toISOString();
@@ -42,10 +41,9 @@ export class PreviewService{
     const env={...process.env,PORT:String(port),HOST:'127.0.0.1',BROWSER:'none'};
     const child=spawn(detected.command,{cwd:project.root_path,env,shell:true,windowsHide:true,stdio:['ignore','pipe','pipe']});
     this.db.prepare(`INSERT INTO preview_sessions(id,project_id,chat_run_id,process_id,pid,command,port,url,status,stdout,stderr,started_at,updated_at)VALUES(?,?,?,?,?,?,?,?, 'starting','','',?,?)`).run(sessionId,projectId,input.chat_run_id??null,sessionId,child.pid??null,detected.command,port,url,t,t);
-    active.set(projectId,{child,projectId,sessionId,port,url});
-    const append=(kind:'stdout'|'stderr',chunk:any)=>{const db=openAgentOfficeDatabase();try{const row=db.connection.prepare(`SELECT ${kind} value FROM preview_sessions WHERE id=?`).get(sessionId) as any;db.connection.prepare(`UPDATE preview_sessions SET ${kind}=?,updated_at=? WHERE id=?`).run(bounded(String(row?.value??'')+String(chunk)),now(),sessionId)}finally{db.connection.close()}};
-    child.stdout?.on('data',x=>append('stdout',x));child.stderr?.on('data',x=>append('stderr',x));
-    child.on('exit',(code)=>{active.delete(projectId);const db=openAgentOfficeDatabase();try{const row=db.connection.prepare('SELECT status FROM preview_sessions WHERE id=?').get(sessionId) as any;if(row?.status==='stopped')return;db.connection.prepare("UPDATE preview_sessions SET status=?,updated_at=?,stopped_at=? WHERE id=?").run(code===0?'stopped':'failed',now(),now(),sessionId)}finally{db.connection.close()}});
+    const entry:ActivePreview={child,projectId,sessionId,port,url,stdout:'',stderr:'',exitCode:null};active.set(projectId,entry);
+    child.stdout?.on('data',x=>{entry.stdout=bounded(entry.stdout+String(x))});child.stderr?.on('data',x=>{entry.stderr=bounded(entry.stderr+String(x))});
+    child.on('exit',(code)=>{entry.exitCode=code??0});
     const healthy=await waitHealth(url,child);
     this.db.prepare('UPDATE preview_sessions SET status=?,updated_at=? WHERE id=?').run(healthy?'healthy':child.exitCode===null?'failed':'failed',now(),sessionId);
     return this.status(projectId);
@@ -53,8 +51,17 @@ export class PreviewService{
   status(projectId:string){
     this.project(projectId);let row=this.db.prepare('SELECT * FROM preview_sessions WHERE project_id=? ORDER BY updated_at DESC LIMIT 1').get(projectId) as any;if(!row)return null;
     const live=active.get(projectId);
-    if((row.status==='starting'||row.status==='healthy')&&!live){const t=now();this.db.prepare("UPDATE preview_sessions SET status='stopped',updated_at=?,stopped_at=COALESCE(stopped_at,?) WHERE id=?").run(t,t,row.id);row=this.db.prepare('SELECT * FROM preview_sessions WHERE id=?').get(row.id) as any}
-    return{...row,running:Boolean(live&&live.child.exitCode===null&&!live.child.killed)};
+    if(live){
+      const running=live.exitCode===null&&live.child.exitCode===null&&!live.child.killed;
+      const nextStatus=running?row.status:(live.exitCode===0?'stopped':'failed');
+      const stoppedAt=running?row.stopped_at:(row.stopped_at??now());
+      this.db.prepare('UPDATE preview_sessions SET status=?,stdout=?,stderr=?,updated_at=?,stopped_at=? WHERE id=?').run(nextStatus,live.stdout,live.stderr,now(),stoppedAt,row.id);
+      row=this.db.prepare('SELECT * FROM preview_sessions WHERE id=?').get(row.id) as any;
+      if(!running)active.delete(projectId);
+      return{...row,running};
+    }
+    if(row.status==='starting'||row.status==='healthy'){const t=now();this.db.prepare("UPDATE preview_sessions SET status='stopped',updated_at=?,stopped_at=COALESCE(stopped_at,?) WHERE id=?").run(t,t,row.id);row=this.db.prepare('SELECT * FROM preview_sessions WHERE id=?').get(row.id) as any}
+    return{...row,running:false};
   }
   logs(projectId:string){const s=this.status(projectId);return s?{id:s.id,status:s.status,stdout:s.stdout,stderr:s.stderr,command:s.command,url:s.url}:null}
   async stop(projectId:string){
