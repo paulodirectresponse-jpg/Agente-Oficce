@@ -49,10 +49,13 @@ describe('Block 11 Integration Registry',()=>{
     try{
       const one=await service.create({driver:'github',name:'Personal',auth_mode:'cli'});
       const two=await service.create({driver:'github',name:'Agency',auth_mode:'cli'});
+      service.bindProject('p1',one.id,{repo:'personal/app'});
       service.bindProject('p1',two.id,{repo:'agency/app'});
       expect(service.list().filter(x=>x.driver==='github')).toHaveLength(2);
       expect(service.resolve('github','p1')?.id).toBe(two.id);
-      expect(service.listProjectBindings('p1')[0].scope).toEqual({repo:'agency/app'});
+      const bindings=service.listProjectBindings('p1').filter(x=>[one.id,two.id].includes(x.integration_id));
+      expect(bindings).toHaveLength(1);
+      expect(bindings[0]).toMatchObject({integration_id:two.id,scope:{repo:'agency/app'}});
       expect(service.resolve('github',null,one.id)?.id).toBe(one.id);
     }finally{f.done()}
   });
