@@ -15,7 +15,8 @@ The current product includes:
 - persistent Project workspaces;
 - Chat Workspace;
 - Analytics;
-- benchmark and release gates.
+- benchmark and release gates;
+- Integration Registry with project-scoped GitHub, Railway, Supabase and Browser connections.
 
 ## Core hierarchy
 
@@ -99,12 +100,12 @@ The heavier `Agent Office Release Gate` is manual/tag-driven and additionally ru
 
 ## Data and secrets
 
-The application is local-first. Provider secrets are stored outside SQLite by the encrypted local secret store. Audit/log payloads must not expose secrets.
+The application is local-first. Provider and Integration secrets are stored outside SQLite by the encrypted local secret store. Audit/log payloads must not expose secrets.
 
 Migrations are additive and existing user data must be preserved across upgrades.
 
 ## Current version
 
-`0.3.0`
+`0.4.0`
 
 Current detailed state is tracked in `BUILD_STATUS.md`. Architectural blueprints live under `docs/`, but code on the latest `main` is the operational source of truth.
