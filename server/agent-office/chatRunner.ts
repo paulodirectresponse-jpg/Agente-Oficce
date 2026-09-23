@@ -24,6 +24,7 @@ import {
 import { chatEventHub, type ChatEventHub } from './chatEventHub.js';
 import { ChatRunCancelledError } from './runtimeControls.js';
 import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
+import { AgentOperationsService } from './agentOperations.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -206,6 +207,7 @@ export class ChatRunnerService {
   private readonly usage: UsageTracker;
   private readonly engine: UniversalProviderEngine;
   private readonly toolPolicies: AgentToolPolicyRepository;
+  private readonly agentOps: AgentOperationsService;
 
   constructor(
     private readonly database: Database,
@@ -224,6 +226,7 @@ export class ChatRunnerService {
     this.usage = new UsageTracker(database);
     this.engine = new UniversalProviderEngine(database, secrets, fetchImpl);
     this.toolPolicies = new AgentToolPolicyRepository(database);
+    this.agentOps = new AgentOperationsService(database);
   }
 
   prepare(input: PrepareChatRunInput): PreparedChatRun {
@@ -369,7 +372,26 @@ export class ChatRunnerService {
             signal,
           });
           stageResults.push(result);
+          this.agentOps.recordPerformance({
+            agent_id: binding.agent.id,
+            run_id: childRun.id,
+            project_id: rootRun.project_id,
+            event_type: 'execution_success',
+            source: 'system',
+            detail: 'Agent execution completed successfully.',
+          });
         } catch (error) {
+          const cancelledStage = signal?.aborted
+            || error instanceof ChatRunCancelledError
+            || (error instanceof Error && error.message === 'CHAT_RUN_CANCELLED');
+          this.agentOps.recordPerformance({
+            agent_id: binding.agent.id,
+            run_id: childRun.id,
+            project_id: rootRun.project_id,
+            event_type: cancelledStage ? 'cancelled' : 'operational_failure',
+            source: 'system',
+            detail: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED',
+          });
           if (childRun.id !== rootRun.id) {
             const cancelled = signal?.aborted
               || error instanceof ChatRunCancelledError
@@ -466,6 +488,7 @@ export class ChatRunnerService {
   private availableBindings(): AgentBinding[] {
     const result: AgentBinding[] = [];
     for (const agent of this.agents.list(false)) {
+      if (agent.paused || !this.agentOps.isEligible(agent.id)) continue;
       if (!agent.provider_id || !agent.model_id) continue;
       const provider = this.providers.get(agent.provider_id);
       const model = this.providers.getModel(agent.model_id);
@@ -478,6 +501,8 @@ export class ChatRunnerService {
   private requireBinding(agentId: string): AgentBinding {
     const agent = this.agents.get(agentId) ?? this.agents.getBySlug(agentId);
     if (!agent || !agent.enabled) throw new Error('CHAT_AGENT_NOT_FOUND');
+    if (agent.paused) throw new Error('CHAT_AGENT_PAUSED');
+    if (!this.agentOps.isEligible(agent.id)) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
     if (!agent.provider_id || !agent.model_id) throw new Error('CHAT_AGENT_NOT_CONFIGURED');
     const provider = this.providers.get(agent.provider_id);
     const model = this.providers.getModel(agent.model_id);
@@ -726,6 +751,8 @@ export class ChatRunnerService {
     let usage: UniversalUsage | undefined;
     let requestCount = 0;
     let toolSteps = 0;
+    let effectiveProvider = binding.provider.id;
+    let effectiveModel = binding.model.model_id;
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
@@ -999,6 +1026,8 @@ export class ChatRunnerService {
             usage = { ...usage, ...event.usage };
           } else if (event.type === 'completed') {
             finishReason = event.finish_reason;
+            effectiveProvider = event.provider_id ?? effectiveProvider;
+            effectiveModel = event.model_id ?? effectiveModel;
           } else if (event.type === 'error') {
             throw new Error(event.message);
           }
@@ -1014,6 +1043,8 @@ export class ChatRunnerService {
         text = result.text;
         usage = result.usage;
         finishReason = result.finish_reason;
+        effectiveProvider = result.provider_id ?? effectiveProvider;
+        effectiveModel = result.model_id ?? effectiveModel;
         if (text) {
           this.hub.publish(rootRun.id, 'response.delta', {
             agent_id: binding.agent.id,
@@ -1029,6 +1060,8 @@ export class ChatRunnerService {
       text = result.text;
       usage = result.usage;
       finishReason = result.finish_reason;
+      effectiveProvider = result.provider_id ?? effectiveProvider;
+      effectiveModel = result.model_id ?? effectiveModel;
       if (text) {
         this.hub.publish(rootRun.id, 'response.delta', {
           agent_id: binding.agent.id,
@@ -1054,10 +1087,14 @@ export class ChatRunnerService {
         provider_id: binding.provider.id,
         model_id: binding.model.id,
         model: binding.model.model_id,
+        effective_provider: effectiveProvider,
+        effective_model: effectiveModel,
         finish_reason: finishReason ?? null,
         final: isFinal,
         tools_enabled: toolsEnabled,
         tool_steps: toolSteps,
+        effective_provider: effectiveProvider,
+        effective_model: effectiveModel,
       },
     });
 
