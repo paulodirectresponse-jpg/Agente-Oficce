@@ -1287,7 +1287,74 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
     `,
   },
 
+
+  {
+    version: 24,
+    sql: `
+      CREATE TABLE IF NOT EXISTS resources (
+        id TEXT PRIMARY KEY,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        owner_type TEXT NOT NULL DEFAULT 'chat' CHECK(owner_type IN ('chat','project','agent','subagent','skill')),
+        owner_id TEXT,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+        size_bytes INTEGER NOT NULL DEFAULT 0,
+        storage_path TEXT NOT NULL,
+        text_content TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'ready' CHECK(status IN ('ready','stored','error')),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_resources_project_created ON resources(project_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_resources_owner ON resources(owner_type,owner_id,created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS message_resources (
+        message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(message_id,resource_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS knowledge_items (
+        id TEXT PRIMARY KEY,
+        scope_type TEXT NOT NULL CHECK(scope_type IN ('project','agent','subagent')),
+        scope_id TEXT NOT NULL,
+        resource_id TEXT NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_knowledge_scope ON knowledge_items(scope_type,scope_id,enabled,updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS skills (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        instructions TEXT NOT NULL DEFAULT '',
+        source_path TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS skill_assignments (
+        skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+        assignee_type TEXT NOT NULL CHECK(assignee_type IN ('agent','subagent')),
+        assignee_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(skill_id,assignee_type,assignee_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_skill_assignments_assignee ON skill_assignments(assignee_type,assignee_id,enabled);
+    `,
+  },
+
 ];
+
 
 function assertMigrationPlan(): void {
   const versions = agentOfficeMigrations.map(migration => migration.version);
