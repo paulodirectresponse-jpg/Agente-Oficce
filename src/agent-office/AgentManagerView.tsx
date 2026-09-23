@@ -543,16 +543,16 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                     <span className="agent-manager-avatar">{selected?.name?.slice(0,1).toUpperCase() || 'A'}</span>
                     <div>
                       <strong>{ownedTeam.name}</strong>
-                      <small>{ownedTeam.members.length} subagentes · {ownedTeam.enabled ? 'ativa' : 'desativada'}</small>
+                      <small>{ownedTeam.subagents.length} Subagents · {ownedTeam.enabled ? 'ativa' : 'desativada'}</small>
                     </div>
                   </div>
                   <div className="subagent-grid">
-                    {ownedTeam.members.map((member) => (
-                      <span key={member.agent_id} className="subagent-chip selected">
-                        <span>{agents.find((agent) => agent.id === member.agent_id)?.name ?? member.agent_id}</span>
+                    {ownedTeam.subagents.map((subagent) => (
+                      <span key={subagent.id} className="subagent-chip selected">
+                        <span>{subagent.name}</span>
                       </span>
                     ))}
-                    {!ownedTeam.members.length && <span className="manager-empty-small">Nenhum subagente. Configure a equipe na aba Equipes.</span>}
+                    {!ownedTeam.subagents.length && <span className="manager-empty-small">Nenhum Subagent. Crie os Subagents na aba Equipes.</span>}
                   </div>
                   <p className="tool-safety-note">O owner não é duplicado como membro. Workforces temporárias podem requisitar outros agentes sem alterar esta equipe.</p>
                 </>
