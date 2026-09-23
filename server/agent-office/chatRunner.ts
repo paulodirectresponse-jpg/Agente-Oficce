@@ -1122,10 +1122,12 @@ export class ChatRunnerService {
       },
     });
 
-    this.usage.recordRunUsage(binding.agent.id, binding.provider.id, {
+    const effectivePricingModel = this.providers.listModels(effectiveProvider, true)
+      .find((candidate) => candidate.model_id === effectiveModel) ?? binding.model;
+    this.usage.recordRunUsage(binding.agent.id, effectiveProvider, {
       input_tokens: usage?.input_tokens,
       output_tokens: usage?.output_tokens,
-      cost_usd: estimateCostUsd(binding.model, usage),
+      cost_usd: estimateCostUsd(effectivePricingModel, usage),
       request_count: requestCount,
       duration_ms: duration,
     });
