@@ -925,7 +925,7 @@ export class ChatRunnerService {
     signal?: AbortSignal;
   }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number; effective_provider: string; effective_model: string }> {
     const { rootRun, childRun, binding, stage, signal } = input;
-    const policy = this.toolPolicies.get(binding.agent.id);
+    const policy = this.toolPolicies.get(this.auditAgentId(binding));
     const definitions = toolRegistry.definitionsForPolicy(policy);
     const messages = input.messages.slice();
     let usage: UniversalUsage | undefined;
@@ -947,7 +947,7 @@ export class ChatRunnerService {
         })),
         metadata: {
           run_id: childRun.id,
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           tools_enabled: true,
           tool_step: step,
         },
@@ -961,7 +961,7 @@ export class ChatRunnerService {
       if (!result.tool_calls?.length) {
         if (result.text) {
           this.hub.publish(rootRun.id, 'response.delta', {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             stage,
             text: result.text,
@@ -990,16 +990,16 @@ export class ChatRunnerService {
         if (toolSteps > policy.max_tool_steps) throw new Error('CHAT_MAX_TOOL_STEPS');
 
         const executionState = call.name === 'run_tests' ? 'testing' : 'coding';
-        this.states.upsert({
-          agent_id: binding.agent.id,
-          project_id: rootRun.project_id,
-          run_id: rootRun.id,
-          state: executionState,
-          activity: `Usando ${call.name}`,
-          progress: Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
-        });
+        this.setWorkerState(
+          binding,
+          rootRun.project_id,
+          rootRun.id,
+          executionState,
+          `Usando ${call.name}`,
+          Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
+        );
         this.emit(rootRun, 'tool.started', `${binding.agent.name} iniciou ${call.name}`, {
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           child_run_id: childRun.id,
           tool_name: call.name,
           tool_call_id: call.id,
@@ -1011,7 +1011,7 @@ export class ChatRunnerService {
           project_id: rootRun.project_id,
           project_root: this.projectRoot(rootRun.project_id),
           run_id: childRun.id,
-          agent_id: binding.agent.id,
+          agent_id: this.auditAgentId(binding),
           signal,
           idempotency_key: call.id,
         };
@@ -1023,16 +1023,16 @@ export class ChatRunnerService {
         );
 
         if (toolResult.approval_required && toolResult.approval_id) {
-          this.states.upsert({
-            agent_id: binding.agent.id,
-            project_id: rootRun.project_id,
-            run_id: rootRun.id,
-            state: 'waiting',
-            activity: `Aguardando aprovação para ${call.name}`,
-            progress: null,
-          });
+          this.setWorkerState(
+            binding,
+            rootRun.project_id,
+            rootRun.id,
+            'waiting',
+            `Aguardando aprovação para ${call.name}`,
+            null,
+          );
           this.emit(rootRun, 'tool.approval_required', `${call.name} precisa de aprovação`, {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             tool_name: call.name,
             tool_call_id: call.id,
@@ -1043,14 +1043,14 @@ export class ChatRunnerService {
           const approvalStatus = await this.waitForToolApproval(toolResult.approval_id, signal);
           if (approvalStatus === 'approved') {
             this.emit(rootRun, 'tool.approved', `${call.name} foi aprovado`, {
-              agent_id: binding.agent.id,
+              ...this.workerPayload(binding),
               child_run_id: childRun.id,
               tool_name: call.name,
               approval_id: toolResult.approval_id,
             });
           } else {
             this.emit(rootRun, 'tool.denied', `${call.name} foi negado`, {
-              agent_id: binding.agent.id,
+              ...this.workerPayload(binding),
               child_run_id: childRun.id,
               tool_name: call.name,
               approval_id: toolResult.approval_id,
@@ -1074,7 +1074,7 @@ export class ChatRunnerService {
             ? `${binding.agent.name} concluiu ${call.name}`
             : `${call.name} não foi executado`,
           {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             tool_name: call.name,
             tool_call_id: call.id,
@@ -1211,7 +1211,7 @@ export class ChatRunnerService {
             text += event.text;
             deltaCount += 1;
             this.hub.publish(rootRun.id, 'response.delta', {
-              agent_id: binding.agent.id,
+              ...this.workerPayload(binding),
               child_run_id: childRun.id,
               stage,
               text: event.text,
@@ -1239,7 +1239,7 @@ export class ChatRunnerService {
         effectiveModel = result.model_id ?? effectiveModel;
         if (text) {
           this.hub.publish(rootRun.id, 'response.delta', {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             stage,
             text,
