@@ -824,7 +824,33 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_orchestration_events_project ON orchestration_events(project_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_orchestration_events_run ON orchestration_events(orchestration_run_id,created_at ASC);
     `,
-  },
+  },,
+  {
+    version: 16,
+    sql: `
+      ALTER TABLE agents ADD COLUMN paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1));
+
+      CREATE TABLE IF NOT EXISTS agent_performance_events (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        event_type TEXT NOT NULL CHECK(event_type IN (
+          'accepted','rework_requested','rejected','quality_failure',
+          'execution_success','operational_failure','cancelled','validation_passed'
+        )),
+        score REAL,
+        source TEXT NOT NULL DEFAULT 'system',
+        detail TEXT NOT NULL DEFAULT '',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_agent_performance_agent_created
+        ON agent_performance_events(agent_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_performance_run
+        ON agent_performance_events(run_id, event_type);
+    `,
+  }
 ];
 
 function assertMigrationPlan(): void {
