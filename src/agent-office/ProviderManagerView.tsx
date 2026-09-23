@@ -169,6 +169,14 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
     setError(null);
   }, [selected?.id]);
 
+  useEffect(() => {
+    if (!selected) return;
+    const timer = window.setInterval(() => {
+      void api.getProviderRuntimeV2(selected.id).then(setRuntime).catch(() => {});
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [selected?.id]);
+
   const applyPreset = (preset: ProviderPreset) => {
     setDraft((current) => ({
       ...current,
