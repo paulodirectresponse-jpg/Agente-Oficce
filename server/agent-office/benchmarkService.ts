@@ -134,12 +134,13 @@ function recoveryBench():BenchmarkResult{
   try{
     const t=now();
     f.database.connection.prepare("INSERT INTO chat_runs(id,conversation_id,project_id,agent_id,provider_id,model_id,status,mode,started_at,metadata_json) VALUES('orphan','bench-conversation','bench-project','backend-agent','bench-provider','bench-model','running','single',?,'{}')").run(t);
-    f.database.connection.prepare("INSERT INTO agent_states(agent_id,project_id,state,run_id,last_activity_at,updated_at) VALUES('backend-agent','bench-project','coding','orphan',?,?)").run(t,t);
+    f.database.connection.prepare("INSERT INTO agent_states(id,agent_id,project_id,state,activity,run_id,updated_at) VALUES('bench-state','backend-agent','bench-project','coding','benchmark','orphan',?)").run(t);
     recoverInterruptedChatRuns(f.database.connection);
-    const run=f.database.connection.prepare("SELECT status,error FROM chat_runs WHERE id='orphan'").get() as any;
+    const run=f.database.connection.prepare("SELECT status,error_json FROM chat_runs WHERE id='orphan'").get() as any;
+    const error=run?.error_json?JSON.parse(run.error_json):null;
     const state=f.database.connection.prepare("SELECT state,run_id FROM agent_states WHERE agent_id='backend-agent' AND project_id='bench-project'").get() as any;
     assertions.push(assert('orphan_failed_safely',run.status==='failed','failed',run.status));
-    assertions.push(assert('recovery_error_recorded',run.error==='RUN_INTERRUPTED_BY_RESTART','RUN_INTERRUPTED_BY_RESTART',run.error));
+    assertions.push(assert('recovery_error_recorded',error?.code==='RUN_INTERRUPTED_BY_RESTART','RUN_INTERRUPTED_BY_RESTART',error?.code));
     assertions.push(assert('worker_released',state?.state==='idle'&&state?.run_id==null,true,state));
     return result('recovery-interrupted-run','recovery',started,assertions,{});
   }catch(e){return result('recovery-interrupted-run','recovery',started,assertions,{},e)}
