@@ -4,7 +4,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { Database } from 'better-sqlite3';
 import { openAgentOfficeDatabase, type AgentOfficeDatabase } from './database.js';
-import { CapabilityRepository } from './capabilityCore.js';
+import { CapabilityMatcher, CapabilityRepository } from './capabilityCore.js';
 import { OrchestratorGateway } from './orchestratorGateway.js';
 import { ExecutionGraphService, ExecutionScheduler } from './executionGraph.js';
 import { recoverInterruptedChatRuns } from './runtimeRecovery.js';
@@ -99,7 +99,6 @@ function capabilityBench():BenchmarkResult{
       caps.replaceAgent(id,[{capability_key:i===499?'software.frontend.react':'operations',declared_score:1,source:'manual'}]);
     }
     const begin=performance.now();
-    const { CapabilityMatcher }=requireCapabilityMatcher();
     const matches=new CapabilityMatcher(f.database.connection).match([{key:'software.frontend.react',mandatory:true,minimum:.1}]);
     const elapsed=performance.now()-begin;
     const eligible=matches.filter(x=>x.eligible);
@@ -108,24 +107,6 @@ function capabilityBench():BenchmarkResult{
     return result('capability-500-catalog','capability',started,assertions,{catalog_size:504,match_duration_ms:Math.round(elapsed*100)/100});
   }catch(e){return result('capability-500-catalog','capability',started,assertions,{},e)}
   finally{f.cleanup()}
-}
-
-// Keeps the runtime dependency explicit while avoiding a second benchmark-only matcher implementation.
-function requireCapabilityMatcher(){
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  return { CapabilityMatcher: class {
-    private inner:any;
-    constructor(db:Database){ this.inner=db; }
-    match(required:any[]){
-      const repo=new CapabilityRepository(this.inner);const defs=new Map(repo.list().map(d=>[d.key,d]));
-      const ancestor=(actual:string,requiredKey:string)=>{let d=defs.get(actual),seen=new Set<string>();while(d?.parent_key&&!seen.has(d.parent_key)){if(d.parent_key===requiredKey)return true;seen.add(d.parent_key);d=defs.get(d.parent_key)}return false};
-      return (this.inner.prepare('SELECT id FROM agents WHERE enabled=1 ORDER BY id').all() as any[]).map(a=>{
-        const by=repo.listAgent(a.id).filter(x=>x.enabled);
-        const missing=required.filter(r=>!by.some(c=>(c.capability_key===r.key||ancestor(c.capability_key,r.key))&&((c.verified_score??c.declared_score)*Math.max(.25,c.confidence))>=(r.minimum??0))).map(r=>r.key);
-        return{agent_id:a.id,eligible:missing.length===0,missing};
-      }).sort((a,b)=>Number(b.eligible)-Number(a.eligible)||a.agent_id.localeCompare(b.agent_id));
-    }
-  }};
 }
 
 async function executionBench():Promise<BenchmarkResult>{
