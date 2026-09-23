@@ -25,6 +25,7 @@ import {
 import { getFullAccessToolHealth } from '../agent-office/fullAccessTools.js';
 import { ProviderFallbackRepository, ProviderResilienceManager } from '../agent-office/providerResilience.js';
 import { AgentOperationsService } from '../agent-office/agentOperations.js';
+import { CapabilityRepository } from '../agent-office/capabilityCore.js';
 
 export const v2DataRouter = Router();
 
@@ -359,6 +360,7 @@ v2DataRouter.post('/providers/:providerId/models', (request, response) => {
       enabled: body.enabled !== false,
       is_default: body.is_default === true,
     });
+    new CapabilityRepository(database.connection).inferAgent(created.id);
     response.status(201).json({ ok: true, data: created });
   } catch (error) {
     const code = codeOf(error, 'PROVIDER_MODEL_CREATE_FAILED');
@@ -507,6 +509,9 @@ v2DataRouter.patch('/agents/:agentId', (request, response) => {
       if (Object.prototype.hasOwnProperty.call(body, key)) patch[key] = body[key];
     }
     const updated = new AgentRepositoryV2(database.connection).update(request.params.agentId, patch);
+    if (['name','role','description','system_prompt'].some((key) => Object.prototype.hasOwnProperty.call(patch,key))) {
+      new CapabilityRepository(database.connection).inferAgent(updated.id);
+    }
     response.json({ ok: true, data: updated });
   } catch (error) {
     const code = codeOf(error, 'AGENT_UPDATE_FAILED');
