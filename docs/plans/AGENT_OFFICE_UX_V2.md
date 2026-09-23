@@ -1,6 +1,6 @@
 # Agent Office UX V2 — Product & Information Architecture Plan
 
-Status: proposal for approval  
+Status: APPROVED  
 Base: Agent Office 0.4.0 / Blocks 1–11 complete  
 Primary audience: vibe coders and builders who should not need infrastructure expertise to use the product.
 
@@ -824,59 +824,20 @@ The backend services, schemas and APIs remain the source of truth; the redesign 
 
 ---
 
-## 17. Implementation stages
+## 17. Implementation
 
-### Stage 0 — Design contract
-- approve this IA;
-- approve visual-direction proposal;
-- create root `DESIGN.md`;
-- add design tokens and shell contracts before page rewrites.
+The architecture is approved.
 
-### Stage 1 — Shell V2
-- new minimal sidebar;
-- compact Project switcher;
-- System status button;
-- Activity Center shell;
-- responsive foundation;
-- route compatibility layer.
+The executable implementation sequence is maintained in:
+`docs/plans/UX_V2_IMPLEMENTATION_PLAN.md`.
 
-### Stage 2 — Trabalho V2
-- merge Chat + execution workspace;
-- contextual Preview/Inspector;
-- Sala mode;
-- Activity/Run drawer;
-- remove permanent Event Stream and secondary columns.
+It intentionally compresses delivery into **3 macro phases**:
 
-### Stage 3 — Equipe V2
-- Agent list;
-- simplified create flow;
-- Agent detail tabs;
-- Teams/Subagents embedded;
-- grouped Access;
-- Advanced capability/tool controls.
+1. Foundation + Trabalho
+2. Recompose the rest of the product
+3. Product polish + release gate
 
-### Stage 4 — Projects + Connections V2
-- Project switcher/manager/detail;
-- Provider + Integrations unified;
-- compact models table;
-- Project bindings in Project settings.
-
-### Stage 5 — System Center + Settings V2
-- move Analytics;
-- move Orchestrator history;
-- runtime health;
-- diagnostics;
-- advanced settings.
-
-### Stage 6 — Product polish gate
-- long-text/reflow;
-- 1366 / 1440 / 1920 / ultrawide verification;
-- 200% text/zoom;
-- keyboard/focus;
-- empty/loading/error/degraded states;
-- labels/Portuguese consistency;
-- visual consistency;
-- MSI gate.
+Fine-grained steps exist only as Git checkpoints for continuity across coding agents.
 
 ---
 
