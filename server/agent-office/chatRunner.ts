@@ -699,7 +699,9 @@ export class ChatRunnerService {
     const currentUserMessage=[...recent].reverse().find((message)=>message.role==='user');
     const currentMeta=currentUserMessage?asMetadata(currentUserMessage):{};
     const attachmentIds=Array.isArray(currentMeta.attachment_ids)?currentMeta.attachment_ids.filter((value):value is string=>typeof value==='string'):[];
-    const resourceContext=new ResourceService(this.database).context({projectId,agentId:binding.agent.id,subagentId:binding.subagent_id,query:currentUser,attachmentIds});
+    const resourceService=new ResourceService(this.database);
+    const resourceContext=resourceService.context({projectId,agentId:binding.agent.id,subagentId:binding.subagent_id,query:currentUser,attachmentIds});
+    const multimodalAttachments=resourceService.multimodalAttachments(attachmentIds);
     const retrieved = currentUser
       ? this.memory.search(projectId, currentUser, undefined, RETRIEVED_MEMORY_LIMIT)
       : [];
@@ -728,7 +730,10 @@ export class ChatRunnerService {
     const result: UniversalMessage[] = [{ role: 'system', content: systemParts.join('\n\n') }];
     for (const message of recent) {
       const normalized = messageTextForContext(message);
-      if (normalized) result.push(normalized);
+      if (normalized) {
+        if(currentUserMessage&&message.id===currentUserMessage.id&&multimodalAttachments.length) normalized.attachments=multimodalAttachments;
+        result.push(normalized);
+      }
     }
 
     return this.trimMessages(result, CHAT_CONTEXT_TOKEN_BUDGET);
