@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import { CapabilityMatcher, type CapabilityRequirement } from './capabilityCore.js';
 import { TeamService, type TeamKind, emitTeamEvent } from './teamService.js';
+import { AgentOperationsService } from './agentOperations.js';
 
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const parse=<T>(v:string|undefined|null,f:T):T=>{try{return v?JSON.parse(v):f}catch{return f}};
@@ -27,12 +28,12 @@ export class DelegationService{
  constructor(private db:Database){this.teams=new TeamService(db);this.matcher=new CapabilityMatcher(db)}
  validate(req:DelegationRequest){
   const plan=this.db.prepare('SELECT project_id,budget_json,status FROM execution_plans WHERE id=?').get(req.plan_id) as any;if(!plan)throw new Error('EXECUTION_PLAN_NOT_FOUND');if(['completed','failed','cancelled','superseded'].includes(plan.status))throw new Error('DELEGATION_PLAN_TERMINAL');
-  const child=this.db.prepare(`SELECT a.id,a.enabled,p.enabled provider_enabled,m.enabled model_enabled FROM agents a LEFT JOIN providers p ON p.id=a.provider_id LEFT JOIN provider_models m ON m.id=a.model_id WHERE a.id=?`).get(req.child_agent_id) as any;if(!child||!child.enabled)throw new Error('DELEGATION_AGENT_DISABLED');if(!child.provider_enabled)throw new Error('DELEGATION_PROVIDER_DISABLED');if(!child.model_enabled)throw new Error('DELEGATION_MODEL_DISABLED');
+  const child=this.db.prepare('SELECT id,enabled,paused FROM agents WHERE id=?').get(req.child_agent_id) as any;if(!child||!child.enabled)throw new Error('DELEGATION_AGENT_DISABLED');if(child.paused)throw new Error('DELEGATION_AGENT_PAUSED');if(!new AgentOperationsService(this.db).isEligible(req.child_agent_id))throw new Error('DELEGATION_AGENT_UNAVAILABLE');
   const chain=[...(req.ancestor_chain??[])];if(req.parent_agent_id&&!chain.includes(req.parent_agent_id))chain.push(req.parent_agent_id);if(chain.includes(req.child_agent_id))throw new Error('DELEGATION_CYCLE');
   this.assertEffectiveGraphAcyclic(req.parent_agent_id??null,req.child_agent_id,chain);
   let maxDepth=2,allowBorrow=false,teamPolicy:any={allowed_tools:[],permissions:[],delegation_permissions:[]},members:string[]=[];
   if(req.team_id){if(req.team_kind==='dynamic'){const team=this.teams.getDynamic(req.team_id);if(!team)throw new Error('DYNAMIC_TEAM_NOT_FOUND');maxDepth=team.max_delegation_depth;allowBorrow=team.allow_external_borrowing;teamPolicy=team.policy??{};members=team.members.filter((m:any)=>m.enabled).map((m:any)=>m.agent_id)}
-   else{const team=this.teams.get(req.team_id);if(!team||!team.enabled)throw new Error('TEAM_NOT_FOUND');maxDepth=team.max_delegation_depth;allowBorrow=team.allow_external_borrowing;teamPolicy=team.policy??{};members=team.members.filter((m:any)=>m.enabled).map((m:any)=>m.agent_id)}
+   else{const team=this.teams.get(req.team_id);if(!team||!team.enabled)throw new Error('TEAM_NOT_FOUND');maxDepth=team.max_delegation_depth;allowBorrow=team.allow_external_borrowing;teamPolicy=team.policy??{};members=[...(team.owner_agent_id?[team.owner_agent_id]:[]),...team.members.filter((m:any)=>m.enabled).map((m:any)=>m.agent_id)]}
    if(!members.includes(req.child_agent_id)&&!allowBorrow)throw new Error('DELEGATION_EXTERNAL_BORROWING_DISABLED');
   }
   const depth=chain.length;if(depth>maxDepth)throw new Error('DELEGATION_DEPTH_EXCEEDED');
@@ -59,7 +60,7 @@ export class DelegationService{
  private assertEffectiveGraphAcyclic(parent:string|null,child:string,chain:string[]){
   if(!parent)return;const edges=new Map<string,Set<string>>(),add=(a:string,b:string)=>{if(!edges.has(a))edges.set(a,new Set());edges.get(a)!.add(b)};
   for(const r of this.db.prepare(`SELECT parent_agent_id,child_agent_id FROM agent_relations WHERE enabled=1`).all() as any[])add(r.parent_agent_id,r.child_agent_id);
-  for(const t of this.db.prepare(`SELECT lead_agent_id,id FROM teams WHERE enabled=1 AND lead_agent_id IS NOT NULL`).all() as any[]){for(const m of this.db.prepare(`SELECT agent_id FROM team_members WHERE team_id=? AND enabled=1`).all(t.id) as any[])if(m.agent_id!==t.lead_agent_id)add(t.lead_agent_id,m.agent_id)}
+  for(const t of this.db.prepare(`SELECT COALESCE(owner_agent_id,lead_agent_id) lead_agent_id,id FROM teams WHERE enabled=1 AND COALESCE(owner_agent_id,lead_agent_id) IS NOT NULL`).all() as any[]){for(const m of this.db.prepare(`SELECT agent_id FROM team_members WHERE team_id=? AND enabled=1`).all(t.id) as any[])if(m.agent_id!==t.lead_agent_id)add(t.lead_agent_id,m.agent_id)}
   for(const t of this.db.prepare(`SELECT lead_agent_id,id FROM dynamic_team_instances WHERE status='active' AND lead_agent_id IS NOT NULL`).all() as any[]){for(const m of this.db.prepare(`SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? AND enabled=1`).all(t.id) as any[])if(m.agent_id!==t.lead_agent_id)add(t.lead_agent_id,m.agent_id)}
   for(const d of this.db.prepare(`SELECT parent_agent_id,child_agent_id FROM runtime_delegations WHERE status='active' AND parent_agent_id IS NOT NULL`).all() as any[])add(d.parent_agent_id,d.child_agent_id);
   add(parent,child);for(let i=0;i<chain.length-1;i++)add(chain[i],chain[i+1]);
