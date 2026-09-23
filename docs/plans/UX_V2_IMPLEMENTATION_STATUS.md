@@ -156,6 +156,24 @@ After review:
 
 ## Verification log
 
+### 2026-09-23 — ChatGPT (review checkpoint A: conversation + activity)
+
+**Completed**
+- Added safe rich-message renderer for Markdown headings, lists, numbered lists, emphasis, inline code, fenced code, links, tables, blockquotes, separators and JSON.
+- Code blocks now have isolated horizontal scroll, language label and copy action.
+- Activity drawer simplified to human-readable progress/current work/events with technical detail routed to Inspector.
+- Existing runtime/audit data remains intact; presentation only was changed.
+
+**Verification**
+- Source-level review complete.
+- CI/release gate to be validated after remote commit; local checkout is unavailable in this execution environment.
+
+**Files most relevant**
+- src/agent-office/conversation/MessageContent.tsx
+- src/agent-office/TrabalhoView.tsx
+- src/agent-office/App.css
+
+
 Add entries newest first.
 
 ### 2026-09-23 — Kimi Code (checkpoint 1.1: Shell V2 + Project Switcher)

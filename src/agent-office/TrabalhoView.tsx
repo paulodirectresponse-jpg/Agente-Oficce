@@ -4,6 +4,7 @@ import { api } from './api.js';
 import { OfficeView } from './OfficeView.js';
 import { Workbench } from './dev-chat/Workbench.js';
 import { V2Drawer, V2EmptyState, V2Status, V2Tabs } from './shell/V2Primitives.js';
+import { MessageContent } from './conversation/MessageContent.js';
 
 type ActiveAction='orient'|'enqueue'|'interrupt';
 type WorkMode='conversation'|'sala';
@@ -211,13 +212,13 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-avatar" aria-hidden="true">{item.role==='user'?'P':nameForMessage(item).slice(0,1).toUpperCase()}</div>
                 <div className="work-v2-message-body">
                   <div className="work-v2-message-meta"><strong>{nameForMessage(item)}</strong><span>{shortTime(item.created_at)}</span></div>
-                  <p>{item.content}</p>
+                  <MessageContent content={item.content}/>
                 </div>
               </article>)}
 
               {Object.entries(streaming).map(([key,text])=><article key={key} className="work-v2-message assistant streaming">
                 <div className="work-v2-avatar" aria-hidden="true">{(workerNames.get(key)??'A').slice(0,1).toUpperCase()}</div>
-                <div className="work-v2-message-body"><div className="work-v2-message-meta"><strong>{workerNames.get(key)??'Agent Office'}</strong><span>ao vivo</span></div><p>{text}<i className="work-v2-caret">▍</i></p></div>
+                <div className="work-v2-message-body"><div className="work-v2-message-meta"><strong>{workerNames.get(key)??'Agent Office'}</strong><span>ao vivo</span></div><MessageContent content={text} streaming/></div>
               </article>)}
 
               {isRunning&&<button type="button" className="work-v2-execution-summary" onClick={()=>setActivityOpen(true)}>
@@ -260,19 +261,32 @@ export function TrabalhoView({project}:{project:Project|null}){
           </section>}
         </div>}
 
-    <V2Drawer open={activityOpen} title="Atividade da execução" onClose={()=>setActivityOpen(false)} className="work-v2-activity-drawer">
+    <V2Drawer open={activityOpen} title="Atividade" onClose={()=>setActivityOpen(false)} className="work-v2-activity-drawer">
       <div className="work-v2-activity-overview">
-        <V2Status tone={statusTone}>{stateLabel(activeRun?.status)}</V2Status>
-        {activeRun?.started_at&&<span>Iniciada {new Date(activeRun.started_at).toLocaleString('pt-BR')}</span>}
+        <div><V2Status tone={statusTone}>{stateLabel(activeRun?.status)}</V2Status>{activeRun?.started_at&&<span>Desde {shortTime(activeRun.started_at)}</span>}</div>
+        {inspectRunId&&<button type="button" className="v2-quiet-button" onClick={()=>{setInspectorOpen(true);setActivityOpen(false)}}>Abrir Inspector</button>}
       </div>
 
-      {activeSteps.length>0&&<section className="work-v2-activity-section"><h3>Etapas</h3><div className="work-v2-step-list">{activeSteps.map(step=><div key={step.id} className={'work-v2-step '+step.status}><span>{step.status==='completed'?'✓':step.status==='running'?'●':'○'}</span><div><strong>{step.title||step.key}</strong><small>{step.resume_state}</small></div></div>)}</div></section>}
+      {activeSteps.length>0&&<section className="work-v2-activity-section"><h3>Progresso</h3><div className="work-v2-step-list">{activeSteps.map(step=><div key={step.id} className={'work-v2-step '+step.status}><span>{step.status==='completed'?'✓':step.status==='running'?'●':'○'}</span><div><strong>{step.title||step.key}</strong>{step.status==='running'&&<small>Em andamento</small>}</div></div>)}</div></section>}
 
-      {workforceResources.length>0&&<section className="work-v2-activity-section"><h3>Quem está trabalhando</h3><div className="work-v2-worker-list">{workforceResources.map(resource=><div key={resource.worker_kind+':'+resource.worker_id}><span className="work-v2-worker-icon">{resource.worker_kind.slice(0,1).toUpperCase()}</span><div><strong>{workerNames.get(resource.worker_kind+':'+resource.worker_id)??resource.worker_id}</strong><small>{resource.reason||resource.worker_kind}</small></div></div>)}</div></section>}
+      {workforceResources.length>0&&<section className="work-v2-activity-section"><h3>Trabalhando agora</h3><div className="work-v2-worker-list">{workforceResources.map(resource=><div key={resource.worker_kind+':'+resource.worker_id}><span className="work-v2-worker-icon">{resource.worker_kind.slice(0,1).toUpperCase()}</span><div><strong>{workerNames.get(resource.worker_kind+':'+resource.worker_id)??'Recurso'}</strong><small>{resource.reason||'Participando desta execução'}</small></div></div>)}</div></section>}
 
-      <section className="work-v2-activity-section"><h3>Execuções recentes</h3><div className="work-v2-run-list">{runs.slice(0,20).map(run=><button type="button" key={run.id} className={inspectRunId===run.id?'active':''} onClick={()=>{setSelectedRunId(run.id);setInspectorOpen(true)}}><span>{run.status==='completed'?'✓':run.status==='failed'?'!':run.status==='cancelled'?'×':'●'}</span><div><strong>{stateLabel(run.status)}</strong><small>{new Date(run.started_at).toLocaleString('pt-BR')}</small></div></button>)}{!runs.length&&<span className="muted">Nenhuma execução ainda.</span>}</div></section>
+      {liveEvents.length>0&&<section className="work-v2-activity-section"><h3>Agora</h3><div className="work-v2-event-list human">{liveEvents.filter(event=>event.event!=='response.delta').slice(0,16).map(event=>{
+        const name=workerNames.get(workerKey(event.data))??'Agent Office';
+        const tool=typeof event.data.tool_name==='string'?event.data.tool_name:'';
+        const detail=typeof event.data.message==='string'?event.data.message:typeof event.data.activity==='string'?event.data.activity:'';
+        const summary=event.event==='tool.started'?name+' iniciou '+(tool||'uma ferramenta')
+          :event.event==='tool.completed'?name+' concluiu '+(tool||'uma ação')
+          :event.event==='tool.approval_required'?'Aprovação necessária para '+(tool||'uma ação')
+          :event.event==='handoff.created'?'Trabalho repassado entre recursos'
+          :event.event==='run.completed'?'Execução concluída'
+          :event.event==='run.failed'?'Execução precisa de atenção'
+          :event.event==='response.completed'?name+' concluiu uma resposta'
+          :detail||eventLabel(event.event);
+        return <button type="button" key={event.run_id+':'+event.sequence} onClick={()=>{setSelectedRunId(event.run_id);setInspectorOpen(true);setActivityOpen(false)}}><span className="work-v2-event-dot" aria-hidden="true"/><div><strong>{summary}</strong><small>{shortTime(event.timestamp)} · Ver detalhes</small></div></button>
+      })}</div></section>}
 
-      {liveEvents.length>0&&<section className="work-v2-activity-section"><h3>Agora</h3><div className="work-v2-event-list">{liveEvents.slice(0,20).map(event=><div key={event.run_id+':'+event.sequence}><span>{shortTime(event.timestamp)}</span><strong>{eventLabel(event.event)}</strong></div>)}</div></section>}
+      <details className="work-v2-activity-history"><summary>Execuções anteriores</summary><div className="work-v2-run-list">{runs.slice(0,12).map(run=><button type="button" key={run.id} className={inspectRunId===run.id?'active':''} onClick={()=>{setSelectedRunId(run.id);setInspectorOpen(true);setActivityOpen(false)}}><span>{run.status==='completed'?'✓':run.status==='failed'?'!':run.status==='cancelled'?'×':'●'}</span><div><strong>{stateLabel(run.status)}</strong><small>{new Date(run.started_at).toLocaleString('pt-BR')}</small></div></button>)}{!runs.length&&<span className="muted">Nenhuma execução ainda.</span>}</div></details>
     </V2Drawer>
   </div>;
 }
