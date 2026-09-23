@@ -217,7 +217,7 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-message-body">
                   <div className="work-v2-message-meta"><strong>{nameForMessage(item)}</strong><span>{shortTime(item.created_at)}</span></div>
                   <MessageContent content={item.content}/>
-                  {Array.isArray(item.metadata?.attachments)&&item.metadata.attachments.length>0&&<div className="work-v2-attachments">{item.metadata.attachments.map((file:ResourceFile)=><span key={file.id} className="work-v2-attachment"><b>{String(file.metadata?.kind||'arquivo')}</b><span>{file.file_name}</span><small>{Math.max(1,Math.round(file.size_bytes/1024))} KB</small></span>)}</div>
+                  {Array.isArray(item.metadata?.attachments)&&item.metadata.attachments.length>0&&<div className="work-v2-attachments">{item.metadata.attachments.map((file:ResourceFile)=><span key={file.id} className="work-v2-attachment"><b>{String(file.metadata?.kind||'arquivo')}</b><span>{file.file_name}</span><small>{Math.max(1,Math.round(file.size_bytes/1024))} KB</small></span>)}</div>}
                 </div>
               </article>)}
 
