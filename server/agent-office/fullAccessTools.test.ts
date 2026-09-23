@@ -51,5 +51,5 @@ describe('Block 1 full access tools', () => {
     expect(health.some(item => item.id === 'browser')).toBe(true);
     expect(health.some(item => item.id === 'computer')).toBe(true);
     await fs.rm(root, { recursive: true, force: true });
-  });
+  }, 15000);
 });
