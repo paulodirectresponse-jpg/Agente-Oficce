@@ -81,4 +81,22 @@ describe('Block 4 agent operations',()=>{
       expect(perf.operational_failures).toBe(1);
     }finally{f.cleanup()}
   });
+  it('replaces human quality feedback for the same run instead of inflating metrics',()=>{
+    const f=fixture();
+    try{
+      const now=new Date().toISOString();
+      f.database.connection.prepare("INSERT INTO projects(id,name,root_path,created_at,updated_at) VALUES('p','P',?,?,?)").run(f.dataDir,now,now);
+      f.database.connection.prepare("INSERT INTO conversations(id,project_id,title,created_at,updated_at) VALUES('c','p','C',?,?)").run(now,now);
+      const agent=f.agents.create({id:'feedback',name:'Feedback',slug:'feedback'});
+      f.database.connection.prepare("INSERT INTO chat_runs(id,conversation_id,project_id,agent_id,status,mode,started_at,metadata_json) VALUES('r','c','p',?,'completed','single',?,'{}')").run(agent.id,now);
+      const ops=new AgentOperationsService(f.database.connection);
+      ops.recordPerformance({agent_id:agent.id,run_id:'r',project_id:'p',event_type:'rework_requested',source:'user'});
+      ops.recordPerformance({agent_id:agent.id,run_id:'r',project_id:'p',event_type:'accepted',source:'user'});
+      const perf=ops.performance(agent.id);
+      expect(perf.quality_signals).toBe(1);
+      expect(perf.assertiveness).toBe(100);
+      expect(perf.rework_rate).toBe(0);
+    }finally{f.cleanup()}
+  });
+
 });
