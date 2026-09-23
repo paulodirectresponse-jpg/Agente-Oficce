@@ -824,7 +824,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_orchestration_events_project ON orchestration_events(project_id,created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_orchestration_events_run ON orchestration_events(orchestration_run_id,created_at ASC);
     `,
-  },,
+  },
   {
     version: 16,
     sql: `
