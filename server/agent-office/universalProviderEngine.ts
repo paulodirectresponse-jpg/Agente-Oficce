@@ -1196,6 +1196,20 @@ export class UniversalProviderEngine {
       result.push({ providerId, model: item.model_id, implicit: true });
     }
 
+    if(modalities.size){
+      for(const candidateProvider of this.providers.list().filter(item=>item.enabled&&item.id!==providerId)){
+        const modelRow=this.providers.listModels(candidateProvider.id,false)
+          .filter(item=>item.enabled)
+          .sort((a,b)=>Number(b.is_default)-Number(a.is_default)||a.display_name.localeCompare(b.display_name))
+          .find(item=>providerAccepts(candidateProvider,item.model_id)&&(!needsTools||item.capabilities.tools!==false));
+        if(!modelRow)continue;
+        const key=candidateProvider.id+'::'+modelRow.model_id;
+        if(seen.has(key))continue;
+        seen.add(key);
+        result.push({providerId:candidateProvider.id,model:modelRow.model_id,implicit:true});
+      }
+    }
+
     if(!result.length&&requiredModalities(input).size)throw new UniversalProviderError('MODEL_MULTIMODAL_UNSUPPORTED','No configured provider/model can accept the attached media types. Configure a compatible multimodal model or fallback.');
     return result;
   }
