@@ -751,8 +751,6 @@ export class ChatRunnerService {
     let usage: UniversalUsage | undefined;
     let requestCount = 0;
     let toolSteps = 0;
-    let effectiveProvider = binding.provider.id;
-    let effectiveModel = binding.model.model_id;
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
@@ -993,6 +991,8 @@ export class ChatRunnerService {
     let deltaCount = 0;
     let requestCount = 1;
     let toolSteps = 0;
+    let effectiveProvider = binding.provider.id;
+    let effectiveModel = binding.model.model_id;
 
     if (toolsEnabled) {
       const toolResult = await this.runToolAwareCompletion({
