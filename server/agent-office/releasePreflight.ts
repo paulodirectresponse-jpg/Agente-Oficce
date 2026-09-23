@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { Database } from 'better-sqlite3';
 import { getProjectRootSetting } from './appSettings.js';
 import { getFullAccessToolHealth } from './fullAccessTools.js';
+import { IntegrationRegistryService } from './integrationRegistry.js';
 
 export interface ReleasePreflightCheck {
   id:string;
@@ -44,6 +45,11 @@ export async function runReleasePreflight(db:Database,activeTools=false,options:
 
   const agents=Number((db.prepare('SELECT COUNT(*) n FROM agents WHERE enabled=1').get() as any)?.n??0);
   add('agents.enabled','Enabled agents',agents>0?'pass':'warn',String(agents)+' enabled',false);
+
+  const integrations=new IntegrationRegistryService(db).list();
+  const unhealthyIntegrations=integrations.filter(item=>item.enabled&&!['healthy','unknown'].includes(item.health_status));
+  add('integrations.registry','Integration Registry',unhealthyIntegrations.length?'warn':'pass',
+    integrations.length+' registered; '+unhealthyIntegrations.length+' enabled with health issues',false);
 
   const tools=options.toolHealth??await getFullAccessToolHealth(root.path,activeTools);
   for(const id of ['files','shell','git']){
