@@ -19,8 +19,8 @@ export class WorkspaceService{
   project(projectId:string){const p=this.db.prepare('SELECT * FROM projects WHERE id=?').get(projectId) as any;if(!p)throw new Error('PROJECT_NOT_FOUND');return p}
   snapshot(projectId:string){
     const project=this.project(projectId);
-    const activeRun=this.db.prepare("SELECT * FROM chat_runs WHERE project_id=? AND status IN ('created','running') ORDER BY started_at DESC LIMIT 1").get(projectId) as any;
-    const latestRun=activeRun??this.db.prepare('SELECT * FROM chat_runs WHERE project_id=? ORDER BY started_at DESC LIMIT 1').get(projectId) as any;
+    const activeRun=this.db.prepare("SELECT * FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL AND status IN ('created','running') ORDER BY started_at DESC LIMIT 1").get(projectId) as any;
+    const latestRun=activeRun??this.db.prepare('SELECT * FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL ORDER BY started_at DESC LIMIT 1').get(projectId) as any;
     const plan=latestRun?.metadata_json?this.planForRun(latestRun):this.db.prepare("SELECT * FROM execution_plans WHERE project_id=? AND status IN ('validated','running') ORDER BY created_at DESC LIMIT 1").get(projectId) as any;
     const workforce=latestRun?this.db.prepare('SELECT id FROM dynamic_team_instances WHERE chat_run_id=? ORDER BY created_at DESC LIMIT 1').get(latestRun.id) as any:null;
     const approvals=this.db.prepare("SELECT * FROM tool_approvals WHERE project_id=? AND status='pending' ORDER BY created_at").all(projectId) as any[];
@@ -60,15 +60,15 @@ export class WorkspaceService{
   }
   runInspection(runId:string){
     const run=this.db.prepare('SELECT * FROM chat_runs WHERE id=?').get(runId) as any;if(!run)throw new Error('CHAT_RUN_NOT_FOUND');
-    const tools=(this.db.prepare('SELECT * FROM tool_audit_events WHERE run_id=? ORDER BY started_at').all(runId) as any[]).map(x=>({...x,input:j(x.input_json,{}),result:j(x.result_json,null)}));
-    const activities=(this.db.prepare('SELECT * FROM activity_events WHERE run_id=? ORDER BY created_at').all(runId) as any[]).map(x=>({...x,payload:j(x.payload_json,{})}));
+    const tools=(this.db.prepare("SELECT * FROM tool_audit_events WHERE run_id=? OR run_id IN (SELECT id FROM chat_runs WHERE parent_run_id=?) ORDER BY started_at").all(runId,runId) as any[]).map(x=>({...x,input:j(x.input_json,{}),result:j(x.result_json,null)}));
+    const activities=(this.db.prepare("SELECT * FROM activity_events WHERE run_id=? OR run_id IN (SELECT id FROM chat_runs WHERE parent_run_id=?) ORDER BY created_at").all(runId,runId) as any[]).map(x=>({...x,payload:j(x.payload_json,{})}));
     const files=[...new Set(tools.flatMap(x=>{const p=x.input?.path??x.input?.to??x.input?.from;return typeof p==='string'?[p]:[]}))];
     const workforce=this.db.prepare('SELECT id FROM dynamic_team_instances WHERE chat_run_id=? ORDER BY created_at DESC LIMIT 1').get(runId) as any;
     const plan=this.planForRun(run);
     const artifacts=plan?this.db.prepare('SELECT * FROM execution_artifacts WHERE plan_id=? ORDER BY created_at').all(plan.id).map((x:any)=>({...x,payload:j(x.payload_json,{})})):[];
     return{run:this.runRow(run),tools,activities,files_changed:files,workforce:workforce?new TeamService(this.db).getWorkforce(workforce.id):null,plan:plan?this.plan(plan.id):null,artifacts,baseline:this.db.prepare('SELECT * FROM workspace_run_baselines WHERE chat_run_id=?').get(runId)??null};
   }
-  listRuns(projectId:string){return (this.db.prepare('SELECT * FROM chat_runs WHERE project_id=? ORDER BY started_at DESC LIMIT 80').all(projectId) as any[]).map(r=>this.runRow(r))}
+  listRuns(projectId:string){return (this.db.prepare('SELECT * FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL ORDER BY started_at DESC LIMIT 80').all(projectId) as any[]).map(r=>this.runRow(r))}
   queueCommand(input:{project_id:string;chat_run_id?:string|null;execution_plan_id?:string|null;command_type:'orient'|'enqueue'|'interrupt';message:string;target?:string}){
     const id=crypto.randomUUID(),t=new Date().toISOString();this.db.prepare(`INSERT INTO workspace_run_commands(id,project_id,chat_run_id,execution_plan_id,command_type,message,target,status,created_at)VALUES(?,?,?,?,?,?,?,'pending',?)`).run(id,input.project_id,input.chat_run_id??null,input.execution_plan_id??null,input.command_type,input.message,input.target??'auto',t);
     if(input.execution_plan_id&&input.command_type!=='interrupt'){const type=input.command_type==='orient'?'orient':'enqueue_message';this.db.prepare(`INSERT INTO execution_commands(id,plan_id,command_type,payload_json,status,created_at)VALUES(?,?,?,?, 'pending',?)`).run(crypto.randomUUID(),input.execution_plan_id,type,JSON.stringify({message:input.message,workspace_command_id:id}),t)}
