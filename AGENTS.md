@@ -95,5 +95,21 @@ Always work from the latest `main`. Do not base redesign work on backups or obso
 
 See:
 - `BUILD_STATUS.md` for current implementation state.
-- `docs/plans/AGENT_OFFICE_UX_V2.md` for the approved UX architecture once present.
-- `DESIGN.md` for visual language once approved and created.
+- `DESIGN.md` for the approved UX V2 visual/interaction contract.
+- `docs/plans/AGENT_OFFICE_UX_V2.md` for the approved UX architecture.
+- `docs/plans/UX_V2_IMPLEMENTATION_PLAN.md` for the 3-phase execution plan.
+- `docs/plans/UX_V2_IMPLEMENTATION_STATUS.md` for the current cross-agent handoff state.
+
+## Cross-agent continuity
+
+UX V2 may be implemented by Kimi Code, ChatGPT, Claude Code or another coding agent.
+
+For UX V2 work:
+- use branch `ux-v2-redesign`;
+- commit and push every coherent checkpoint;
+- never leave meaningful work only in a local working tree;
+- update `docs/plans/UX_V2_IMPLEMENTATION_STATUS.md` before ending a work session;
+- when credits/time are running low, prioritize a clean remote checkpoint over starting another feature;
+- do not merge `ux-v2-redesign` to `main` without explicit user instruction.
+
+A future agent must be able to continue from the repository alone.
