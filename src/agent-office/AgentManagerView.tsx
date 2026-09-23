@@ -343,7 +343,10 @@ export function AgentManagerView({ agents, providers, onChanged }: AgentManagerV
                     <span className={`agent-manager-avatar avatar-${index % 3}`}>{avatarLabel(agent.avatar_key)}</span>
                     <span className="manager-list-copy">
                       <strong>{agent.name}</strong>
-                      <small>{agent.role || 'AI Agent'} · {provider?.name ?? 'sem provider'} · {readiness}</small>
+                      <small>
+                        {agent.role || 'AI Agent'} · {provider?.name ?? 'sem provider'} · {readiness}
+                        {overview?.performance.assertiveness != null ? ` · ${overview.performance.assertiveness.toFixed(0)}% assert.` : ''}
+                      </small>
                     </span>
                     <span className={`mini-status ${dotClass}`} />
                   </button>
