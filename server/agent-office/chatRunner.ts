@@ -1020,7 +1020,13 @@ export class ChatRunnerService {
     const streamingSupported = binding.model.capabilities.streaming !== false;
     if (streamingSupported) {
       try {
-        for await (const event of this.engine.stream(binding.provider.id, completionInput, { signal })) {
+        for await (const event of this.engine.stream(binding.provider.id, completionInput, {
+          signal,
+          onResolvedModel: (providerId, modelId) => {
+            effectiveProvider = providerId;
+            effectiveModel = modelId;
+          },
+        })) {
           if (event.type === 'text_delta') {
             text += event.text;
             deltaCount += 1;
@@ -1034,8 +1040,6 @@ export class ChatRunnerService {
             usage = { ...usage, ...event.usage };
           } else if (event.type === 'completed') {
             finishReason = event.finish_reason;
-            effectiveProvider = event.provider_id ?? effectiveProvider;
-            effectiveModel = event.model_id ?? effectiveModel;
           } else if (event.type === 'error') {
             throw new Error(event.message);
           }
