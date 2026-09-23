@@ -14,6 +14,7 @@ import type {
 import { api } from './api.js';
 import { MessageContent } from './conversation/MessageContent.js';
 import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
+import { VoiceInputButton } from './conversation/VoiceInputButton.js';
 import { OfficeMap } from './room/OfficeMap.js';
 
 type OfficeFocus = 'office' | 'chat';
@@ -637,6 +638,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               </div>
               <div className="composer-actions">
                 <label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={event=>{setPendingFiles(cur=>[...cur,...Array.from(event.target.files??[])].slice(0,12));event.currentTarget.value=''}}/></label>
+                <VoiceInputButton disabled={sending} onTranscript={text=>setMessage(current=>current.trim()?current.trimEnd()+' '+text:text)}/>
                 <select value={target} onChange={(event) => setTarget(event.target.value)} disabled={sending}>
                   <option value="auto">Auto</option>
                   <option value="team">Team</option>
