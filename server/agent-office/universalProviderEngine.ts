@@ -494,7 +494,7 @@ class OpenAiChatDriver implements ProtocolDriver {
           return name ? [{
             model_id: name,
             display_name: name,
-            capabilities: { text: true, streaming: true },
+            capabilities: { text: true, streaming: true, image: true, pdf: this.id === 'openai_responses' },
             context_window: null,
             max_output_tokens: null,
             metadata: object,
@@ -510,7 +510,7 @@ class OpenAiChatDriver implements ProtocolDriver {
         return modelId ? [{
           model_id: modelId,
           display_name: getString(object.display_name) || modelId,
-          capabilities: { text: true, streaming: true },
+          capabilities: { text: true, streaming: true, image: true, pdf: this.id === 'openai_responses' },
           context_window: typeof object.context_window === 'number' ? object.context_window : null,
           max_output_tokens: typeof object.max_output_tokens === 'number' ? object.max_output_tokens : null,
           metadata: object,
@@ -673,7 +673,7 @@ class AnthropicMessagesDriver implements ProtocolDriver {
         return modelId ? [{
           model_id: modelId,
           display_name: getString(object.display_name) || modelId,
-          capabilities: { text: true, streaming: true },
+          capabilities: { text: true, streaming: true, image: true, pdf: this.id === 'openai_responses' },
           context_window: typeof object.context_window === 'number' ? object.context_window : null,
           max_output_tokens: typeof object.max_output_tokens === 'number' ? object.max_output_tokens : null,
           metadata: object,
