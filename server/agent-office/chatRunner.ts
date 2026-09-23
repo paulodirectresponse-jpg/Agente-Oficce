@@ -637,6 +637,7 @@ export class ChatRunnerService {
     toolsEnabled = false,
   ): UniversalMessage[] {
     const projectMemory = this.memory.getProjectMemory(projectId);
+    const teamRoomContext = this.teamRoomContextForAgent(agent.id);
     const recent = this.messages.list(conversationId, RECENT_MESSAGE_LIMIT);
     const currentUser = [...recent].reverse().find((message) => message.role === 'user')?.content ?? '';
     const retrieved = currentUser
@@ -652,6 +653,7 @@ export class ChatRunnerService {
         ? 'You may work across the local computer, repositories, browser and deployment tools within the permissions of the Agent Office process. Avoid catastrophic system-level deletion. Prefer the minimum reliable set of actions and verify outcomes.'
         : 'You may reason, plan, draft, review and answer in text.',
       agent.system_prompt.trim(),
+      teamRoomContext ? `Permanent Agent Team context:\n${teamRoomContext}` : '',
       projectMemory?.summary ? `Project summary: ${projectMemory.summary}` : '',
       projectMemory?.architecture ? `Project architecture: ${projectMemory.architecture}` : '',
       projectMemory?.rules ? `Project rules: ${projectMemory.rules}` : '',
@@ -669,6 +671,28 @@ export class ChatRunnerService {
     }
 
     return this.trimMessages(result, CHAT_CONTEXT_TOKEN_BUDGET);
+  }
+
+  private teamRoomContextForAgent(agentId: string): string {
+    const team = this.database.prepare(`
+      SELECT DISTINCT t.id,t.name
+      FROM teams t
+      LEFT JOIN team_members tm ON tm.team_id=t.id
+      WHERE t.enabled=1 AND t.owner_agent_id IS NOT NULL
+        AND (t.owner_agent_id=? OR (tm.agent_id=? AND tm.enabled=1))
+      ORDER BY CASE WHEN t.owner_agent_id=? THEN 0 ELSE 1 END,t.created_at
+      LIMIT 1
+    `).get(agentId,agentId,agentId) as {id:string;name:string}|undefined;
+    if(!team)return '';
+    const room=this.database.prepare('SELECT instructions,shared_context_json,memory_json FROM team_rooms WHERE team_id=?').get(team.id) as any;
+    if(!room)return `Team: ${team.name}`;
+    const read=(value:string)=>{try{const parsed=JSON.parse(value||'{}');return typeof parsed?.text==='string'?parsed.text:JSON.stringify(parsed)}catch{return ''}};
+    return [
+      `Team: ${team.name}`,
+      room.instructions ? `Team instructions: ${room.instructions}` : '',
+      read(room.shared_context_json) ? `Shared context: ${read(room.shared_context_json)}` : '',
+      read(room.memory_json) ? `Team memory: ${read(room.memory_json)}` : '',
+    ].filter(Boolean).join('\n');
   }
 
   private trimMessages(messages: UniversalMessage[], budget: number): UniversalMessage[] {

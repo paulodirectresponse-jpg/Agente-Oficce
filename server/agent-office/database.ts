@@ -850,6 +850,44 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_agent_performance_run
         ON agent_performance_events(run_id, event_type);
     `,
+  },
+  {
+    version: 17,
+    sql: `
+      ALTER TABLE teams ADD COLUMN owner_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_team_owner_unique
+        ON teams(owner_agent_id)
+        WHERE owner_agent_id IS NOT NULL AND type = 'permanent';
+      CREATE INDEX IF NOT EXISTS idx_team_owner
+        ON teams(owner_agent_id, enabled);
+
+      CREATE TABLE IF NOT EXISTS team_rooms (
+        team_id TEXT PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+        instructions TEXT NOT NULL DEFAULT '',
+        shared_context_json TEXT NOT NULL DEFAULT '{}',
+        memory_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS team_room_entries (
+        id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+        entry_type TEXT NOT NULL DEFAULT 'activity'
+          CHECK(entry_type IN ('activity','decision','memory','note','delegation','result')),
+        content TEXT NOT NULL DEFAULT '',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_team_room_entries_team
+        ON team_room_entries(team_id, created_at DESC);
+
+      INSERT OR IGNORE INTO team_rooms(team_id,instructions,shared_context_json,memory_json,created_at,updated_at)
+      SELECT id,'','{}','{}',created_at,updated_at FROM teams;
+    `,
   }
 ];
 

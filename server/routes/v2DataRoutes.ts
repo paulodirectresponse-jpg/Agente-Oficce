@@ -26,6 +26,7 @@ import { getFullAccessToolHealth } from '../agent-office/fullAccessTools.js';
 import { ProviderFallbackRepository, ProviderResilienceManager } from '../agent-office/providerResilience.js';
 import { AgentOperationsService } from '../agent-office/agentOperations.js';
 import { CapabilityRepository } from '../agent-office/capabilityCore.js';
+import { TeamService } from '../agent-office/teamService.js';
 
 export const v2DataRouter = Router();
 
@@ -811,6 +812,12 @@ v2DataRouter.post('/tool-approvals/:approvalId/resolve', (request, response) => 
 v2DataRouter.get('/agents/:agentId/subagents', (request, response) => {
   const database = openAgentOfficeDatabase();
   try {
+    const teams = new TeamService(database.connection);
+    const owned = teams.getOwnedByAgent(request.params.agentId);
+    if (owned) {
+      response.json({ ok: true, data: owned.members.filter((member:any)=>member.enabled).map((member:any,index:number)=>({ child_agent_id: member.agent_id, relation_type:'supervises', priority: member.priority ?? index })) });
+      return;
+    }
     response.json({ ok: true, data: new AgentRelationRepository(database.connection).listChildren(request.params.agentId) });
   } finally {
     database.connection.close();
@@ -825,12 +832,21 @@ v2DataRouter.put('/agents/:agentId/subagents', (request, response) => {
       response.status(404).json({ ok: false, error: { code: 'AGENT_NOT_FOUND', message: 'Agent not found.' } });
       return;
     }
-    const children = Array.isArray(request.body?.child_agent_ids)
-      ? request.body.child_agent_ids.map(String)
-      : [];
-    const relationRepository = new AgentRelationRepository(database.connection);
-    relationRepository.replaceChildren(agent.id, children);
-    response.json({ ok: true, data: relationRepository.listChildren(agent.id) });
+    const children = Array.isArray(request.body?.child_agent_ids) ? request.body.child_agent_ids.map(String) : [];
+    const teams = new TeamService(database.connection);
+    let team = teams.getOwnedByAgent(agent.id);
+    if (!team && children.length) {
+      const base = (agent.slug || agent.id).replace(/[^a-z0-9_-]/gi,'-').toLowerCase();
+      const slug = teams.getBySlug(base + '-team') ? base + '-owned-team' : base + '-team';
+      team = teams.createOwnedTeam(agent.id,{name: agent.name + ' Team',slug,purpose:'Equipe permanente do agente '+agent.name},'user:compat');
+    }
+    if (team) {
+      teams.replaceMembers(team.id, children.map((child_agent_id:string,index:number)=>({child_agent_id,agent_id:child_agent_id,priority:index,enabled:true} as any)));
+      response.json({ ok:true, data: teams.get(team.id)!.members.map((member:any,index:number)=>({child_agent_id:member.agent_id,relation_type:'supervises',priority:member.priority??index})) });
+      return;
+    }
+    new AgentRelationRepository(database.connection).replaceChildren(agent.id, []);
+    response.json({ ok:true, data: [] });
   } catch (error) {
     const code = codeOf(error, 'AGENT_RELATIONS_UPDATE_FAILED');
     response.status(statusFor(code)).json({ ok: false, error: { code, message: messageOf(error, code) } });
