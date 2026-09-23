@@ -8,9 +8,14 @@ import { getProjectRootSetting } from './appSettings.js';
 export interface AgentOfficeProject {
   id: string;
   name: string;
+  objective: string;
+  lifecycle_status: 'active' | 'paused' | 'completed' | 'archived';
   root_path: string;
   git_enabled: boolean;
   git_branch: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -46,7 +51,17 @@ function detectGit(rootPath: string): { enabled: boolean; branch: string | null 
 }
 
 function normalizeProject(row: any): AgentOfficeProject {
-  return { ...row, git_enabled: Boolean(row.git_enabled) };
+  let metadata: Record<string, unknown> = {};
+  try { metadata = JSON.parse(row.metadata_json || '{}'); } catch {}
+  return {
+    ...row,
+    objective: row.objective ?? '',
+    lifecycle_status: row.lifecycle_status ?? 'active',
+    git_enabled: Boolean(row.git_enabled),
+    completed_at: row.completed_at ?? null,
+    archived_at: row.archived_at ?? null,
+    metadata,
+  };
 }
 
 export class ProjectRepository {
@@ -85,15 +100,20 @@ export class ProjectRepository {
     const project: AgentOfficeProject = {
       id: id(),
       name: input.name?.trim() || path.basename(rootPath) || rootPath,
+      objective: '',
+      lifecycle_status: 'active',
       root_path: rootPath,
       git_enabled: detected.enabled,
       git_branch: detected.branch,
+      completed_at: null,
+      archived_at: null,
+      metadata: {},
       created_at: timestamp,
       updated_at: timestamp,
     };
     try {
-      this.database.prepare(`INSERT INTO projects (id, name, root_path, git_enabled, git_branch, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-        project.id, project.name, project.root_path, project.git_enabled ? 1 : 0, project.git_branch, project.created_at, project.updated_at,
+      this.database.prepare(`INSERT INTO projects (id, name, objective, lifecycle_status, root_path, git_enabled, git_branch, completed_at, archived_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        project.id, project.name, project.objective, project.lifecycle_status, project.root_path, project.git_enabled ? 1 : 0, project.git_branch, project.completed_at, project.archived_at, JSON.stringify(project.metadata), project.created_at, project.updated_at,
       );
     } catch (error: any) {
       if (String(error?.code || '').includes('CONSTRAINT') || String(error?.message || '').includes('UNIQUE')) throw new Error('PROJECT_ALREADY_EXISTS');
