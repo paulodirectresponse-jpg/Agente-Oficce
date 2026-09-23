@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AgentProfile, Project, UniversalProvider } from './types.js';
 import { WorkspaceView } from './WorkspaceView.js';
+import { ProjectsView } from './ProjectsView.js';
 import { AnalyticsView } from './AnalyticsView.js';
 import { SettingsView } from './SettingsView.js';
 import { OfficeView } from './OfficeView.js';
@@ -15,6 +16,7 @@ import { DevChatView } from './DevChatView.js';
 import { TrabalhoView } from './TrabalhoView.js';
 import { LegacyNav } from './shell/LegacyNav.js';
 import { ProjectSwitcher } from './shell/ProjectSwitcher.js';
+import type { ProjectMenuAction } from './shell/ProjectSwitcher.js';
 import { SystemCenterView } from './shell/SystemCenterView.js';
 import { SystemStatusFooter } from './shell/SystemStatusFooter.js';
 import { PRIMARY_NAV, activePrimaryKey } from './shell/shellModel.js';
@@ -30,6 +32,7 @@ export function AgentOfficeApp() {
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [runtimeState, setRuntimeState] = useState<RuntimeState>('checking');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [projectIntent, setProjectIntent] = useState<ProjectMenuAction>('all');
 
   const loadShellData = useCallback(async () => {
     try {
@@ -114,7 +117,7 @@ export function AgentOfficeApp() {
           projects={projects}
           activeProject={activeProject}
           onSwitch={(project) => switchProject(project)}
-          onMenuAction={() => setView('projects')}
+          onMenuAction={(action) => { setProjectIntent(action); setView('projects'); }}
         />
 
         <nav className="experience-nav" aria-label="Navegação principal">
@@ -161,15 +164,15 @@ export function AgentOfficeApp() {
         {view === 'analytics' && <div className="legacy-view-wrap"><AnalyticsView /></div>}
 
         {view === 'projects' && (
-          <div className="legacy-view-wrap">
-            <WorkspaceView
-              activeProject={activeProject}
-              onSelectProject={(project) => {
-                switchProject(project);
-                void loadShellData();
-              }}
-            />
-          </div>
+          <ProjectsView
+            activeProject={activeProject}
+            intent={projectIntent}
+            onOpenWork={() => setView('trabalho')}
+            onSelectProject={(project) => {
+              switchProject(project);
+              void loadShellData();
+            }}
+          />
         )}
       </main>
     </div>
