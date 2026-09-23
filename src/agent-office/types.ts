@@ -1,3 +1,9 @@
+export interface VoiceStatus {
+  local_ready:boolean; local_binary:string|null; local_model:string|null;
+  cloud_ready:boolean; cloud_provider:string|null; mode:'local'|'cloud'|'unavailable';
+}
+export interface VoiceTranscript { text:string; engine:string; }
+
 export interface ResourceFile {
   id:string; project_id:string|null; owner_type:'chat'|'project'|'agent'|'subagent'|'skill'; owner_id:string|null;
   file_name:string; mime_type:string; size_bytes:number; storage_path:string; text_content:string;
