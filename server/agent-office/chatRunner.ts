@@ -257,12 +257,14 @@ export class ChatRunnerService {
     const available = this.availableBindings();
     if (!available.length) throw new Error('CHAT_NO_AVAILABLE_AGENTS');
 
-    const selected = input.selected_agent_ids?.length
-      ? input.selected_agent_ids.map((agentId) => {
-          const binding = available.find((item) => item.agent.id === agentId || item.agent.slug === agentId);
-          if (!binding) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
-          return binding;
-        })
+    const explicitAgents = (input.selected_agent_ids ?? []).map((agentId) => {
+      const binding = available.find((item) => item.agent.id === agentId || item.agent.slug === agentId);
+      if (!binding) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
+      return binding;
+    });
+    const explicitSubagents = (input.selected_subagent_ids ?? []).map((subagentId) => this.requireSubagentBinding(subagentId));
+    const selected = explicitAgents.length || explicitSubagents.length
+      ? [...explicitAgents, ...explicitSubagents]
       : target === 'team'
         ? this.selectTeam(available, message)
         : target === 'auto'
@@ -288,7 +290,7 @@ export class ChatRunnerService {
     const run = this.runs.create({
       conversation_id: conversationId,
       project_id: projectId,
-      agent_id: mode === 'single' ? first.agent.id : null,
+      agent_id: mode === 'single' && first.worker_kind === 'agent' ? first.agent.id : null,
       provider_id: mode === 'single' ? first.provider.id : null,
       model_id: mode === 'single' ? this.resolveModel(first, input.model_override).id : null,
       status: 'running',
@@ -296,7 +298,9 @@ export class ChatRunnerService {
       metadata: {
         source: 'chat_v2',
         target,
-        selected_agents: selected.map((binding) => binding.agent.id),
+        selected_agents: selected.filter((binding) => binding.worker_kind === 'agent').map((binding) => binding.agent.id),
+        selected_subagents: selected.filter((binding) => binding.worker_kind === 'subagent').map((binding) => binding.subagent_id!),
+        selected_workers: selected.map((binding) => ({ kind: binding.worker_kind, id: binding.worker_kind === 'agent' ? binding.agent.id : binding.subagent_id! })),
         user_message_id: userMessage.id,
         tools_enabled: toolsEnabled,
         routing: target === 'auto' ? 'adaptive' : target,
@@ -310,14 +314,17 @@ export class ChatRunnerService {
     this.emit(run, 'run.created', 'Chat iniciado', {
       mode,
       target,
-      selected_agents: selected.map((binding) => binding.agent.id),
+      selected_agents: selected.filter((binding) => binding.worker_kind === 'agent').map((binding) => binding.agent.id),
+      selected_subagents: selected.filter((binding) => binding.worker_kind === 'subagent').map((binding) => binding.subagent_id!),
       tools_enabled: toolsEnabled,
     });
 
     return {
       run,
       conversation_id: conversationId,
-      selected_agents: selected.map((binding) => binding.agent.id),
+      selected_agents: selected.filter((binding) => binding.worker_kind === 'agent').map((binding) => binding.agent.id),
+      selected_subagents: selected.filter((binding) => binding.worker_kind === 'subagent').map((binding) => binding.subagent_id!),
+      selected_workers: selected.map((binding) => ({ kind: binding.worker_kind, id: binding.worker_kind === 'agent' ? binding.agent.id : binding.subagent_id! })),
       mode,
       model_override: input.model_override,
       tools_enabled: toolsEnabled,
@@ -329,6 +336,7 @@ export class ChatRunnerService {
       run_id: prepared.run.id,
       conversation_id: prepared.conversation_id,
       selected_agents: prepared.selected_agents,
+      selected_subagents: prepared.selected_subagents,
       mode: prepared.mode,
       status: 'running',
       tools_enabled: prepared.tools_enabled,
@@ -337,7 +345,7 @@ export class ChatRunnerService {
 
   async execute(prepared: PreparedChatRun, signal?: AbortSignal): Promise<void> {
     const rootRun = prepared.run;
-    const selected = prepared.selected_agents.map((agentId) => this.requireBinding(agentId));
+    const selected = prepared.selected_workers.map((worker) => worker.kind === 'agent' ? this.requireBinding(worker.id) : this.requireSubagentBinding(worker.id));
     const stageResults: AgentResult[] = [];
 
     try {
