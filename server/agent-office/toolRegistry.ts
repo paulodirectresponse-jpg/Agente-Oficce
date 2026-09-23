@@ -8,6 +8,7 @@ import {
 } from './localTools.js';
 import { redactSecrets, stableJson } from './securitySanitizer.js';
 import { executeFullAccessTool, fullAccessToolDefinitions, type FullAccessToolResult } from './fullAccessTools.js';
+import { IntegrationRegistryService, integrationToolDefinitions } from './integrationRegistry.js';
 
 export type ToolRisk = 'read' | 'write' | 'execute' | 'external' | 'destructive';
 export type ToolApprovalMode = 'safe' | 'manual' | 'auto';
@@ -199,6 +200,7 @@ const LEGACY_TOOL_DEFINITIONS: ToolDefinition[] = [
 const TOOL_DEFINITIONS: ToolDefinition[] = [
   ...LEGACY_TOOL_DEFINITIONS,
   ...fullAccessToolDefinitions,
+  ...integrationToolDefinitions,
 ];
 
 function isLegacyTool(name: string): name is LocalToolName {
@@ -209,12 +211,22 @@ async function executeBackendTool(
   name: string,
   input: Record<string, unknown>,
   context: LocalToolContext,
+  execution?: ToolExecutionContext,
 ): Promise<LocalToolResult | FullAccessToolResult> {
   if (name === 'run_command') {
     const command = Array.isArray(input.command) ? input.command.map(String).join(' ') : String(input.command ?? '');
     return executeFullAccessTool('shell_command', { command }, context);
   }
   if (isLegacyTool(name)) return executeLocalTool(name, input, context);
+  if (integrationToolDefinitions.some((tool) => tool.name === name)) {
+    if (!execution) return { ok: false, error: 'INTEGRATION_EXECUTION_CONTEXT_REQUIRED' };
+    return new IntegrationRegistryService(execution.database).executeTool(name, input, {
+      project_id: execution.project_id,
+      project_root: execution.project_root,
+      run_id: execution.run_id,
+      signal: execution.signal,
+    });
+  }
   return executeFullAccessTool(name, input, context);
 }
 
@@ -378,7 +390,7 @@ function auditResult(toolName: string, result: LocalToolResult | FullAccessToolR
       args: redactSecrets(data.args),
     };
   }
-  return { ok: true, ...data };
+  return { ok: true, ...(redactSecrets(data) as Record<string, unknown>) };
 }
 
 export class ToolRegistry {
@@ -395,7 +407,9 @@ export class ToolRegistry {
   private needsApproval(tool: ToolDefinition, policy: AgentToolPolicy): boolean {
     if (policy.approval_mode === 'auto') return false;
     if (policy.approval_mode === 'manual') return tool.risk !== 'read';
-    return tool.risk === 'destructive';
+    const integrationMutation = integrationToolDefinitions.some((item) => item.name === tool.name)
+      && (tool.risk === 'write' || tool.risk === 'external' || tool.risk === 'destructive');
+    return tool.risk === 'destructive' || integrationMutation;
   }
 
   async execute(
@@ -416,7 +430,10 @@ export class ToolRegistry {
     }
 
     const inputFingerprint = fingerprintInput(input);
-    const idempotencyKey = context.idempotency_key?.trim() || null;
+    const integrationMutation = integrationToolDefinitions.some((tool) => tool.name === definition.name)
+      && (definition.risk === 'external' || definition.risk === 'destructive' || definition.risk === 'write');
+    const idempotencyKey = context.idempotency_key?.trim()
+      || (integrationMutation ? 'integration:' + context.run_id + ':' + definition.name + ':' + inputFingerprint : null);
     if (idempotencyKey) {
       const existing = context.database.prepare(`
         SELECT id, status, result_json FROM tool_audit_events
@@ -463,7 +480,7 @@ export class ToolRegistry {
         context.execution_plan_id ?? null,
         context.execution_step_id ?? null,
         context.execution_plan_id ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null,
-        context.idempotency_key ?? null,
+        idempotencyKey,
       );
       context.database.prepare(`
         UPDATE tool_audit_events SET status = 'waiting_approval', result_json = ?, ended_at = ? WHERE id = ?
@@ -483,7 +500,7 @@ export class ToolRegistry {
       timeoutMs: 30_000,
       signal: context.signal,
     };
-    const result = await executeBackendTool(definition.name, input, localContext);
+    const result = await executeBackendTool(definition.name, input, localContext, context);
     context.database.prepare(`
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?
@@ -583,7 +600,7 @@ export class ToolRegistry {
       timeoutMs: 30_000,
       signal: context.signal,
     };
-    const result = await executeBackendTool(definition.name, input, localContext);
+    const result = await executeBackendTool(definition.name, input, localContext, context);
     context.database.prepare(`
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?

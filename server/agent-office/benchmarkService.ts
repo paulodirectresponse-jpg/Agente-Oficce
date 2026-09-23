@@ -8,6 +8,7 @@ import { OrchestratorGateway } from './orchestratorGateway.js';
 import { ExecutionGraphService, ExecutionScheduler } from './executionGraph.js';
 import { recoverInterruptedChatRuns } from './runtimeRecovery.js';
 import { redactSecrets } from './securitySanitizer.js';
+import { IntegrationRegistryService } from './integrationRegistry.js';
 
 export interface RoutingGoldenScenario {
   id: string;
@@ -20,7 +21,7 @@ export interface RoutingGoldenScenario {
 
 export interface BenchmarkResult {
   id: string;
-  category: 'routing'|'capability'|'execution'|'recovery'|'security';
+  category: 'routing'|'capability'|'execution'|'recovery'|'security'|'integration';
   status: 'pass'|'fail';
   duration_ms: number;
   assertions: Array<{ name:string; pass:boolean; expected?:unknown; actual?:unknown }>;
@@ -147,6 +148,24 @@ function recoveryBench():BenchmarkResult{
   finally{f.cleanup()}
 }
 
+async function integrationBench():Promise<BenchmarkResult>{
+  const f=fixture(),started=performance.now(),assertions:BenchmarkResult['assertions']=[];
+  try{
+    const registry=new IntegrationRegistryService(f.database.connection);
+    const catalog=registry.catalog();
+    const browser=registry.list().find(x=>x.driver==='browser');
+    const before=registry.availabilityForTool('railway_deploy','bench-project');
+    await registry.create({driver:'railway',name:'Benchmark Railway',auth_mode:'cli'});
+    const after=registry.availabilityForTool('railway_deploy','bench-project');
+    assertions.push(assert('catalog_has_initial_drivers',['github','railway','supabase','browser'].every(driver=>catalog.some(x=>x.driver===driver)),true,catalog.map(x=>x.driver)));
+    assertions.push(assert('browser_auto_registered',Boolean(browser),true,Boolean(browser)));
+    assertions.push(assert('missing_external_connection_detected',before.managed&&!before.available,true,before.available));
+    assertions.push(assert('configured_connection_becomes_eligible',after.available,true,after.available));
+    return result('integration-registry-synthetic','integration',started,assertions,{catalog_size:catalog.length,connections:registry.list().length});
+  }catch(e){return result('integration-registry-synthetic','integration',started,assertions,{},e)}
+  finally{f.cleanup()}
+}
+
 function securityBench():BenchmarkResult{
   const started=performance.now();
   const raw={authorization:'Bearer abcdefghijklmnop',nested:{api_key:'sk-abcdefghijklmnop',safe:'ok'},args:['Bearer qwertyuiopasdfgh']};
@@ -162,7 +181,7 @@ function securityBench():BenchmarkResult{
 
 export async function runBenchmarkSuite(golden:RoutingGoldenScenario[]):Promise<BenchmarkReport>{
   const started=performance.now();
-  const results=[...(await routingBench(golden)),capabilityBench(),await executionBench(),recoveryBench(),securityBench()];
+  const results=[...(await routingBench(golden)),capabilityBench(),await executionBench(),recoveryBench(),securityBench(),await integrationBench()];
   const duration=Math.round((performance.now()-started)*100)/100;
-  return{schema_version:1,generated_at:now(),benchmark_version:'1.0.0',environment:{node:process.version,platform:process.platform,arch:process.arch},summary:{total:results.length,passed:results.filter(x=>x.status==='pass').length,failed:results.filter(x=>x.status==='fail').length,duration_ms:duration},results};
+  return{schema_version:1,generated_at:now(),benchmark_version:'1.1.0',environment:{node:process.version,platform:process.platform,arch:process.arch},summary:{total:results.length,passed:results.filter(x=>x.status==='pass').length,failed:results.filter(x=>x.status==='fail').length,duration_ms:duration},results};
 }

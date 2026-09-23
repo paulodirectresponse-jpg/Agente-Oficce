@@ -6,6 +6,7 @@ import { SettingsView } from './SettingsView.js';
 import { OfficeView } from './OfficeView.js';
 import { AgentManagerView } from './AgentManagerView.js';
 import { ProviderManagerView } from './ProviderManagerView.js';
+import { IntegrationsView } from './IntegrationsView.js';
 import { TeamsView } from './TeamsView.js';
 import { OrchestratorView } from './OrchestratorView.js';
 import { WorkforcesView } from './WorkforcesView.js';
@@ -13,7 +14,7 @@ import { DevChatView } from './DevChatView.js';
 import { api } from './api.js';
 import './App.css';
 
-type ViewKey = 'office' | 'chat' | 'orchestrator' | 'agents' | 'teams' | 'workforces' | 'providers' | 'projects' | 'analytics' | 'settings';
+type ViewKey = 'office' | 'chat' | 'orchestrator' | 'agents' | 'teams' | 'workforces' | 'providers' | 'integrations' | 'projects' | 'analytics' | 'settings';
 type RuntimeState = 'checking' | 'online' | 'offline';
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: string }[] = [
@@ -24,6 +25,7 @@ const NAV_ITEMS: { key: ViewKey; label: string; icon: string }[] = [
   { key: 'teams', label: 'Teams', icon: '◎' },
   { key: 'workforces', label: 'Workforces', icon: '◇' },
   { key: 'providers', label: 'Providers', icon: '⌁' },
+  { key: 'integrations', label: 'Integrações', icon: '⇄' },
   { key: 'projects', label: 'Projetos', icon: '□' },
   { key: 'analytics', label: 'Analytics', icon: '↯' },
   { key: 'settings', label: 'Configurações', icon: '⚙' },
@@ -179,7 +181,7 @@ export function AgentOfficeApp() {
         </div>
 
         <div className="sidebar-footer">
-          <span>Agent Office v0.2</span>
+          <span>Agent Office v0.4</span>
           <small>API-first · local runtime</small>
         </div>
       </aside>
@@ -199,6 +201,7 @@ export function AgentOfficeApp() {
         {view === 'teams' && <TeamsView agents={agents} />}
         {view === 'workforces' && <WorkforcesView />}
         {view === 'providers' && <ProviderManagerView providers={providers} onChanged={loadShellData} />}
+        {view === 'integrations' && <div className="legacy-view-wrap"><IntegrationsView project={activeProject} /></div>}
 
         {view === 'projects' && (
           <div className="legacy-view-wrap">

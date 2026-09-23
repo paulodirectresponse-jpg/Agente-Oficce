@@ -14,5 +14,6 @@ describe('Block 10 benchmark gate',()=>{
     expect(report.results.some(x=>x.category==='execution')).toBe(true);
     expect(report.results.some(x=>x.category==='recovery')).toBe(true);
     expect(report.results.some(x=>x.category==='security')).toBe(true);
+    expect(report.results.some(x=>x.category==='integration')).toBe(true);
   },30000);
 });

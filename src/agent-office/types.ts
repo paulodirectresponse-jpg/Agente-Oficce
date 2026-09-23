@@ -13,6 +13,69 @@ export interface Project {
   updated_at?: string;
 }
 
+export interface IntegrationCapability {
+  capability_key: string;
+  tool_name: string;
+  risk: 'read'|'write'|'execute'|'external'|'destructive';
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  driver: string;
+  name: string;
+  enabled: boolean;
+  auth_mode: string;
+  secret_ref: string | null;
+  health_status: 'unknown'|'healthy'|'degraded'|'auth_error'|'unavailable'|'misconfigured';
+  last_health_at: string | null;
+  last_error: string | null;
+  config: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  capabilities: IntegrationCapability[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationCatalogEntry {
+  driver: string;
+  name: string;
+  description: string;
+  auth_modes: string[];
+  local: boolean;
+  capabilities: Array<{key:string;tool_name:string;risk:string;description:string}>;
+}
+
+export interface ProjectIntegrationBinding {
+  project_id: string;
+  integration_id: string;
+  scope: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  integration?: IntegrationConnection | null;
+}
+
+export interface IntegrationHealthResult {
+  integration_id: string;
+  status: IntegrationConnection['health_status'];
+  detail: string;
+}
+
+export interface IntegrationEvent {
+  id: string;
+  integration_id: string | null;
+  project_id: string | null;
+  run_id: string | null;
+  event_type: string;
+  status: string;
+  operation: string;
+  detail: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface ProjectSummary {
   project: Project;
   operational_state: string;
