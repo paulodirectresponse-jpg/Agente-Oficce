@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3';
 import type { SecretStore } from './secretStore.js';
-import { providerRequestGate } from './runtimeControls.js';
+import { ProviderFallbackRepository, ProviderResilienceManager, isRetryableProviderError } from './providerResilience.js';
 import {
   ProviderRepositoryV2,
   type Provider,
@@ -1057,6 +1057,8 @@ class HttpTransport {
 export class UniversalProviderEngine {
   private readonly providers: ProviderRepositoryV2;
   private readonly transport: HttpTransport;
+  private readonly resilience: ProviderResilienceManager;
+  private readonly fallbacks: ProviderFallbackRepository;
 
   constructor(
     private readonly database: Database,
@@ -1065,6 +1067,8 @@ export class UniversalProviderEngine {
   ) {
     this.providers = new ProviderRepositoryV2(database);
     this.transport = new HttpTransport(fetchImpl);
+    this.resilience = new ProviderResilienceManager(database);
+    this.fallbacks = new ProviderFallbackRepository(database);
   }
 
   private provider(providerId: string): Provider {
@@ -1082,11 +1086,52 @@ export class UniversalProviderEngine {
     return secret;
   }
 
-  private gateOptions(provider: Provider): { maxConcurrent: number; minIntervalMs: number } {
-    return {
-      maxConcurrent: Math.max(1, Math.min(20, configNumber(provider, 'max_concurrent_requests') ?? 2)),
-      minIntervalMs: Math.max(0, configNumber(provider, 'min_request_interval_ms') ?? 0),
-    };
+  private estimatedTokens(input: UniversalCompletionInput): number {
+    const chars = input.messages.reduce((sum, message) => sum + message.content.length, 0);
+    return Math.max(1, Math.ceil(chars / 4));
+  }
+
+  private candidates(providerId: string, model: string): Array<{ providerId: string; model: string }> {
+    const result = [{ providerId, model }];
+    const seen = new Set([providerId + '::' + model]);
+    for (const fallback of this.fallbacks.list(providerId, model)) {
+      const targetProvider = this.providers.get(fallback.target_provider_id);
+      if (!targetProvider?.enabled) continue;
+      const targetModel = fallback.target_model
+        || this.providers.listModels(targetProvider.id, false).find(item => item.is_default)?.model_id
+        || this.providers.listModels(targetProvider.id, false)[0]?.model_id;
+      if (!targetModel) continue;
+      const key = targetProvider.id + '::' + targetModel;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ providerId: targetProvider.id, model: targetModel });
+    }
+    return result;
+  }
+
+  private async completeCandidate(
+    providerId: string,
+    model: string,
+    input: UniversalCompletionInput,
+    options: UniversalRequestOptions,
+  ): Promise<UniversalCompletionResult> {
+    const provider = this.provider(providerId);
+    const release = await this.resilience.acquire(provider, this.estimatedTokens(input), options.signal);
+    try {
+      const driver = createProtocolDriver(provider.protocol_driver);
+      const secret = await this.secret(provider);
+      const payload = await this.transport.json(provider, driver.prepareCompletion(provider, { ...input, model }, false), secret, options);
+      const result = driver.parseCompletion(provider, payload);
+      this.resilience.recordSuccess(provider, model, Math.max(0,
+        (result.usage?.input_tokens ?? 0) + (result.usage?.output_tokens ?? 0) - this.estimatedTokens(input)
+      ));
+      return result;
+    } catch (error) {
+      this.resilience.recordFailure(provider, model, error);
+      throw error;
+    } finally {
+      release();
+    }
   }
 
   async complete(
@@ -1094,16 +1139,18 @@ export class UniversalProviderEngine {
     input: UniversalCompletionInput,
     options: UniversalRequestOptions = {},
   ): Promise<UniversalCompletionResult> {
-    const provider = this.provider(providerId);
-    const release = await providerRequestGate.acquire(provider.id, { ...this.gateOptions(provider), signal: options.signal });
-    try {
-      const driver = createProtocolDriver(provider.protocol_driver);
-      const secret = await this.secret(provider);
-      const payload = await this.transport.json(provider, driver.prepareCompletion(provider, input, false), secret, options);
-      return driver.parseCompletion(provider, payload);
-    } finally {
-      release();
+    const candidates = this.candidates(providerId, input.model);
+    let lastError: unknown;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      try {
+        return await this.completeCandidate(candidate.providerId, candidate.model, input, options);
+      } catch (error) {
+        lastError = error;
+        if (!isRetryableProviderError(error) || index === candidates.length - 1) throw error;
+      }
     }
+    throw lastError instanceof Error ? lastError : new UniversalProviderError('PROVIDER_REQUEST_FAILED', 'Provider request failed.');
   }
 
   async *stream(
@@ -1111,16 +1158,38 @@ export class UniversalProviderEngine {
     input: UniversalCompletionInput,
     options: UniversalRequestOptions = {},
   ): AsyncIterable<UniversalStreamEvent> {
-    const provider = this.provider(providerId);
-    const release = await providerRequestGate.acquire(provider.id, { ...this.gateOptions(provider), signal: options.signal });
-    try {
-      const driver = createProtocolDriver(provider.protocol_driver);
-      const secret = await this.secret(provider);
-      const response = await this.transport.request(provider, driver.prepareCompletion(provider, input, true), secret, options);
-      yield* driver.stream(provider, response);
-    } finally {
-      release();
+    const candidates = this.candidates(providerId, input.model);
+    let lastError: unknown;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index];
+      const provider = this.provider(candidate.providerId);
+      let release: (() => void) | null = null;
+      let emitted = false;
+      try {
+        release = await this.resilience.acquire(provider, this.estimatedTokens(input), options.signal);
+        const driver = createProtocolDriver(provider.protocol_driver);
+        const secret = await this.secret(provider);
+        const response = await this.transport.request(provider, driver.prepareCompletion(provider, { ...input, model: candidate.model }, true), secret, options);
+        let tokenTotal = 0;
+        for await (const event of driver.stream(provider, response)) {
+          if (event.type === 'usage') tokenTotal += (event.usage.input_tokens ?? 0) + (event.usage.output_tokens ?? 0);
+          if (event.type === 'text_delta') emitted = true;
+          yield event;
+        }
+        this.resilience.recordSuccess(provider, candidate.model, Math.max(0, tokenTotal - this.estimatedTokens(input)));
+        return;
+      } catch (error) {
+        lastError = error;
+        const code = error && typeof error === 'object' && 'code' in error ? String((error as any).code ?? '') : '';
+        if (release || (code !== 'PROVIDER_CIRCUIT_OPEN' && code !== 'PROVIDER_COOLDOWN')) {
+          this.resilience.recordFailure(provider, candidate.model, error);
+        }
+        if (emitted || !isRetryableProviderError(error) || index === candidates.length - 1) throw error;
+      } finally {
+        release?.();
+      }
     }
+    throw lastError instanceof Error ? lastError : new UniversalProviderError('PROVIDER_REQUEST_FAILED', 'Provider stream failed.');
   }
 
   async discoverModels(providerId: string, persist = true): Promise<DiscoveredModel[]> {
@@ -1132,8 +1201,29 @@ export class UniversalProviderEngine {
     const payload = await this.transport.json(provider, request, secret);
     const models = driver.parseModels(provider, payload);
     if (persist) {
+      const discoveredIds = new Set(models.map(model => model.model_id));
       for (const model of models) {
         this.providers.upsertDiscoveredModel(provider.id, model);
+        this.database.prepare(`
+          INSERT INTO provider_model_runtime_state (
+            provider_id, model_id, operational_status, last_success_at, last_failure_at, last_error, updated_at
+          ) VALUES (?, ?, 'healthy', ?, NULL, NULL, ?)
+          ON CONFLICT(provider_id,model_id) DO UPDATE SET
+            operational_status='healthy', last_success_at=excluded.last_success_at,
+            last_error=NULL, updated_at=excluded.updated_at
+        `).run(provider.id, model.model_id, new Date().toISOString(), new Date().toISOString());
+      }
+      const existing = this.providers.listModels(provider.id, true);
+      for (const model of existing) {
+        if (discoveredIds.has(model.model_id)) continue;
+        this.database.prepare(`
+          INSERT INTO provider_model_runtime_state (
+            provider_id, model_id, operational_status, last_success_at, last_failure_at, last_error, updated_at
+          ) VALUES (?, ?, 'unavailable', NULL, ?, 'Model was not returned by provider discovery.', ?)
+          ON CONFLICT(provider_id,model_id) DO UPDATE SET
+            operational_status='unavailable', last_failure_at=excluded.last_failure_at,
+            last_error=excluded.last_error, updated_at=excluded.updated_at
+        `).run(provider.id, model.model_id, new Date().toISOString(), new Date().toISOString());
       }
     }
     return models;
@@ -1160,6 +1250,7 @@ export class UniversalProviderEngine {
         last_health_at: new Date().toISOString(),
         last_health_error: null,
       });
+      this.resilience.recordSuccess(provider, '__health__');
       return {
         provider_id: provider.id,
         status: 'healthy',
@@ -1168,6 +1259,7 @@ export class UniversalProviderEngine {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Provider connection failed.';
+      this.resilience.recordFailure(provider, '__health__', error);
       this.providers.update(provider.id, {
         health_status: 'unavailable',
         last_health_at: new Date().toISOString(),

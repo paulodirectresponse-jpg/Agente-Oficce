@@ -6,6 +6,7 @@ import { agentOfficeRouter } from './routes/agentOfficeRoutes.js';
 import { openAgentOfficeDatabase } from './agent-office/database.js';
 import { recoverInterruptedChatRuns } from './agent-office/runtimeRecovery.js';
 import { DurableExecutionService } from './agent-office/durableExecution.js';
+import { startProviderHealthMonitor } from './agent-office/providerHealthMonitor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,6 +49,8 @@ if (!DESKTOP_RUNTIME) {
     res.sendFile(join(clientDir, 'index.html'));
   });
 }
+
+startProviderHealthMonitor();
 
 app.listen(PORT, HOST, () => {
   console.log(`\n🚀 Agent Office server running at http://${HOST}:${PORT}`);

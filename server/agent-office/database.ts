@@ -761,6 +761,52 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_execution_team_snapshot_plan ON execution_team_snapshots(plan_id,team_kind,team_id);
     `,
   },
+  {
+    version: 14,
+    sql: `
+      CREATE TABLE IF NOT EXISTS provider_fallbacks (
+        id TEXT PRIMARY KEY,
+        source_provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+        source_model TEXT,
+        target_provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+        target_model TEXT,
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        CHECK(source_provider_id <> target_provider_id OR COALESCE(source_model,'') <> COALESCE(target_model,''))
+      );
+      CREATE INDEX IF NOT EXISTS idx_provider_fallbacks_source
+        ON provider_fallbacks(source_provider_id, source_model, enabled, priority);
+
+      CREATE TABLE IF NOT EXISTS provider_runtime_state (
+        provider_id TEXT PRIMARY KEY REFERENCES providers(id) ON DELETE CASCADE,
+        operational_status TEXT NOT NULL DEFAULT 'unknown',
+        active_requests INTEGER NOT NULL DEFAULT 0,
+        queued_requests INTEGER NOT NULL DEFAULT 0,
+        rpm_used INTEGER NOT NULL DEFAULT 0,
+        tpm_used INTEGER NOT NULL DEFAULT 0,
+        cooldown_until TEXT,
+        circuit_state TEXT NOT NULL DEFAULT 'closed' CHECK(circuit_state IN ('closed','open','half_open')),
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        last_success_at TEXT,
+        last_failure_at TEXT,
+        last_error TEXT,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS provider_model_runtime_state (
+        provider_id TEXT NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+        model_id TEXT NOT NULL,
+        operational_status TEXT NOT NULL DEFAULT 'unknown',
+        last_success_at TEXT,
+        last_failure_at TEXT,
+        last_error TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(provider_id, model_id)
+      );
+    `,
+  }
 ];
 
 function assertMigrationPlan(): void {

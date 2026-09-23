@@ -3657,3 +3657,125 @@ textarea {
     flex-direction: column;
   }
 }
+
+
+.provider-runtime-card {
+  border-color: #28445f;
+  background: linear-gradient(180deg, rgba(59,130,246,.06), rgba(14,20,29,1));
+}
+
+.provider-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.provider-runtime-grid > div {
+  border: 1px solid #263246;
+  background: #0a0f16;
+  border-radius: 9px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.provider-runtime-grid strong {
+  display: block;
+  font-size: 17px;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-runtime-grid span {
+  display: block;
+  color: #7c8a9e;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-top: 5px;
+}
+
+.provider-runtime-warning,
+.provider-runtime-error {
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.provider-runtime-warning {
+  border: 1px solid #6b4f1d;
+  background: rgba(245,158,11,.08);
+  color: #fbbf24;
+}
+
+.provider-runtime-error {
+  border: 1px solid #6b2530;
+  background: rgba(239,68,68,.07);
+  color: #fda4af;
+}
+
+.model-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.model-runtime-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #334155;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #94a3b8;
+  background: #0a0f16;
+}
+
+.model-runtime-chip.status-healthy {
+  border-color: #22543d;
+  color: #86efac;
+  background: rgba(34,197,94,.08);
+}
+
+.model-runtime-chip.status-rate_limited,
+.model-runtime-chip.status-queued,
+.model-runtime-chip.status-busy,
+.model-runtime-chip.status-degraded {
+  border-color: #6b4f1d;
+  color: #fbbf24;
+  background: rgba(245,158,11,.08);
+}
+
+.model-runtime-chip.status-auth_error,
+.model-runtime-chip.status-misconfigured,
+.model-runtime-chip.status-unavailable {
+  border-color: #6b2530;
+  color: #fda4af;
+  background: rgba(239,68,68,.07);
+}
+
+.model-add-row select {
+  min-width: 190px;
+  background: #0a0f16;
+  border: 1px solid #263246;
+  border-radius: 6px;
+  color: #dbe4f0;
+  padding: 8px 10px;
+}
+
+@media (max-width: 1050px) {
+  .provider-runtime-grid {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
+}
+
+@media (max-width: 650px) {
+  .provider-runtime-grid {
+    grid-template-columns: repeat(2, minmax(90px, 1fr));
+  }
+}

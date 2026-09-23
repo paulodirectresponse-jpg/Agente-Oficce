@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -140,6 +140,15 @@ export const api = {
     }),
   listProviderModelsV2: (providerId: string) =>
     request<ProviderModel[]>(`/api/agent-office/v2/providers/${providerId}/models`),
+  getProviderRuntimeV2: (providerId: string) =>
+    request<ProviderRuntimeStatus>(`/api/agent-office/v2/providers/${providerId}/runtime`),
+  listProviderFallbacksV2: (providerId: string) =>
+    request<ProviderFallback[]>(`/api/agent-office/v2/providers/${providerId}/fallbacks`),
+  saveProviderFallbacksV2: (providerId: string, fallbacks: Array<{ source_model?: string | null; target_provider_id: string; target_model?: string | null }>) =>
+    request<ProviderFallback[]>(`/api/agent-office/v2/providers/${providerId}/fallbacks`, {
+      method: 'PUT',
+      body: JSON.stringify({ fallbacks }),
+    }),
   createProviderModelV2: (providerId: string, input: Partial<ProviderModel> & { model_id: string }) =>
     request<ProviderModel>(`/api/agent-office/v2/providers/${providerId}/models`, {
       method: 'POST',
