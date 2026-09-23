@@ -49,6 +49,8 @@ export interface UniversalUsage {
 
 export interface UniversalCompletionResult {
   text: string;
+  provider_id?: string;
+  model_id?: string;
   finish_reason?: string;
   usage?: UniversalUsage;
   tool_calls?: UniversalToolCall[];
@@ -1125,7 +1127,7 @@ export class UniversalProviderEngine {
       this.resilience.recordSuccess(provider, model, Math.max(0,
         (result.usage?.input_tokens ?? 0) + (result.usage?.output_tokens ?? 0) - this.estimatedTokens(input)
       ));
-      return result;
+      return { ...result, provider_id: provider.id, model_id: model };
     } catch (error) {
       this.resilience.recordFailure(provider, model, error);
       throw error;
