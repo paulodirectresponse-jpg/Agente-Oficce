@@ -33,6 +33,10 @@ export interface PrepareChatRunInput {
   message: string;
   target?: ChatTarget;
   model_override?: string;
+  selected_agent_ids?: string[];
+  orchestration_run_id?: string;
+  routing_level?: string;
+  routing_decision?: Record<string, unknown>;
 }
 
 export interface PreparedChatRun {
@@ -239,11 +243,17 @@ export class ChatRunnerService {
     const available = this.availableBindings();
     if (!available.length) throw new Error('CHAT_NO_AVAILABLE_AGENTS');
 
-    const selected = target === 'team'
-      ? this.selectTeam(available, message)
-      : target === 'auto'
-        ? this.selectAdaptive(available, message)
-        : [this.selectSingle(available, message, target)];
+    const selected = input.selected_agent_ids?.length
+      ? input.selected_agent_ids.map((agentId) => {
+          const binding = available.find((item) => item.agent.id === agentId || item.agent.slug === agentId);
+          if (!binding) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
+          return binding;
+        })
+      : target === 'team'
+        ? this.selectTeam(available, message)
+        : target === 'auto'
+          ? this.selectAdaptive(available, message)
+          : [this.selectSingle(available, message, target)];
 
     const toolsEnabled = selected.some((binding) => this.toolsAvailable(binding));
 
@@ -277,6 +287,9 @@ export class ChatRunnerService {
         tools_enabled: toolsEnabled,
         routing: target === 'auto' ? 'adaptive' : target,
         model_override: input.model_override ?? null,
+        orchestration_run_id: input.orchestration_run_id ?? null,
+        routing_level: input.routing_level ?? null,
+        routing_decision: input.routing_decision ?? null,
       },
     });
 
