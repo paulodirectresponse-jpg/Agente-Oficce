@@ -52,6 +52,7 @@ export interface Agent {
   model_id: string | null;
   system_prompt: string;
   enabled: boolean;
+  paused: boolean;
   sort_order: number;
   idle_after_seconds: number;
   metadata: Record<string, unknown>;
@@ -175,6 +176,7 @@ function normalizeAgent(row: any): Agent {
     model_id: row.model_id ?? null,
     system_prompt: row.system_prompt,
     enabled: Boolean(row.enabled),
+    paused: Boolean(row.paused),
     sort_order: Number(row.sort_order),
     idle_after_seconds: Number(row.idle_after_seconds),
     metadata: parseJson(row.metadata_json, {}),
@@ -508,9 +510,9 @@ export class AgentRepositoryV2 {
     this.database.prepare(`
       INSERT INTO agents (
         id, name, slug, role, description, avatar_key, provider_id, model_id,
-        system_prompt, enabled, sort_order, idle_after_seconds, metadata_json,
+        system_prompt, enabled, paused, sort_order, idle_after_seconds, metadata_json,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       agentId,
       input.name.trim(),
@@ -522,6 +524,7 @@ export class AgentRepositoryV2 {
       input.model_id ?? null,
       input.system_prompt ?? '',
       input.enabled === false ? 0 : 1,
+      0,
       input.sort_order ?? 0,
       input.idle_after_seconds ?? 300,
       JSON.stringify(input.metadata ?? {}),
@@ -561,7 +564,7 @@ export class AgentRepositoryV2 {
     this.database.prepare(`
       UPDATE agents SET
         name = ?, slug = ?, role = ?, description = ?, avatar_key = ?,
-        provider_id = ?, model_id = ?, system_prompt = ?, enabled = ?,
+        provider_id = ?, model_id = ?, system_prompt = ?, enabled = ?, paused = ?,
         sort_order = ?, idle_after_seconds = ?, metadata_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
@@ -574,6 +577,7 @@ export class AgentRepositoryV2 {
       next.model_id,
       next.system_prompt,
       next.enabled ? 1 : 0,
+      next.paused ? 1 : 0,
       next.sort_order,
       next.idle_after_seconds,
       JSON.stringify(next.metadata),
