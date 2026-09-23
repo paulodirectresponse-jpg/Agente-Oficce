@@ -763,6 +763,118 @@ export class ChatRunnerService {
     return result;
   }
 
+  private auditAgentId(binding: AgentBinding): string {
+    return binding.worker_kind === 'agent' ? binding.agent.id : binding.owner_agent_id!;
+  }
+
+  private workerPayload(binding: AgentBinding): Record<string, unknown> {
+    return {
+      worker_kind: binding.worker_kind,
+      agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
+      subagent_id: binding.worker_kind === 'subagent' ? binding.subagent_id : null,
+      owner_agent_id: binding.owner_agent_id ?? null,
+      team_id: binding.team_id ?? null,
+    };
+  }
+
+  private setWorkerState(
+    binding: AgentBinding,
+    projectId: string,
+    runId: string | null,
+    state: string,
+    activity: string,
+    progress: number | null,
+  ): void {
+    if (binding.worker_kind === 'agent') {
+      this.states.upsert({
+        agent_id: binding.agent.id,
+        project_id: projectId,
+        run_id: runId,
+        state,
+        activity,
+        progress,
+      });
+      return;
+    }
+    const timestamp = new Date().toISOString();
+    this.database.prepare(`
+      INSERT INTO subagent_states(subagent_id,project_id,run_id,state,activity,progress,updated_at)
+      VALUES(?,?,?,?,?,?,?)
+      ON CONFLICT(subagent_id,project_id) DO UPDATE SET
+        run_id=excluded.run_id,state=excluded.state,activity=excluded.activity,progress=excluded.progress,updated_at=excluded.updated_at
+    `).run(binding.subagent_id, projectId, runId, state, activity, progress, timestamp);
+  }
+
+  private recordWorkerPerformance(
+    binding: AgentBinding,
+    runId: string,
+    projectId: string,
+    eventType: string,
+    detail: string,
+  ): void {
+    if (binding.worker_kind === 'agent') {
+      this.agentOps.recordPerformance({
+        agent_id: binding.agent.id,
+        run_id: runId,
+        project_id: projectId,
+        event_type: eventType,
+        source: 'system',
+        detail,
+      });
+      return;
+    }
+    const duplicate = this.database.prepare(
+      'SELECT 1 FROM subagent_performance_events WHERE subagent_id=? AND run_id=? AND source=? AND event_type=? LIMIT 1'
+    ).get(binding.subagent_id, runId, 'system', eventType);
+    if (duplicate) return;
+    this.database.prepare(`
+      INSERT INTO subagent_performance_events(id,subagent_id,run_id,project_id,event_type,score,source,detail,metadata_json,created_at)
+      VALUES(?,?,?,?,?,NULL,'system',?,'{}',?)
+    `).run(
+      crypto.randomUUID(),
+      binding.subagent_id,
+      runId,
+      projectId,
+      eventType,
+      detail,
+      new Date().toISOString(),
+    );
+  }
+
+  private recordWorkerUsage(
+    binding: AgentBinding,
+    providerId: string,
+    usage: UniversalUsage | undefined,
+    costUsd: number | undefined,
+    requestCount: number,
+    durationMs: number,
+  ): void {
+    if (binding.worker_kind === 'agent') {
+      this.usage.recordRunUsage(binding.agent.id, providerId, {
+        input_tokens: usage?.input_tokens,
+        output_tokens: usage?.output_tokens,
+        cost_usd: costUsd,
+        request_count: requestCount,
+        duration_ms: durationMs,
+      });
+      return;
+    }
+    this.database.prepare(`
+      INSERT INTO subagent_usage_snapshots(id,subagent_id,provider_id,input_tokens,output_tokens,cost_usd,request_count,duration_ms,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?)
+    `).run(
+      crypto.randomUUID(),
+      binding.subagent_id,
+      providerId,
+      usage?.input_tokens ?? 0,
+      usage?.output_tokens ?? 0,
+      costUsd ?? null,
+      requestCount,
+      durationMs,
+      new Date().toISOString(),
+    );
+  }
+
   private projectRoot(projectId: string): string {
     const row = this.database.prepare('SELECT root_path FROM projects WHERE id = ?').get(projectId) as { root_path: string } | undefined;
     if (!row?.root_path) throw new Error('CHAT_PROJECT_ROOT_NOT_FOUND');
