@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport, IntegrationConnection, IntegrationCatalogEntry, ProjectIntegrationBinding, IntegrationHealthResult, IntegrationEvent } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport, IntegrationConnection, IntegrationCatalogEntry, ProjectIntegrationBinding, IntegrationHealthResult, IntegrationEvent, ResourceFile, KnowledgeItem, SkillDefinition } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -37,6 +37,14 @@ async function fetchWithStartupRetry(path: string, init?: RequestInit): Promise<
   }
 
   throw lastError instanceof Error ? lastError : new Error('Local Agent Office backend is unavailable.');
+}
+
+async function uploadBinary<T>(path:string,file:File):Promise<T>{
+  const apiBase=await resolveApiBase();
+  const response=await fetch(`${apiBase}${path}`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','X-File-Name':encodeURIComponent(file.name)},body:file});
+  const payload=await response.json() as {ok:boolean;data?:T;error?:{message?:string}};
+  if(!response.ok||!payload.ok)throw new Error(payload.error?.message||`Upload failed (${response.status})`);
+  return payload.data as T;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -122,6 +130,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(config),
     }),
+
+  uploadResource: (projectId:string,file:File,ownerType:'chat'|'project'|'agent'|'subagent'|'skill'='chat',ownerId?:string) =>
+    uploadBinary<ResourceFile>(`/api/agent-office/resources/upload?${projectId?`project_id=${encodeURIComponent(projectId)}&`:''}owner_type=${ownerType}${ownerId?`&owner_id=${encodeURIComponent(ownerId)}`:''}`,file),
+  listProjectResources: (projectId:string) => request<ResourceFile[]>(`/api/agent-office/projects/${projectId}/resources`),
+  listKnowledge: (scopeType:'project'|'agent'|'subagent',scopeId:string) => request<KnowledgeItem[]>(`/api/agent-office/knowledge/${scopeType}/${scopeId}`),
+  addKnowledge: (input:{scope_type:'project'|'agent'|'subagent';scope_id:string;resource_id:string;title?:string}) => request<KnowledgeItem>('/api/agent-office/knowledge',{method:'POST',body:JSON.stringify(input)}),
+  deleteKnowledge: (id:string) => request<{deleted:boolean}>(`/api/agent-office/knowledge/${id}`,{method:'DELETE'}),
+  listSkills: () => request<SkillDefinition[]>('/api/agent-office/skills'),
+  createSkill: (input:{name:string;description?:string;instructions?:string}) => request<SkillDefinition>('/api/agent-office/skills',{method:'POST',body:JSON.stringify(input)}),
+  updateSkill: (id:string,input:{name:string;description?:string;instructions?:string;enabled?:boolean}) => request<SkillDefinition>(`/api/agent-office/skills/${id}`,{method:'PATCH',body:JSON.stringify(input)}),
+  deleteSkill: (id:string) => request<{deleted:boolean}>(`/api/agent-office/skills/${id}`,{method:'DELETE'}),
+  listAssignedSkills: (assigneeType:'agent'|'subagent',assigneeId:string) => request<SkillDefinition[]>(`/api/agent-office/skills/assigned/${assigneeType}/${assigneeId}`),
+  assignSkill: (skillId:string,assigneeType:'agent'|'subagent',assigneeId:string) => request<{assigned:boolean}>(`/api/agent-office/skills/${skillId}/assign/${assigneeType}/${assigneeId}`,{method:'PUT'}),
+  unassignSkill: (skillId:string,assigneeType:'agent'|'subagent',assigneeId:string) => request<{assigned:boolean}>(`/api/agent-office/skills/${skillId}/assign/${assigneeType}/${assigneeId}`,{method:'DELETE'}),
 
   // API-only chat runner
   startChatRun: (input: ChatStartInput) =>
