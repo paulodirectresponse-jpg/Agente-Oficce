@@ -5,6 +5,7 @@ import { AnalyticsView } from './AnalyticsView.js';
 import { SettingsView } from './SettingsView.js';
 import { OfficeView } from './OfficeView.js';
 import { AgentManagerView } from './AgentManagerView.js';
+import { EquipeView } from './EquipeView.js';
 import { ProviderManagerView } from './ProviderManagerView.js';
 import { IntegrationsView } from './IntegrationsView.js';
 import { TeamsView } from './TeamsView.js';
@@ -146,7 +147,7 @@ export function AgentOfficeApp() {
         )}
 
         {view === 'trabalho' && <TrabalhoView project={activeProject} />}
-        {view === 'equipe' && <AgentManagerView agents={agents} providers={providers} onChanged={loadShellData} />}
+        {view === 'equipe' && <EquipeView agents={agents} providers={providers} onChanged={loadShellData} />}
         {view === 'conexoes' && <ProviderManagerView providers={providers} onChanged={loadShellData} />}
         {view === 'configuracoes' && <div className="legacy-view-wrap"><SettingsView /></div>}
         {view === 'system' && <SystemCenterView runtimeState={runtimeState} providers={providers} activeProject={activeProject} />}
