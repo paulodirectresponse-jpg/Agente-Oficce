@@ -407,7 +407,9 @@ export class ToolRegistry {
   private needsApproval(tool: ToolDefinition, policy: AgentToolPolicy): boolean {
     if (policy.approval_mode === 'auto') return false;
     if (policy.approval_mode === 'manual') return tool.risk !== 'read';
-    return tool.risk === 'destructive';
+    const integrationMutation = integrationToolDefinitions.some((item) => item.name === tool.name)
+      && (tool.risk === 'write' || tool.risk === 'external' || tool.risk === 'destructive');
+    return tool.risk === 'destructive' || integrationMutation;
   }
 
   async execute(
