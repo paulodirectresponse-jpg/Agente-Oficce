@@ -91,7 +91,7 @@ export class VoiceService{
     const config=cloudConfig(provider);if(!config.url||!config.model)throw new Error('VOICE_PROVIDER_UNSUPPORTED');
     const secret=await new DevelopmentSecretStore(getAgentOfficeConfig().dataDir).get(provider.secret_ref);if(!secret)throw new Error('VOICE_PROVIDER_SECRET_MISSING');
     const form=new FormData();
-    form.append('file',new Blob([buffer],{type:'audio/wav'}),'voice.wav');
+    form.append('file',new Blob([new Uint8Array(buffer)],{type:'audio/wav'}),'voice.wav');
     form.append('model',config.model);
     form.append('language',language||'pt');
     const headers:Record<string,string>={...provider.headers};
