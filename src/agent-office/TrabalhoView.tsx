@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentProfile, ChatRun, ChatStreamEnvelope, Conversation, Project, ResourceFile, Team, ToolApproval, WorkspaceSnapshot } from './types.js';
+import type { AgentProfile, ChatRun, ChatStreamEnvelope, Conversation, KnowledgeItem, Project, ResourceFile, Team, ToolApproval, WorkspaceSnapshot } from './types.js';
 import { api } from './api.js';
 import { OfficeView } from './OfficeView.js';
 import { Workbench } from './dev-chat/Workbench.js';
 import { V2Drawer, V2EmptyState, V2Status, V2Tabs } from './shell/V2Primitives.js';
 import { MessageContent } from './conversation/MessageContent.js';
+import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
 
 type ActiveAction='orient'|'enqueue'|'interrupt';
 type WorkMode='conversation'|'sala';
@@ -49,6 +50,8 @@ export function TrabalhoView({project}:{project:Project|null}){
   const [mode,setMode]=useState<WorkMode>('conversation');
   const [inspectorOpen,setInspectorOpen]=useState(false);
   const [activityOpen,setActivityOpen]=useState(false);
+  const [knowledgeOpen,setKnowledgeOpen]=useState(false);
+  const [projectKnowledge,setProjectKnowledge]=useState<KnowledgeItem[]>([]);
   const [error,setError]=useState<string|null>(null);
   const [sending,setSending]=useState(false);
   const [resolvingApproval,setResolvingApproval]=useState<string|null>(null);
@@ -157,6 +160,10 @@ export function TrabalhoView({project}:{project:Project|null}){
     return'Agent Office';
   };
 
+  const addPendingFiles=(incoming:File[])=>setPendingFiles(cur=>[...cur,...incoming].filter((file,index,all)=>all.findIndex(x=>x.name===file.name&&x.size===file.size&&x.lastModified===file.lastModified)===index).slice(0,12));
+  const refreshProjectKnowledge=useCallback(async()=>{if(!project)return;try{setProjectKnowledge(await api.listKnowledge('project',project.id))}catch{}},[project?.id]);
+  useEffect(()=>{void refreshProjectKnowledge()},[refreshProjectKnowledge]);
+
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();if(!project||(!message.trim()&&!pendingFiles.length)||sending)return;
     const text=message.trim()||'Analise os arquivos anexados.';const files=pendingFiles.slice();setMessage('');setPendingFiles([]);setSending(true);setUploading(Boolean(files.length));setError(null);
@@ -200,7 +207,7 @@ export function TrabalhoView({project}:{project:Project|null}){
       <V2Tabs<WorkMode> label="Modo de trabalho" items={[{key:'conversation',label:'Conversa'},{key:'sala',label:'Sala'}]} value={mode} onChange={setMode}/>
       <div className="work-v2-header-actions">
         <V2Status tone={statusTone}>{stateLabel(activeRun?.status)}</V2Status>
-        <button type="button" className="v2-quiet-button" onClick={()=>setActivityOpen(true)}>Atividade{isRunning?' · ao vivo':''}</button>
+        <button type="button" className="v2-quiet-button" onClick={()=>setKnowledgeOpen(true)}>Conhecimento</button><button type="button" className="v2-quiet-button" onClick={()=>setActivityOpen(true)}>Atividade{isRunning?' · ao vivo':''}</button>
         {(previewUseful||inspectRunId)&&<button type="button" className={inspectorOpen?'v2-quiet-button active':'v2-quiet-button'} onClick={()=>setInspectorOpen(value=>!value)}>Inspecionar</button>}
       </div>
     </header>
@@ -217,7 +224,7 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-message-body">
                   <div className="work-v2-message-meta"><strong>{nameForMessage(item)}</strong><span>{shortTime(item.created_at)}</span></div>
                   <MessageContent content={item.content}/>
-                  {Array.isArray(item.metadata?.attachments)&&item.metadata.attachments.length>0&&<div className="work-v2-attachments">{item.metadata.attachments.map((file:ResourceFile)=><span key={file.id} className="work-v2-attachment"><b>{String(file.metadata?.kind||'arquivo')}</b><span>{file.file_name}</span><small>{Math.max(1,Math.round(file.size_bytes/1024))} KB</small></span>)}</div>}
+                  {Array.isArray(item.metadata?.attachments)&&item.metadata.attachments.length>0&&<div className="work-v2-attachments">{item.metadata.attachments.map((file:ResourceFile)=><StoredAttachmentCard key={file.id} file={file}/>)}</div>}
                 </div>
               </article>)}
 
@@ -245,17 +252,17 @@ export function TrabalhoView({project}:{project:Project|null}){
               {jumpVisible&&<button type="button" className="work-v2-jump" onClick={()=>{const element=transcriptRef.current;if(element)element.scrollTop=element.scrollHeight;setJumpVisible(false)}}>↓ Mais recente</button>}
             </div>
 
-            <form className="work-v2-composer" onSubmit={submit}>
+            <form className="work-v2-composer" onSubmit={submit} onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='copy'}} onDrop={e=>{e.preventDefault();addPendingFiles(Array.from(e.dataTransfer.files??[]))}}>
               {isRunning&&<div className="work-v2-command-mode">
                 <button type="button" className={activeAction==='orient'?'active':''} onClick={()=>setActiveAction('orient')}>Orientar</button>
                 <button type="button" className={activeAction==='enqueue'?'active':''} onClick={()=>setActiveAction('enqueue')}>Depois</button>
                 <button type="button" className={activeAction==='interrupt'?'active danger':''} onClick={()=>setActiveAction('interrupt')}>Mudar agora</button>
               </div>}
-              {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><span key={file.name+'-'+index}><b>{file.type.startsWith('image/')?'Imagem':file.type.startsWith('video/')?'Vídeo':file.type.startsWith('audio/')?'Áudio':'Arquivo'}</b>{file.name}<button type="button" aria-label={'Remover '+file.name} onClick={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}>×</button></span>)}</div>}
+              {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><PendingAttachmentCard key={file.name+'-'+index} file={file} onRemove={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}/>)}</div>}
               <textarea value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={isRunning?'Dê uma orientação ou peça outra coisa…':'Peça algo ao Agent Office…'} rows={3}/>
               <div className="work-v2-composer-footer">
                 <span>{isRunning?'A execução continua enquanto você conversa.':'Pronto para iniciar.'}</span>
-                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);setPendingFiles(cur=>[...cur,...next].slice(0,12));e.currentTarget.value=''}}/></label><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
+                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);addPendingFiles(next);e.currentTarget.value=''}}/></label><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
               </div>
               {error&&<div className="work-v2-error" role="alert">{error}</div>}
             </form>
@@ -266,6 +273,12 @@ export function TrabalhoView({project}:{project:Project|null}){
             <Workbench project={project} snapshot={snapshot} runId={inspectRunId} liveEvents={liveEvents} contextual/>
           </section>}
         </div>}
+
+    <V2Drawer open={knowledgeOpen} title="Conhecimento do Project" onClose={()=>setKnowledgeOpen(false)} className="work-v2-knowledge-drawer">
+      <div className="team-v2-callout"><strong>Contexto persistente de {project.name}</strong><p>Arquivos daqui ficam disponíveis para qualquer Agent ou Subagent que trabalhar neste Project.</p></div>
+      <label className="knowledge-upload">+ Adicionar arquivo ao Project<input type="file" multiple onChange={async e=>{const files=Array.from(e.target.files??[]);e.currentTarget.value='';if(!files.length)return;setError(null);try{for(const file of files){const resource=await api.uploadResource(project.id,file,'project',project.id);await api.addKnowledge({scope_type:'project',scope_id:project.id,resource_id:resource.id,title:file.name})}await refreshProjectKnowledge()}catch(reason){setError(humanError(reason))}}}/></label>
+      <div className="knowledge-list">{projectKnowledge.map(item=><div key={item.id}><div><strong>{item.title}</strong><small>{item.resource?.mime_type||'arquivo'} · {item.resource?.metadata?.text_extracted?'texto extraído':'multimodal/arquivo preservado'}</small></div><button type="button" onClick={()=>void api.deleteKnowledge(item.id).then(refreshProjectKnowledge)}>Remover</button></div>)}{!projectKnowledge.length&&<V2EmptyState title="Nenhum conhecimento do Project" description="Adicione documentos, mídia, código ou referências que todos os workers deste Project devem conhecer."/>}</div>
+    </V2Drawer>
 
     <V2Drawer open={activityOpen} title="Atividade" onClose={()=>setActivityOpen(false)} className="work-v2-activity-drawer">
       <div className="work-v2-activity-overview">
