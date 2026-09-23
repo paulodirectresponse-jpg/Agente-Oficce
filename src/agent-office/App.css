@@ -5042,3 +5042,13 @@ textarea {
 .skill-create{display:grid;grid-template-columns:minmax(160px,.55fr) minmax(260px,1.45fr) auto;gap:9px;align-items:start;margin:10px 0 14px}
 .skill-create input,.skill-create textarea{width:100%}
 @media(max-width:900px){.skill-create{grid-template-columns:1fr}.work-v2-pending-files>span,.work-v2-attachment{max-width:100%}}
+
+.resource-card{display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:9px;min-width:180px;max-width:330px;padding:7px;border:1px solid rgba(22,24,29,.1);border-radius:12px;background:rgba(255,255,255,.72)}
+.resource-card.pending{grid-template-columns:56px minmax(0,1fr) auto}.resource-media{width:48px;height:42px;border-radius:8px;overflow:hidden;background:rgba(22,24,29,.06);display:grid;place-items:center}.resource-card.pending .resource-media{width:56px;height:48px}
+.resource-media img,.resource-media video{width:100%;height:100%;object-fit:cover}.resource-media audio{width:42px;height:30px}.resource-preview-icon{font-size:10px;font-weight:800;letter-spacing:.04em;text-decoration:none}
+.resource-copy{display:grid;min-width:0;gap:2px}.resource-copy b{font-size:10px;text-transform:uppercase;opacity:.58}.resource-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.resource-copy small{opacity:.55}
+.resource-card>button{border:0;background:transparent;cursor:pointer;font-size:18px}.work-v2-composer{transition:outline-color .15s ease}.work-v2-composer:has(.resource-card.pending){outline:1px solid rgba(54,95,74,.12)}
+.subagent-resource-panel{margin:12px 0;padding:14px;border:1px solid rgba(22,24,29,.1);border-radius:14px;background:rgba(255,255,255,.42)}
+.subagent-resource-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.subagent-resource-grid h4{margin:0 0 8px}.team-v2-subs>div.active{background:rgba(45,80,63,.07);border-radius:10px}
+.work-v2-knowledge-drawer .knowledge-list{margin-top:10px}
+@media(max-width:900px){.subagent-resource-grid{grid-template-columns:1fr}.resource-card{max-width:100%}}
