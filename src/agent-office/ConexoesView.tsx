@@ -51,7 +51,7 @@ export function ConexoesView({providers,project,onChanged}:{providers:UniversalP
       <div className="connections-v2-layout">
         <aside className="connections-v2-list">{providers.map(provider=><button type="button" key={provider.id} className={selected?.id===provider.id?'active':''} onClick={()=>setSelectedId(provider.id)}>
           <span className="connections-v2-provider-icon">{provider.name.slice(0,1).toUpperCase()}</span><span><strong>{provider.name}</strong><small>{provider.protocol_driver}</small></span><span className={'connections-v2-health '+tone(provider)}/>
-        </button>)}{!providers.length&&<V2EmptyState title="Conecte uma IA" description="Use “Conectar IA” para começar."/ >}</aside>
+        </button>)}{!providers.length&&<V2EmptyState title="Conecte uma IA" description="Use “Conectar IA” para começar."/>}</aside>
         <section className="connections-v2-detail">
           {!selected&&<V2EmptyState title="Nenhuma IA selecionada" description="Conecte uma IA para configurar Agents e começar a trabalhar."/>}
           {selected&&<>
@@ -65,7 +65,7 @@ export function ConexoesView({providers,project,onChanged}:{providers:UniversalP
               </>}
               {providerTab==='modelos'&&<>
                 <div className="connections-v2-model-head"><div><h3>Modelos</h3><p>Ative somente os modelos que pretende usar.</p></div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Pesquisar modelo…"/></div>
-                <div className="connections-v2-models">{filtered.map(model=><div key={model.id}><div><strong>{model.display_name}</strong><code>{model.model_id}</code></div><div>{model.is_default&&<span className="connections-v2-default">Padrão</span>}<V2Status tone={model.enabled?'success':'neutral'}>{model.enabled?'Ativo':'Desativado'}</V2Status><button disabled={busy||model.is_default||!model.enabled} onClick={()=>void updateModel(model,{is_default:true})}>Definir padrão</button><button disabled={busy} onClick={()=>void updateModel(model,{enabled:!model.enabled})}>{model.enabled?'Desativar':'Ativar'}</button></div></div>)}{!filtered.length&&<V2EmptyState title="Nenhum modelo" description="Atualize os modelos da conexão ou ajuste a pesquisa."/ >}</div>
+                <div className="connections-v2-models">{filtered.map(model=><div key={model.id}><div><strong>{model.display_name}</strong><code>{model.model_id}</code></div><div>{model.is_default&&<span className="connections-v2-default">Padrão</span>}<V2Status tone={model.enabled?'success':'neutral'}>{model.enabled?'Ativo':'Desativado'}</V2Status><button disabled={busy||model.is_default||!model.enabled} onClick={()=>void updateModel(model,{is_default:true})}>Definir padrão</button><button disabled={busy} onClick={()=>void updateModel(model,{enabled:!model.enabled})}>{model.enabled?'Desativar':'Ativar'}</button></div></div>)}{!filtered.length&&<V2EmptyState title="Nenhum modelo" description="Atualize os modelos da conexão ou ajuste a pesquisa."/>}</div>
               </>}
               {providerTab==='resiliencia'&&<>
                 <div className="connections-v2-callout"><strong>Alternativas automáticas</strong><p>Quando esta IA falha de forma recuperável, o Agent Office pode usar uma conexão alternativa sem alterar o Agent.</p></div>
@@ -73,7 +73,7 @@ export function ConexoesView({providers,project,onChanged}:{providers:UniversalP
                 <button className="v2-secondary-button" onClick={()=>setShowTechnicalManager(true)}>Gerenciar resiliência avançada</button>
               </>}
               {providerTab==='diagnostico'&&<>
-                <div className="connections-v2-diagnostic">{runtime?<><div><span>Requisições ativas</span><strong>{runtime.runtime.active_requests}</strong></div><div><span>Na fila</span><strong>{runtime.runtime.queued_requests}</strong></div><div><span>RPM</span><strong>{runtime.runtime.rpm_used}/{runtime.runtime.rpm_limit||'—'}</strong></div><div><span>TPM</span><strong>{runtime.runtime.tpm_used}/{runtime.runtime.tpm_limit||'—'}</strong></div><div><span>Circuito</span><strong>{runtime.runtime.circuit_state}</strong></div><div><span>Falhas seguidas</span><strong>{runtime.runtime.consecutive_failures}</strong></div></>:<V2EmptyState title="Diagnóstico indisponível" description="Teste a conexão para atualizar o estado."/ >}</div>
+                <div className="connections-v2-diagnostic">{runtime?<><div><span>Requisições ativas</span><strong>{runtime.runtime.active_requests}</strong></div><div><span>Na fila</span><strong>{runtime.runtime.queued_requests}</strong></div><div><span>RPM</span><strong>{runtime.runtime.rpm_used}/{runtime.runtime.rpm_limit||'—'}</strong></div><div><span>TPM</span><strong>{runtime.runtime.tpm_used}/{runtime.runtime.tpm_limit||'—'}</strong></div><div><span>Circuito</span><strong>{runtime.runtime.circuit_state}</strong></div><div><span>Falhas seguidas</span><strong>{runtime.runtime.consecutive_failures}</strong></div></>:<V2EmptyState title="Diagnóstico indisponível" description="Teste a conexão para atualizar o estado."/>}</div>
                 {runtime?.runtime.last_error&&<div className="v2-notice error">{runtime.runtime.last_error}</div>}
               </>}
             </div>
