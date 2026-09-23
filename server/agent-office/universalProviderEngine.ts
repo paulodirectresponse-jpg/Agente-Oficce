@@ -1093,9 +1093,11 @@ export class UniversalProviderEngine {
     return Math.max(1, Math.ceil(chars / 4));
   }
 
-  private candidates(providerId: string, model: string): Array<{ providerId: string; model: string }> {
-    const result = [{ providerId, model }];
+  private candidates(providerId: string, model: string, input?: UniversalCompletionInput): Array<{ providerId: string; model: string; implicit?: boolean }> {
+    const result: Array<{ providerId: string; model: string; implicit?: boolean }> = [{ providerId, model }];
     const seen = new Set([providerId + '::' + model]);
+
+    // Explicit user-configured fallbacks always win.
     for (const fallback of this.fallbacks.list(providerId, model)) {
       const targetProvider = this.providers.get(fallback.target_provider_id);
       if (!targetProvider?.enabled) continue;
@@ -1108,7 +1110,30 @@ export class UniversalProviderEngine {
       seen.add(key);
       result.push({ providerId: targetProvider.id, model: targetModel });
     }
+
+    // Surgical resilience: if the selected model itself is temporarily unavailable,
+    // try another enabled compatible model from the SAME provider before giving up.
+    // This does not run on auth/config errors and does not override explicit fallbacks.
+    const needsTools = Boolean(input?.tools?.length);
+    const sameProviderModels = this.providers.listModels(providerId, false)
+      .filter(item => item.enabled && item.model_id !== model)
+      .filter(item => !needsTools || item.capabilities.tools !== false)
+      .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.display_name.localeCompare(b.display_name));
+
+    for (const item of sameProviderModels) {
+      const key = providerId + '::' + item.model_id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push({ providerId, model: item.model_id, implicit: true });
+    }
+
     return result;
+  }
+
+  private isModelScopedTransient(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const status = 'status' in error ? Number((error as any).status) : undefined;
+    return status === 502 || status === 503 || status === 504;
   }
 
   private async completeCandidate(
@@ -1129,7 +1154,8 @@ export class UniversalProviderEngine {
       ));
       return { ...result, provider_id: provider.id, model_id: model };
     } catch (error) {
-      this.resilience.recordFailure(provider, model, error);
+      if (this.isModelScopedTransient(error)) this.resilience.recordModelFailure(provider, model, error);
+      else this.resilience.recordFailure(provider, model, error);
       throw error;
     } finally {
       release();
@@ -1141,10 +1167,11 @@ export class UniversalProviderEngine {
     input: UniversalCompletionInput,
     options: UniversalRequestOptions = {},
   ): Promise<UniversalCompletionResult> {
-    const candidates = this.candidates(providerId, input.model);
+    const candidates = this.candidates(providerId, input.model, input);
     let lastError: unknown;
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
+      if (candidate.implicit && lastError && !this.isModelScopedTransient(lastError)) continue;
       try {
         return await this.completeCandidate(candidate.providerId, candidate.model, input, options);
       } catch (error) {
@@ -1160,10 +1187,11 @@ export class UniversalProviderEngine {
     input: UniversalCompletionInput,
     options: UniversalRequestOptions = {},
   ): AsyncIterable<UniversalStreamEvent> {
-    const candidates = this.candidates(providerId, input.model);
+    const candidates = this.candidates(providerId, input.model, input);
     let lastError: unknown;
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
+      if (candidate.implicit && lastError && !this.isModelScopedTransient(lastError)) continue;
       const provider = this.provider(candidate.providerId);
       let release: (() => void) | null = null;
       let emitted = false;
@@ -1184,7 +1212,8 @@ export class UniversalProviderEngine {
         lastError = error;
         const code = error && typeof error === 'object' && 'code' in error ? String((error as any).code ?? '') : '';
         if (release || (code !== 'PROVIDER_CIRCUIT_OPEN' && code !== 'PROVIDER_COOLDOWN')) {
-          this.resilience.recordFailure(provider, candidate.model, error);
+          if (this.isModelScopedTransient(error)) this.resilience.recordModelFailure(provider, candidate.model, error);
+          else this.resilience.recordFailure(provider, candidate.model, error);
         }
         if (emitted || !isRetryableProviderError(error) || index === candidates.length - 1) throw error;
       } finally {
