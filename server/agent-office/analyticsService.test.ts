@@ -47,6 +47,51 @@ describe('AnalyticsService',()=>{
     }finally{f.done()}
   });
 
+  it('keeps a team root run when filtering by a participating agent',()=>{
+    const f=fixture();
+    try{
+      f.database.connection.prepare(`
+        INSERT INTO chat_runs(id,conversation_id,project_id,agent_id,status,mode,parent_run_id,started_at,ended_at,metadata_json)
+        VALUES('team-root',?,?,NULL,'completed','team',NULL,?,?,'{"selected_agents":["kimi"]}')
+      `).run(f.conversation.id,f.project.id,f.now,f.now);
+      f.database.connection.prepare(`
+        INSERT INTO chat_runs(id,conversation_id,project_id,agent_id,status,mode,parent_run_id,started_at,ended_at,metadata_json)
+        VALUES('team-child',?,?,'kimi','completed','single','team-root',?,?,'{}')
+      `).run(f.conversation.id,f.project.id,f.now,f.now);
+      const snapshot=new AnalyticsService(f.database.connection).snapshot({range:'all',agent_id:'kimi'});
+      expect(snapshot.overview.runs).toBe(1);
+      expect(snapshot.overview.completed_runs).toBe(1);
+    }finally{f.done()}
+  });
+
+  it('summarizes workforce composition and connects orchestration to execution outcome',()=>{
+    const f=fixture();
+    try{
+      f.database.connection.prepare(`
+        INSERT INTO orchestration_runs(id,project_id,level_used,decision_json,status,duration_ms,created_at)
+        VALUES('orch-1',?,'deterministic','{}','routed',12,?)
+      `).run(f.project.id,f.now);
+      f.database.connection.prepare(`
+        INSERT INTO chat_runs(id,conversation_id,project_id,status,mode,started_at,ended_at,metadata_json)
+        VALUES('orch-root',?,?,'completed','single',?,?,'{"orchestration_run_id":"orch-1"}')
+      `).run(f.conversation.id,f.project.id,f.now,f.now);
+      f.database.connection.prepare(`
+        INSERT INTO dynamic_team_instances(id,orchestration_run_id,purpose,created_at,updated_at,lifecycle_status,started_at,completed_at)
+        VALUES('wf-1','orch-1','Test workforce',?,?,'completed',?,?)
+      `).run(f.now,f.now,f.now,f.now);
+      f.database.connection.prepare(`
+        INSERT INTO workforce_resource_metadata(dynamic_team_id,worker_kind,worker_id,reason,capability_keys_json,metadata_json,created_at)
+        VALUES('wf-1','agent','kimi','','[]','{}',?)
+      `).run(f.now);
+      const snapshot=new AnalyticsService(f.database.connection).snapshot({range:'all'});
+      expect(snapshot.execution.workforces.total).toBe(1);
+      expect(snapshot.execution.workforces.completed).toBe(1);
+      expect(snapshot.execution.workforces.resource_kinds.agent).toBe(1);
+      expect(snapshot.orchestrator.execution_outcome).toMatchObject({linked:1,completed:1,failed:0});
+      expect(snapshot.orchestrator.execution_outcome.success_rate).toBe(100);
+    }finally{f.done()}
+  });
+
   it('keeps unknown cost unknown and reports coverage',()=>{
     const f=fixture();
     try{
