@@ -155,7 +155,11 @@ export class TeamService {
  private validateOwner(agentId:string){if(!this.db.prepare('SELECT 1 FROM agents WHERE id=?').get(agentId))throw new Error('TEAM_OWNER_NOT_FOUND')}
  private validateSubagents(owner:string,children:string[]){
   const unique=[...new Set(children)];if(unique.length!==children.length)throw new Error('TEAM_MEMBER_DUPLICATE');if(unique.includes(owner))throw new Error('TEAM_OWNER_CANNOT_BE_MEMBER');
-  for(const child of unique){const other=this.db.prepare("SELECT parent_agent_id FROM agent_relations WHERE child_agent_id=? AND relation_type='supervises' AND enabled=1 AND parent_agent_id<>? LIMIT 1").get(child,owner) as any;if(other)throw new Error('SUBAGENT_ALREADY_ASSIGNED')}
+  for(const child of unique){
+   const permanent=this.db.prepare(`SELECT t.owner_agent_id FROM team_members tm JOIN teams t ON t.id=tm.team_id WHERE tm.agent_id=? AND t.owner_agent_id IS NOT NULL AND t.owner_agent_id<>? LIMIT 1`).get(child,owner) as any;
+   const other=this.db.prepare("SELECT parent_agent_id FROM agent_relations WHERE child_agent_id=? AND relation_type='supervises' AND enabled=1 AND parent_agent_id<>? LIMIT 1").get(child,owner) as any;
+   if(permanent||other)throw new Error('SUBAGENT_ALREADY_ASSIGNED')
+  }
   const edges=this.db.prepare("SELECT parent_agent_id,child_agent_id FROM agent_relations WHERE relation_type='supervises' AND enabled=1 AND parent_agent_id<>?").all(owner) as any[];const graph=new Map<string,string[]>();for(const e of edges)graph.set(e.parent_agent_id,[...(graph.get(e.parent_agent_id)??[]),e.child_agent_id]);graph.set(owner,unique);
   const visit=(node:string,path:Set<string>,depth:number)=>{if(depth>12)throw new Error('AGENT_RELATION_MAX_DEPTH');if(path.has(node))throw new Error('AGENT_RELATION_CYCLE');const next=new Set(path);next.add(node);for(const child of graph.get(node)??[])visit(child,next,depth+1)};for(const node of graph.keys())visit(node,new Set(),0);
  }
