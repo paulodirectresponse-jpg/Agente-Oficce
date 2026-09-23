@@ -23,7 +23,7 @@
 | 7 | Chat Workspace | DONE |
 | 8 | Projects persistent workspace | DONE |
 | 9 | Analytics | DONE |
-| 10 | Benchmark + Release Gate | IN PROGRESS — PR #41 |
+| 10 | Benchmark + Release Gate | DONE — PR #41 |
 
 ## Bloco 9 — referência estável
 - PR: #40
@@ -33,6 +33,16 @@
 - artifact: `agent-office-desktop-msi`
 - artifact id: `10761999132`
 - artifact digest: `sha256:847e56ed226406d5e1e04a1e941da7a677c6453ccbdee68b814376781e5e9a24`
+
+## Bloco 10 — concluído
+- PR: #41
+- merge SHA: `4072ca9d9c95f9a2885d362a96f4feaf9e346305`
+- desktop gate: `35892430595` — PASS
+- 242/242 testes — PASS
+- deterministic benchmark — PASS
+- release preflight — PASS
+- typecheck/build/Tauri/MSI/lifecycle — PASS
+- Production Release Gate manual/tag-driven implementado para stress + MSI upgrade preservation.
 
 ## Bloco 10 — objetivo
 Transformar testes, CI, recovery e desktop gates já existentes em um critério formal e repetível de release.
@@ -86,8 +96,6 @@ Uma release não pode ser considerada pronta se ocorrer:
 Os documentos em `docs/v3/` continuam úteis como blueprint de arquitetura, mas a numeração V3.7–V3.11 não representa o release train atual de Blocos 1–10. Funcionalidades desses documentos só devem ser marcadas DONE quando existirem no código e tiverem gate próprio.
 
 ## Próximo passo exato
-1. concluir PR #41;
-2. exigir Desktop Gate verde;
-3. executar o novo Production Release Gate;
-4. registrar workflow/artifacts/digest finais;
-5. somente então marcar Bloco 10 DONE.
+1. realizar o pente fino de produto/UX quando priorizado;
+2. usar o Production Release Gate manual antes de uma distribuição formal/tag;
+3. manter `main` como única fonte de verdade para qualquer próximo bloco.
