@@ -24,6 +24,28 @@ const normalizeTarget=(v?:string)=>{const x=(v??'auto').trim();return x.startsWi
 function complexity(message:string){const n=message.length;return n>1200||/arquitet|architecture|completo|multi[- ]?domain|planej|migre|refator/i.test(message)?'high':n>300?'medium':'low'}
 function risk(message:string){return /delete|excluir|deploy|produção|production|pagamento|billing|secret|senha|credential|install/i.test(message)?'high':/write|editar|alterar|banco|database/i.test(message)?'medium':'low'}
 function infer(message:string,defs:Set<string>):CapabilityRequirement[]{const s=message.toLowerCase(),out:string[]=[];const add=(k:string)=>defs.has(k)&&out.push(k);if(/react|frontend|interface|ui/.test(s))add(/react/.test(s)?'software.frontend.react':'software.frontend');if(/backend|api|server/.test(s))add('software.backend');if(/test|revis|review|bug|debug/.test(s))add('software.testing');if(/marketing|copy|anúncio|anuncio/.test(s))add(/copy/.test(s)?'marketing.copywriting':'marketing');if(/video|vídeo|edição|edicao/.test(s))add(/edi/.test(s)?'video.editing':'video');if(/pesquis|research/.test(s))add('research');if(/design/.test(s))add('design');if(/seguran|security|auth/.test(s))add('security');if(!out.length&&defs.has('software')&&/code|código|codigo|program|app|site|sistema/.test(s))add('software');return[...new Set(out)].map(key=>({key,mandatory:true,minimum:.1}))}
+function inferTools(message:string):string[]{
+  const s=message.toLowerCase(),out:string[]=[];
+  const add=(tool:string)=>{if(!out.includes(tool))out.push(tool)};
+  if(/github|pull request|\bpr\b/.test(s)){
+    if(/merge|mesclar/.test(s))add('github_pr_merge');
+    else if(/pull request|\bpr\b/.test(s))add('github_pr_create');
+    else add('github_repo_list');
+  }
+  if(/github/.test(s)&&/issue/.test(s)&&/cri|create|abrir/.test(s))add('github_issue_create');
+  if(/railway/.test(s)){
+    if(/deploy|public|subir|produção|production/.test(s))add('railway_deploy');
+    else if(/log/.test(s))add('railway_logs_read');
+    else add('railway_project_list');
+  }
+  if(/supabase/.test(s)){
+    if(/function|função|funcao/.test(s)&&/deploy|public|subir/.test(s))add('supabase_function_deploy');
+    else if(/function|função|funcao/.test(s))add('supabase_functions_list');
+    else add('supabase_project_list');
+  }
+  if(/browser|navegador|site|página|pagina|url/.test(s)&&/abr|open|aces|visite|naveg/.test(s))add('browser_open');
+  return out;
+}
 function unwrap(raw:unknown):{decision:unknown;telemetry?:OrchestratorTelemetry}{if(raw&&typeof raw==='object'&&'decision'in raw&&'telemetry'in raw){const x=raw as OrchestratorLLMEnvelope;return{decision:x.decision,telemetry:x.telemetry}}return{decision:raw}}
 function validateDecision(raw:any,defs:Set<string>):RoutingDecision|null{
   if(!raw||typeof raw!=='object')return null;const modes=new Set(['direct_agent','dynamic_team','existing_team','needs_gap_analysis']);if(!modes.has(raw.target_mode))return null;
@@ -98,7 +120,7 @@ export class OrchestratorGateway {
     const event=(type:string,title:string,detail='',payload?:Record<string,unknown>,severity:'debug'|'info'|'warning'|'error'='info')=>staged.push({type,severity,title,detail,payload});
     event('orchestrator.received','Solicitação recebida',input.message.slice(0,240),{target});
     this.capturePreviousFeedback(input,event);
-    const base=(mode:TargetMode,explanation:string):RoutingDecision=>({request_id:requestId,normalized_goal:input.message.trim().slice(0,1000),target_mode:mode,required_capabilities:infer(input.message,keys),required_tools:[],optional_capabilities:[],complexity:complexity(input.message),risk:risk(input.message),requires_plan:complexity(input.message)==='high',candidate_scope:[],workforce_resources:[],quality_controls:[],explanation,confidence:.8});
+    const base=(mode:TargetMode,explanation:string):RoutingDecision=>({request_id:requestId,normalized_goal:input.message.trim().slice(0,1000),target_mode:mode,required_capabilities:infer(input.message,keys),required_tools:inferTools(input.message),optional_capabilities:[],complexity:complexity(input.message),risk:risk(input.message),requires_plan:complexity(input.message)==='high',candidate_scope:[],workforce_resources:[],quality_controls:[],explanation,confidence:.8});
 
     if(target!=='auto'&&target!=='team'){
       const a=this.db.prepare('SELECT id,slug FROM agents WHERE (id=? OR slug=?) AND enabled=1 LIMIT 1').get(target,target) as any;
@@ -137,7 +159,7 @@ export class OrchestratorGateway {
 
     decision=this.policyValidate(decision,keys);
     if((decision.required_capabilities.length||decision.required_tools.length)&&(decision.target_mode==='needs_gap_analysis'||(decision.target_mode==='dynamic_team'&&!decision.candidate_scope.length&&!decision.workforce_resources.length)||(decision.target_mode==='existing_team'&&!decision.target_team_id)||(decision.target_mode==='direct_agent'&&!decision.target_agent_id))){
-      const gap=new GapAnalysisService(this.db).analyze(decision.required_capabilities,decision.required_tools);
+      const gap=new GapAnalysisService(this.db).analyze(decision.required_capabilities,decision.required_tools,{project_id:input.project_id});
       if(gap.resolution==='active_agent'&&gap.selected_agent_ids.length===1)decision={...decision,target_mode:'direct_agent',target_agent_id:gap.selected_agent_ids[0],candidate_scope:gap.selected_agent_ids,workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
       else if(gap.resolution==='active_subagent'&&gap.selected_subagent_ids.length===1)decision={...decision,target_mode:'dynamic_team',candidate_scope:[],workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
       else if(gap.resolution==='existing_team'&&gap.selected_team_id)decision={...decision,target_mode:'existing_team',target_team_id:gap.selected_team_id,candidate_scope:[],workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
@@ -171,8 +193,7 @@ export class OrchestratorGateway {
 
   private policyValidate(d:RoutingDecision,keys:Set<string>):RoutingDecision{
     const req=d.required_capabilities.filter(x=>keys.has(x.key));
-    const registered=new Set(toolRegistry.listDefinitions().map(x=>x.name));
-    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&registered.has(x.trim())).map(x=>x.trim()))];
+    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&/^[a-z0-9_.:-]{1,100}$/i.test(x.trim())).map(x=>x.trim()))];
     const scope=d.candidate_scope.filter(agent=>this.agentEligible(agent));
     const subs=new SubagentService(this.db);
     const resources=(d.workforce_resources??[]).filter(r=>{
