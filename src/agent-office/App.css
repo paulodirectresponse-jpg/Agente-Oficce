@@ -5052,3 +5052,15 @@ textarea {
 .subagent-resource-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.subagent-resource-grid h4{margin:0 0 8px}.team-v2-subs>div.active{background:rgba(45,80,63,.07);border-radius:10px}
 .work-v2-knowledge-drawer .knowledge-list{margin-top:10px}
 @media(max-width:900px){.subagent-resource-grid{grid-template-columns:1fr}.resource-card{max-width:100%}}
+
+.voice-input-wrap{position:relative;display:flex;align-items:center;gap:4px}
+.voice-input-button{height:36px;min-width:36px;border:1px solid rgba(22,24,29,.12);border-radius:10px;background:rgba(255,255,255,.74);display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-size:15px;transition:.16s ease;padding:0 9px}
+.voice-input-button:hover{background:rgba(255,255,255,.96);transform:translateY(-1px)}
+.voice-input-button.recording{background:rgba(181,49,49,.1);border-color:rgba(181,49,49,.35);color:#9c2525;min-width:74px}
+.voice-input-button.transcribing{cursor:wait;opacity:.75}.voice-input-button small{font:600 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace}
+.voice-pulse{width:7px;height:7px;border-radius:999px;background:currentColor;animation:voicePulse 1s ease-in-out infinite}
+.voice-spinner{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:voiceSpin .7s linear infinite}
+.voice-cancel-button{width:25px;height:25px;border:0;border-radius:8px;background:rgba(22,24,29,.06);cursor:pointer;font-size:16px}
+.voice-input-error{position:absolute;right:0;bottom:44px;z-index:20;width:280px;padding:8px 10px;border:1px solid rgba(174,57,57,.2);border-radius:10px;background:#fff8f7;color:#8b2929;font-size:11px;box-shadow:0 8px 28px rgba(22,24,29,.12)}
+@keyframes voicePulse{0%,100%{transform:scale(.85);opacity:.5}50%{transform:scale(1.3);opacity:1}}
+@keyframes voiceSpin{to{transform:rotate(360deg)}}
