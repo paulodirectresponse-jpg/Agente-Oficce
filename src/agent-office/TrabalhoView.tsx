@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentProfile, ChatRun, ChatStreamEnvelope, Conversation, Project, Team, ToolApproval, WorkspaceSnapshot } from './types.js';
+import type { AgentProfile, ChatRun, ChatStreamEnvelope, Conversation, Project, ResourceFile, Team, ToolApproval, WorkspaceSnapshot } from './types.js';
 import { api } from './api.js';
 import { OfficeView } from './OfficeView.js';
 import { Workbench } from './dev-chat/Workbench.js';
@@ -39,6 +39,8 @@ export function TrabalhoView({project}:{project:Project|null}){
   const [agents,setAgents]=useState<AgentProfile[]>([]);
   const [teams,setTeams]=useState<Team[]>([]);
   const [message,setMessage]=useState('');
+  const [pendingFiles,setPendingFiles]=useState<File[]>([]);
+  const [uploading,setUploading]=useState(false);
   const [target,setTarget]=useState('auto');
   const [activeAction,setActiveAction]=useState<ActiveAction>('orient');
   const [liveEvents,setLiveEvents]=useState<ChatStreamEnvelope[]>([]);
@@ -156,21 +158,23 @@ export function TrabalhoView({project}:{project:Project|null}){
   };
 
   const submit=async(event:React.FormEvent)=>{
-    event.preventDefault();if(!project||!message.trim()||sending)return;
-    const text=message.trim();setMessage('');setSending(true);setError(null);
+    event.preventDefault();if(!project||(!message.trim()&&!pendingFiles.length)||sending)return;
+    const text=message.trim()||'Analise os arquivos anexados.';const files=pendingFiles.slice();setMessage('');setPendingFiles([]);setSending(true);setUploading(Boolean(files.length));setError(null);
+    let uploaded:ResourceFile[]=[];
     try{
+      if(files.length)uploaded=await Promise.all(files.map(file=>api.uploadResource(project.id,file,'chat')));
       if(isRunning&&activeRun){
-        await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text,target,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id});
+        await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text+(uploaded.length?'\n\nArquivos anexados: '+uploaded.map(file=>file.storage_path).join(', '):''),target,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id});
         setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:'local-'+Date.now(),role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{workspace_command:activeAction,pending:true}}]}:cur);
         await refresh();
       }else{
-        const receipt=await api.startChatRun({project_id:project.id,conversation_id:conversation?.conversation_id,message:text,target});
+        const receipt=await api.startChatRun({project_id:project.id,conversation_id:conversation?.conversation_id,message:text,target,attachment_ids:uploaded.map(file=>file.id)});
         setSelectedRunId(receipt.run_id);
-        setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:'local-'+Date.now(),role:'user',agent_id:null,content:text,created_at:new Date().toISOString()}]}:cur);
+        setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:'local-'+Date.now(),role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}]}:cur);
         await refresh();await connect(receipt.run_id);
       }
-    }catch(reason){setMessage(text);setError(humanError(reason))}
-    finally{setSending(false)}
+    }catch(reason){setMessage(text);setPendingFiles(files);setError(humanError(reason))}
+    finally{setSending(false);setUploading(false)}
   };
 
   const resolveApproval=async(approval:ToolApproval,status:'approved'|'denied')=>{
@@ -213,6 +217,7 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-message-body">
                   <div className="work-v2-message-meta"><strong>{nameForMessage(item)}</strong><span>{shortTime(item.created_at)}</span></div>
                   <MessageContent content={item.content}/>
+                  {Array.isArray(item.metadata?.attachments)&&item.metadata.attachments.length>0&&<div className="work-v2-attachments">{item.metadata.attachments.map((file:ResourceFile)=><span key={file.id} className="work-v2-attachment"><b>{String(file.metadata?.kind||'arquivo')}</b><span>{file.file_name}</span><small>{Math.max(1,Math.round(file.size_bytes/1024))} KB</small></span>)}</div>
                 </div>
               </article>)}
 
@@ -246,10 +251,11 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <button type="button" className={activeAction==='enqueue'?'active':''} onClick={()=>setActiveAction('enqueue')}>Depois</button>
                 <button type="button" className={activeAction==='interrupt'?'active danger':''} onClick={()=>setActiveAction('interrupt')}>Mudar agora</button>
               </div>}
+              {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><span key={file.name+'-'+index}><b>{file.type.startsWith('image/')?'Imagem':file.type.startsWith('video/')?'Vídeo':file.type.startsWith('audio/')?'Áudio':'Arquivo'}</b>{file.name}<button type="button" aria-label={'Remover '+file.name} onClick={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}>×</button></span>)}</div>}
               <textarea value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={isRunning?'Dê uma orientação ou peça outra coisa…':'Peça algo ao Agent Office…'} rows={3}/>
               <div className="work-v2-composer-footer">
                 <span>{isRunning?'A execução continua enquanto você conversa.':'Pronto para iniciar.'}</span>
-                <div><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||!message.trim()} aria-label="Enviar">{sending?'•••':'➤'}</button></div>
+                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);setPendingFiles(cur=>[...cur,...next].slice(0,12));e.currentTarget.value=''}}/></label><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
               </div>
               {error&&<div className="work-v2-error" role="alert">{error}</div>}
             </form>
