@@ -125,14 +125,41 @@ export class AnalyticsService {
     });
   }
 
-  private rootRuns(filters: ReturnType<AnalyticsService['resolveFilters']>) {
-    const rows = this.db.prepare('SELECT * FROM chat_runs WHERE parent_run_id IS NULL ORDER BY started_at').all() as any[];
-    return rows.filter(row => {
+  private rootRuns(filters: ReturnType<AnalyticsService['resolveFilters']>, usage: UsageRow[]) {
+    const all = this.db.prepare('SELECT * FROM chat_runs ORDER BY started_at').all() as any[];
+    const roots = all.filter(row => !row.parent_run_id);
+    const rootByRun = new Map<string,string>();
+    for (const row of all) rootByRun.set(row.id, row.parent_run_id ?? row.id);
+
+    let matchingRoots: Set<string> | null = null;
+    if (filters.agent_id || filters.subagent_id || filters.provider_id || filters.model_id) {
+      matchingRoots = new Set<string>();
+      for (const row of all) {
+        const meta = parseJson<any>(row.metadata_json, {});
+        const agentMatch = !filters.agent_id
+          || row.agent_id === filters.agent_id
+          || (Array.isArray(meta.selected_agents) && meta.selected_agents.includes(filters.agent_id));
+        const subagentMatch = !filters.subagent_id
+          || meta.subagent_id === filters.subagent_id
+          || (Array.isArray(meta.selected_subagents) && meta.selected_subagents.includes(filters.subagent_id));
+        const providerMatch = !filters.provider_id || row.provider_id === filters.provider_id;
+        const modelMatch = !filters.model_id || row.model_id === filters.model_id;
+        if (agentMatch && subagentMatch && providerMatch && modelMatch) matchingRoots.add(row.parent_run_id ?? row.id);
+      }
+      for (const u of usage) {
+        if (!u.run_id) continue;
+        const workerMatch = (!filters.agent_id || (u.worker_kind==='agent' && u.worker_id===filters.agent_id))
+          && (!filters.subagent_id || (u.worker_kind==='subagent' && u.worker_id===filters.subagent_id));
+        const providerMatch = !filters.provider_id || u.provider_id===filters.provider_id;
+        const modelMatch = !filters.model_id || u.model_id===filters.model_id;
+        if (workerMatch && providerMatch && modelMatch) matchingRoots.add(rootByRun.get(u.run_id) ?? u.run_id);
+      }
+    }
+
+    return roots.filter(row => {
       if (!this.inTime(row.started_at, filters)) return false;
       if (filters.project_id && row.project_id !== filters.project_id) return false;
-      if (filters.agent_id && row.agent_id !== filters.agent_id) return false;
-      if (filters.provider_id && row.provider_id !== filters.provider_id) return false;
-      if (filters.model_id && row.model_id !== filters.model_id) return false;
+      if (matchingRoots && !matchingRoots.has(row.id)) return false;
       return true;
     });
   }
@@ -202,6 +229,8 @@ export class AnalyticsService {
     for (const run of allRuns) {
       if (!this.inTime(run.started_at, filters)) continue;
       if (filters.project_id && run.project_id !== filters.project_id) continue;
+      if (filters.provider_id && run.provider_id !== filters.provider_id) continue;
+      if (filters.model_id && run.model_id !== filters.model_id) continue;
       if (run.agent_id) runWorkers.push({ worker_kind:'agent', worker_id:run.agent_id, status:run.status, started_at:run.started_at, ended_at:run.ended_at, project_id:run.project_id });
       const meta = parseJson<any>(run.metadata_json, {});
       if (meta.worker_kind === 'subagent' && typeof meta.subagent_id === 'string') {
@@ -246,15 +275,15 @@ export class AnalyticsService {
       const r = runs.filter(x => x.project_id === project.id);
       const terminal = r.filter(x => ['completed','failed','cancelled'].includes(x.status));
       const u = usage.filter(x => x.project_id === project.id);
-      const plans = (this.db.prepare('SELECT status FROM execution_plans WHERE project_id=?').all(project.id) as any[]);
+      const plans = (this.db.prepare('SELECT status,created_at FROM execution_plans WHERE project_id=?').all(project.id) as any[]).filter(x=>this.inTime(x.created_at,filters));
       const wf = (this.db.prepare(`
-        SELECT DISTINCT d.id,d.lifecycle_status
+        SELECT DISTINCT d.id,d.lifecycle_status,d.created_at
         FROM dynamic_team_instances d
         LEFT JOIN chat_runs cr ON cr.id=d.chat_run_id
         LEFT JOIN execution_plans ep ON ep.id=d.execution_plan_id
         LEFT JOIN orchestration_runs oo ON oo.id=d.orchestration_run_id
         WHERE cr.project_id=? OR ep.project_id=? OR oo.project_id=?
-      `).all(project.id,project.id,project.id) as any[]);
+      `).all(project.id,project.id,project.id) as any[]).filter(x=>this.inTime(x.created_at,filters));
       const blockers = this.db.prepare("SELECT COUNT(*) n FROM project_blockers WHERE project_id=? AND status='open'").get(project.id) as any;
       return {
         id: project.id, name: project.name, lifecycle_status: project.lifecycle_status,
@@ -282,6 +311,12 @@ export class AnalyticsService {
     const terminalSteps=steps.filter(s=>['completed','failed','cancelled'].includes(s.status));
     const durations=attempts.map(a=>durationMs(a.started_at,a.ended_at)).filter((x):x is number=>x!=null);
     const replans = plans.filter(p=>num(p.replan_count)>0).reduce((sum,p)=>sum+num(p.replan_count),0);
+    const workforces = this.workforceRows(filters);
+    const workforceDurations = workforces.map(w=>durationMs(w.started_at??w.created_at,w.completed_at)).filter((x):x is number=>x!=null);
+    const workforceIds = new Set(workforces.map(w=>w.id));
+    const resources = (this.db.prepare('SELECT dynamic_team_id,worker_kind,worker_id FROM workforce_resource_metadata').all() as any[]).filter(r=>workforceIds.has(r.dynamic_team_id));
+    const resourceKinds={agent:0,subagent:0,team:0};
+    for(const r of resources) if(r.worker_kind in resourceKinds) resourceKinds[r.worker_kind as keyof typeof resourceKinds]++;
     return {
       plans: plans.length, completed_plans: terminalPlans.filter(p=>p.status==='completed').length,
       failed_plans: terminalPlans.filter(p=>p.status==='failed').length,
@@ -301,19 +336,55 @@ export class AnalyticsService {
       approvals: approvals.length,
       approvals_pending: approvals.filter(a=>a.status==='pending').length,
       approvals_denied: approvals.filter(a=>a.status==='denied').length,
+      workforces: {
+        total: workforces.length,
+        completed: workforces.filter(w=>w.lifecycle_status==='completed').length,
+        failed: workforces.filter(w=>w.lifecycle_status==='failed').length,
+        cancelled: workforces.filter(w=>w.lifecycle_status==='cancelled').length,
+        active: workforces.filter(w=>w.lifecycle_status==='active').length,
+        average_duration_ms: workforceDurations.length ? Math.round(workforceDurations.reduce((a,b)=>a+b,0)/workforceDurations.length) : null,
+        average_resources: workforces.length ? Math.round((resources.length/workforces.length)*10)/10 : 0,
+        resource_kinds: resourceKinds,
+      },
     };
+  }
+
+  private workforceRows(filters: ReturnType<AnalyticsService['resolveFilters']>) {
+    const rows=this.db.prepare(`
+      SELECT DISTINCT d.*,COALESCE(cr.project_id,ep.project_id,oo.project_id) resolved_project_id
+      FROM dynamic_team_instances d
+      LEFT JOIN chat_runs cr ON cr.id=d.chat_run_id
+      LEFT JOIN execution_plans ep ON ep.id=d.execution_plan_id
+      LEFT JOIN orchestration_runs oo ON oo.id=d.orchestration_run_id
+    `).all() as any[];
+    return rows.filter(r=>this.inTime(r.created_at,filters)&&(!filters.project_id||r.resolved_project_id===filters.project_id));
   }
 
   private orchestrator(filters: ReturnType<AnalyticsService['resolveFilters']>) {
     const rows=(this.db.prepare('SELECT * FROM orchestration_runs').all() as any[]).filter(r=>this.inTime(r.created_at,filters)&&(!filters.project_id||r.project_id===filters.project_id)&&(!filters.provider_id||r.provider_id===filters.provider_id)&&(!filters.model_id||r.model_id===filters.model_id));
     const fallbackEvents=(this.db.prepare("SELECT * FROM orchestration_events WHERE event_type='orchestrator.fallback'").all() as any[]).filter(r=>this.inTime(r.created_at,filters)&&(!filters.project_id||r.project_id===filters.project_id));
+    const fallbackRunIds=new Set(fallbackEvents.map(r=>r.orchestration_run_id).filter(Boolean));
+    const chatRoots=(this.db.prepare('SELECT id,status,metadata_json FROM chat_runs WHERE parent_run_id IS NULL').all() as any[]);
+    const outcome={linked:0,completed:0,failed:0,cancelled:0,running:0};
+    const orchestrationIds=new Set(rows.map(r=>r.id));
+    for(const run of chatRoots){
+      const meta=parseJson<any>(run.metadata_json,{});
+      const orchestrationId=typeof meta.orchestration_run_id==='string'?meta.orchestration_run_id:typeof meta.routing_decision?.orchestration_run_id==='string'?meta.routing_decision.orchestration_run_id:null;
+      if(!orchestrationId||!orchestrationIds.has(orchestrationId))continue;
+      outcome.linked++;
+      if(run.status==='completed')outcome.completed++;
+      else if(run.status==='failed')outcome.failed++;
+      else if(run.status==='cancelled')outcome.cancelled++;
+      else outcome.running++;
+    }
     const durations=rows.map(r=>num(r.duration_ms));
     const byLevel:any={deterministic:0,fast:0,deep:0,fallback:0};
     for(const row of rows) byLevel[row.level_used]=(byLevel[row.level_used]??0)+1;
     return {
       total:rows.length, routed:rows.filter(r=>r.status==='routed').length, failed:rows.filter(r=>r.status==='failed').length,
       success_rate:pct(rows.filter(r=>r.status==='routed').length,rows.length),
-      levels:byLevel, fallback_events:fallbackEvents.length, fallback_rate:pct(fallbackEvents.length,rows.length),
+      levels:byLevel, fallback_events:fallbackEvents.length, fallback_runs:fallbackRunIds.size, fallback_rate:pct(fallbackRunIds.size,rows.length),
+      execution_outcome:{...outcome,success_rate:pct(outcome.completed,outcome.completed+outcome.failed+outcome.cancelled)},
       input_tokens:rows.reduce((s,r)=>s+num(r.input_tokens),0),
       output_tokens:rows.reduce((s,r)=>s+num(r.output_tokens),0),
       average_duration_ms:durations.length?Math.round(durations.reduce((a,b)=>a+b,0)/durations.length):null,
@@ -371,7 +442,7 @@ export class AnalyticsService {
   snapshot(input: AnalyticsFilters = {}) {
     const filters=this.resolveFilters(input);
     const usage=this.usage(filters);
-    const runs=this.rootRuns(filters);
+    const runs=this.rootRuns(filters,usage);
     const totals=this.usageTotals(usage);
     return {
       generated_at:new Date().toISOString(),
