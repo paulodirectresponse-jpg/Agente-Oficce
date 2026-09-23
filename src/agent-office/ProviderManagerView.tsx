@@ -105,6 +105,10 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
     () => new Map((capabilities?.presets ?? []).map((preset) => [preset.id, preset])),
     [capabilities],
   );
+  const modelRuntimeById = useMemo(
+    () => new Map((runtime?.models ?? []).map((item) => [item.model_id, item])),
+    [runtime],
+  );
 
   useEffect(() => {
     void api.providerEngineCapabilities().then(setCapabilities).catch((reason) => {
@@ -320,6 +324,7 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
     try {
       const result = await api.testProviderV2(selected.id);
       await onChanged();
+      await refreshRuntime();
       setNotice(`Conexão saudável · ${result.latency_ms} ms`);
     } catch (reason) {
       await onChanged();
@@ -337,6 +342,7 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
     try {
       const discovered = await api.discoverProviderModelsV2(selected.id, true);
       setModels(await api.listProviderModelsV2(selected.id));
+      await refreshRuntime();
       setNotice(`${discovered.length} modelo(s) encontrado(s).`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao descobrir modelos.');
@@ -781,15 +787,24 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
               </div>
 
               <div className="model-list">
-                {models.map((model) => (
+                {models.map((model) => {
+                  const modelRuntime = modelRuntimeById.get(model.model_id);
+                  return (
                   <div key={model.id} className={`model-row ${!model.enabled ? 'disabled' : ''}`}>
                     <div className="model-row-main">
-                      <strong>{model.display_name}</strong>
+                      <div className="model-title-line">
+                        <strong>{model.display_name}</strong>
+                        <span className={`model-runtime-chip status-${modelRuntime?.operational_status ?? 'unknown'}`}>
+                          {model.enabled ? (modelRuntime?.operational_status ?? 'unknown') : 'desativado'}
+                        </span>
+                      </div>
                       <span>{model.model_id}</span>
                       <small>
                         {model.context_window ? `${model.context_window.toLocaleString('pt-BR')} ctx` : 'ctx desconhecido'}
                         {' · '}
                         {model.capabilities.streaming === false ? 'sem streaming' : 'streaming'}
+                        {' · '}
+                        {model.capabilities.tools === false ? 'sem tools' : 'tools'}
                       </small>
                     </div>
                     <div className="model-row-actions">
@@ -798,7 +813,8 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
                       <button type="button" className="danger-link" onClick={() => removeModel(model)}>Excluir</button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {!models.length && <div className="manager-empty-small">Descubra modelos pela API ou adicione um manualmente.</div>}
               </div>
             </div>
