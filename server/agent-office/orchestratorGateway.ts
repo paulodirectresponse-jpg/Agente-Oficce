@@ -6,6 +6,7 @@ import { TeamService, type WorkerRef } from './teamService.js';
 import { addOrchestratorEvent, getOrchestratorSettings, type OrchestratorLLMEnvelope, type OrchestratorTelemetry } from './orchestratorRuntime.js';
 import { AgentOperationsService } from './agentOperations.js';
 import { SubagentService } from './subagentService.js';
+import { toolRegistry } from './toolRegistry.js';
 
 export type OrchestratorLevel='deterministic'|'fast'|'deep'|'fallback';
 export type TargetMode='direct_agent'|'dynamic_team'|'existing_team'|'needs_gap_analysis';
@@ -170,7 +171,8 @@ export class OrchestratorGateway {
 
   private policyValidate(d:RoutingDecision,keys:Set<string>):RoutingDecision{
     const req=d.required_capabilities.filter(x=>keys.has(x.key));
-    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim()))];
+    const registered=new Set(toolRegistry.listDefinitions().map(x=>x.name));
+    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&registered.has(x.trim())).map(x=>x.trim()))];
     const scope=d.candidate_scope.filter(agent=>this.agentEligible(agent));
     const subs=new SubagentService(this.db);
     const resources=(d.workforce_resources??[]).filter(r=>{
