@@ -22,8 +22,10 @@ function officeText(storage:string,name:string):string{
   const temp=path.join(path.dirname(storage),'office-unpacked');
   try{
     fs.rmSync(temp,{recursive:true,force:true});
-    const script=`Expand-Archive -LiteralPath '${storage.replace(/'/g,"''")}' -DestinationPath '${temp.replace(/'/g,"''")}' -Force`;
+    const zipCopy=path.join(path.dirname(storage),'office-source.zip');fs.copyFileSync(storage,zipCopy);
+    const script=`Expand-Archive -LiteralPath '${zipCopy.replace(/'/g,"''")}' -DestinationPath '${temp.replace(/'/g,"''")}' -Force`;
     const run=spawnSync('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,timeout:20000});
+    try{fs.rmSync(zipCopy,{force:true})}catch{}
     if(run.status!==0)return'';
     const candidates:string[]=[];
     const walk=(dir:string)=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,entry.name);if(entry.isDirectory())walk(p);else if(/\.xml$/i.test(entry.name)&&(/word[\\/]document\.xml$/i.test(p)||/ppt[\\/]slides[\\/]slide\d+\.xml$/i.test(p)||/xl[\\/]worksheets[\\/]sheet\d+\.xml$/i.test(p)||/xl[\\/]sharedStrings\.xml$/i.test(p)))candidates.push(p)}};
