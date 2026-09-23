@@ -98,7 +98,7 @@ export class ProjectService {
     };
   }
 
-  private operationalState(project: any, counts: ReturnType<ProjectService['counts']>): string {
+  private operationalState(project: any, counts: any): string {
     if (project.lifecycle_status === 'archived') return 'archived';
     if (project.lifecycle_status === 'completed') return 'completed';
     if (project.lifecycle_status === 'paused') return 'paused';
@@ -120,7 +120,8 @@ export class ProjectService {
       (this.db.prepare('SELECT MAX(created_at) value FROM project_decisions WHERE project_id=?').get(projectId) as any)?.value,
       (this.db.prepare('SELECT MAX(opened_at) value FROM project_blockers WHERE project_id=?').get(projectId) as any)?.value,
     ].filter(Boolean) as string[];
-    return candidates.sort().at(-1) ?? fallback;
+    candidates.sort();
+    return candidates.length ? candidates[candidates.length - 1] : fallback;
   }
 
   summary(projectId: string) {
