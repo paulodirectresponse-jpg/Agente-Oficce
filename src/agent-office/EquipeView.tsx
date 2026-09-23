@@ -54,18 +54,29 @@ export function EquipeView({agents,providers,onChanged}:{agents:AgentProfile[];p
   const [assignedSkills,setAssignedSkills]=useState<SkillDefinition[]>([]);
   const [skillName,setSkillName]=useState('');
   const [skillInstructions,setSkillInstructions]=useState('');
+  const [selectedSubId,setSelectedSubId]=useState<string|null>(null);
+  const [subKnowledge,setSubKnowledge]=useState<KnowledgeItem[]>([]);
+  const [subSkills,setSubSkills]=useState<SkillDefinition[]>([]);
   const selected=creating?null:agents.find(x=>x.id===selectedId)??null;
+  const selectedSub=subagents.find(x=>x.id===selectedSubId)??null;
 
   useEffect(()=>{if(!selectedId&&agents[0])setSelectedId(agents[0].id);if(selectedId&&!agents.some(x=>x.id===selectedId))setSelectedId(agents[0]?.id??null)},[agents,selectedId]);
   useEffect(()=>{void api.listToolDefinitionsV2().then(setTools).catch(()=>setTools([]))},[]);
   useEffect(()=>{
-    setNotice(null);setError(null);setTab('geral');
+    setNotice(null);setError(null);setTab('geral');setSelectedSubId(null);setSubKnowledge([]);setSubSkills([]);
     if(!selected){if(!creating)return;setDraft(cur=>cur);setOverview(null);setTeam(null);setSubagents([]);setKnowledge([]);setSkills([]);setAssignedSkills([]);return}
     setDraft({name:selected.name,role:selected.role,description:selected.description,provider_id:selected.provider_id??'',model_id:selected.model_id??'',system_prompt:selected.system_prompt,enabled:selected.enabled,slug:selected.slug,avatar_key:selected.avatar_key||'default',sort_order:selected.sort_order,idle_after_seconds:selected.idle_after_seconds});
     void Promise.all([api.getAgentOverviewV2(selected.id),api.getOwnedTeamV3(selected.id),api.getAgentToolPolicyV2(selected.id),api.listKnowledge('agent',selected.id),api.listSkills(),api.listAssignedSkills('agent',selected.id)])
       .then(([o,t,p,k,s,a])=>{setOverview(o);setTeam(t);setSubagents(t?.subagents??[]);setKnowledge(k);setSkills(s);setAssignedSkills(a);setPolicy({enabled:p.enabled,allowed_tools:p.allowed_tools,approval_mode:p.approval_mode,max_tool_steps:p.max_tool_steps})})
       .catch(()=>{setOverview(null);setTeam(null);setSubagents([]);setKnowledge([]);setSkills([]);setAssignedSkills([])});
   },[selected?.id,creating]);
+  useEffect(()=>{
+    if(!selectedSub){setSubKnowledge([]);setSubSkills([]);return}
+    void Promise.all([api.listKnowledge('subagent',selectedSub.id),api.listAssignedSkills('subagent',selectedSub.id)])
+      .then(([knowledge,assigned])=>{setSubKnowledge(knowledge);setSubSkills(assigned)})
+      .catch(()=>{setSubKnowledge([]);setSubSkills([])});
+  },[selectedSub?.id]);
+
   useEffect(()=>{
     if(!draft.provider_id){setModels([]);return}
     void api.listProviderModelsV2(draft.provider_id).then(items=>{setModels(items);if(!draft.model_id){const m=items.find(x=>x.enabled&&x.is_default)??items.find(x=>x.enabled);if(m)setDraft(cur=>({...cur,model_id:m.id}))}}).catch(()=>setModels([]));
@@ -137,7 +148,7 @@ export function EquipeView({agents,providers,onChanged}:{agents:AgentProfile[];p
 
             {tab==='skills'&&<>
               {creating?<V2EmptyState title="Salve o Agent primeiro" description="Depois você poderá ligar Skills reutilizáveis a ele."/>:<>
-                <div className="team-v2-callout"><strong>Skills reutilizáveis</strong><p>Uma Skill é um procedimento reutilizável. Ela não vira um Agent e não muda a hierarquia da equipe.</p></div>
+                <div className="team-v2-callout"><strong>Skills reutilizáveis</strong><p>Uma Skill é um procedimento reutilizável. Ela não vira um Agent e não muda a hierarquia da equipe.</p><button type="button" className="v2-quiet-button" onClick={async()=>{setBusy(true);setError(null);try{await api.syncSkills();setSkills(await api.listSkills());setNotice('Skills de .agents/skills sincronizadas.')}catch(err){setError(err instanceof Error?err.message:'Falha ao sincronizar Skills.')}finally{setBusy(false)}}}>Sincronizar .agents/skills</button></div>
                 <div className="skill-create"><input value={skillName} onChange={e=>setSkillName(e.target.value)} placeholder="Nome da Skill"/><textarea rows={4} value={skillInstructions} onChange={e=>setSkillInstructions(e.target.value)} placeholder="Quando usar e como executar esta Skill"/><button type="button" className="v2-primary-button" disabled={busy||!skillName.trim()||!skillInstructions.trim()} onClick={async()=>{if(!selected)return;setBusy(true);setError(null);try{const skill=await api.createSkill({name:skillName.trim(),instructions:skillInstructions.trim()});await api.assignSkill(skill.id,'agent',selected.id);setSkills(await api.listSkills());setAssignedSkills(await api.listAssignedSkills('agent',selected.id));setSkillName('');setSkillInstructions('');setNotice('Skill criada e adicionada ao Agent.')}catch(err){setError(err instanceof Error?err.message:'Falha ao criar Skill.')}finally{setBusy(false)}}}>Criar Skill</button></div>
                 <div className="skill-list">{skills.map(skill=>{const on=assignedSkills.some(x=>x.id===skill.id);return <label key={skill.id}><input type="checkbox" checked={on} onChange={async e=>{if(!selected)return;try{if(e.target.checked)await api.assignSkill(skill.id,'agent',selected.id);else await api.unassignSkill(skill.id,'agent',selected.id);setAssignedSkills(await api.listAssignedSkills('agent',selected.id))}catch(err){setError(err instanceof Error?err.message:'Falha ao atualizar Skill.')}}}/><span><strong>{skill.name}</strong><small>{skill.description||skill.instructions.slice(0,110)}</small></span></label>})}{!skills.length&&<V2EmptyState title="Nenhuma Skill criada" description="Crie a primeira Skill para padronizar uma forma de trabalhar."/>}</div>
               </>}
@@ -146,7 +157,14 @@ export function EquipeView({agents,providers,onChanged}:{agents:AgentProfile[];p
             {tab==='equipe'&&<>
               {creating?<V2EmptyState title="Salve o Agent primeiro" description="Depois você poderá adicionar especialistas permanentes a ele."/>:<>
                 <div className="team-v2-tree"><div className="team-v2-owner"><span className="team-v2-avatar">{selected!.name.slice(0,1)}</span><div><strong>{selected!.name}</strong><small>Agent principal · owner</small></div></div>
-                <div className="team-v2-subs">{subagents.map(sub=><div key={sub.id}><span className="team-v2-tree-line"/><span className="team-v2-avatar sub">{sub.name.slice(0,1)}</span><div><strong>{sub.name}</strong><small>{sub.role||'Subagent'} · {sub.paused?'pausado':sub.enabled?'ativo':'desativado'}</small></div><button type="button" onClick={()=>void deleteSub(sub)}>Remover</button></div>)}{!subagents.length&&<p>Este Agent trabalha sozinho. Adicione um Subagent quando quiser especializar parte do trabalho.</p>}</div></div>
+                <div className="team-v2-subs">{subagents.map(sub=><div key={sub.id} className={selectedSub?.id===sub.id?'active':''}><span className="team-v2-tree-line"/><span className="team-v2-avatar sub">{sub.name.slice(0,1)}</span><div><strong>{sub.name}</strong><small>{sub.role||'Subagent'} · {sub.paused?'pausado':sub.enabled?'ativo':'desativado'}</small></div><button type="button" onClick={()=>setSelectedSubId(cur=>cur===sub.id?null:sub.id)}>{selectedSub?.id===sub.id?'Fechar':'Configurar'}</button><button type="button" onClick={()=>void deleteSub(sub)}>Remover</button></div>)}{!subagents.length&&<p>Este Agent trabalha sozinho. Adicione um Subagent quando quiser especializar parte do trabalho.</p>}</div></div>
+                {selectedSub&&<section className="subagent-resource-panel">
+                  <div className="team-v2-callout"><strong>{selectedSub.name}</strong><p>Conhecimento e Skills abaixo pertencem somente a este Subagent. Ele continua subordinado a {selected!.name}.</p></div>
+                  <div className="subagent-resource-grid">
+                    <div><h4>Conhecimento</h4><label className="knowledge-upload">+ Adicionar arquivo<input type="file" multiple onChange={async e=>{const files=Array.from(e.target.files??[]);e.currentTarget.value='';if(!files.length)return;setBusy(true);try{for(const file of files){const resource=await api.uploadResource('',file,'subagent',selectedSub.id);await api.addKnowledge({scope_type:'subagent',scope_id:selectedSub.id,resource_id:resource.id,title:file.name})}setSubKnowledge(await api.listKnowledge('subagent',selectedSub.id))}catch(err){setError(err instanceof Error?err.message:'Falha ao adicionar conhecimento.')}finally{setBusy(false)}}}/></label><div className="knowledge-list">{subKnowledge.map(item=><div key={item.id}><div><strong>{item.title}</strong><small>{item.resource?.mime_type||'arquivo'}</small></div><button type="button" onClick={()=>void api.deleteKnowledge(item.id).then(()=>api.listKnowledge('subagent',selectedSub.id).then(setSubKnowledge))}>Remover</button></div>)}{!subKnowledge.length&&<small className="v2-help">Nenhum conhecimento exclusivo.</small>}</div></div>
+                    <div><h4>Skills</h4><div className="skill-list">{skills.map(skill=>{const on=subSkills.some(x=>x.id===skill.id);return <label key={skill.id}><input type="checkbox" checked={on} onChange={async e=>{try{if(e.target.checked)await api.assignSkill(skill.id,'subagent',selectedSub.id);else await api.unassignSkill(skill.id,'subagent',selectedSub.id);setSubSkills(await api.listAssignedSkills('subagent',selectedSub.id))}catch(err){setError(err instanceof Error?err.message:'Falha ao atualizar Skill.')}}}/><span><strong>{skill.name}</strong><small>{skill.description||skill.instructions.slice(0,90)}</small></span></label>})}{!skills.length&&<small className="v2-help">Nenhuma Skill disponível.</small>}</div></div>
+                  </div>
+                </section>}
                 <div className="team-v2-add-sub"><input value={subName} onChange={e=>setSubName(e.target.value)} placeholder="Nome do especialista"/><input value={subRole} onChange={e=>setSubRole(e.target.value)} placeholder="Função (opcional)"/><button className="v2-primary-button" disabled={busy||!subName.trim()} onClick={()=>void addSubagent()}>Adicionar Subagent</button></div>
                 {team&&<details className="v2-disclosure"><summary>Configurações da equipe</summary><div><p><strong>{team.name}</strong> · v{team.current_version}</p><p>{team.purpose}</p><small>Esta Team pertence somente a {selected!.name}. Outros Agents nunca viram subordinados.</small></div></details>}
               </>}
