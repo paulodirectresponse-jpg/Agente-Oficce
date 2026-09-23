@@ -134,10 +134,12 @@ export const api = {
   uploadResource: (projectId:string,file:File,ownerType:'chat'|'project'|'agent'|'subagent'|'skill'='chat',ownerId?:string) =>
     uploadBinary<ResourceFile>(`/api/agent-office/resources/upload?${projectId?`project_id=${encodeURIComponent(projectId)}&`:''}owner_type=${ownerType}${ownerId?`&owner_id=${encodeURIComponent(ownerId)}`:''}`,file),
   listProjectResources: (projectId:string) => request<ResourceFile[]>(`/api/agent-office/projects/${projectId}/resources`),
+  getResourceContentUrl: async (resourceId:string) => `${await resolveApiBase()}/api/agent-office/resources/${encodeURIComponent(resourceId)}/content`,
   listKnowledge: (scopeType:'project'|'agent'|'subagent',scopeId:string) => request<KnowledgeItem[]>(`/api/agent-office/knowledge/${scopeType}/${scopeId}`),
   addKnowledge: (input:{scope_type:'project'|'agent'|'subagent';scope_id:string;resource_id:string;title?:string}) => request<KnowledgeItem>('/api/agent-office/knowledge',{method:'POST',body:JSON.stringify(input)}),
   deleteKnowledge: (id:string) => request<{deleted:boolean}>(`/api/agent-office/knowledge/${id}`,{method:'DELETE'}),
   listSkills: () => request<SkillDefinition[]>('/api/agent-office/skills'),
+  syncSkills: (projectId?:string) => request<SkillDefinition[]>('/api/agent-office/skills/sync',{method:'POST',body:JSON.stringify(projectId?{project_id:projectId}:{})}),
   createSkill: (input:{name:string;description?:string;instructions?:string}) => request<SkillDefinition>('/api/agent-office/skills',{method:'POST',body:JSON.stringify(input)}),
   updateSkill: (id:string,input:{name:string;description?:string;instructions?:string;enabled?:boolean}) => request<SkillDefinition>(`/api/agent-office/skills/${id}`,{method:'PATCH',body:JSON.stringify(input)}),
   deleteSkill: (id:string) => request<{deleted:boolean}>(`/api/agent-office/skills/${id}`,{method:'DELETE'}),
