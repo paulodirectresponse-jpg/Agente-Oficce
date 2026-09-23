@@ -6,38 +6,87 @@ Update it **before every work session ends**.
 
 ## Current state
 
-- Overall: PHASE 1 IN PROGRESS
-- Current macro phase: Phase 1 — Foundation + Trabalho
-- Current checkpoint: 1.1 Shell V2 (done) → next 1.2 design tokens/primitives, then 1.3 Trabalho V2
+- Overall: PHASE 1 DONE
+- Current macro phase: Phase 1 — Foundation + Trabalho — COMPLETE
+- Next macro phase: Phase 2 — Recompose the rest of the product
 - Implementation branch: `ux-v2-redesign`
 - Baseline from main: `c153ea4e61b3456ef18c435afaa83a360bb14fca`
-- Last implementation checkpoint: `ux: establish V2 shell and project switcher` (see handoff below)
+- Phase 1 code gate SHA: `b384dc462560ee3cb1117d141e595abf560ed84a`
+- Phase 1 CI workflow: `35909526584` — PASS
 - Blocked: no
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
 
 ## Completed
 
+### Planning / contract
 - UX audit of every existing primary surface.
 - UX V2 information architecture approved.
 - Calm Control Room visual direction approved.
 - Repository-local UX/design skills installed.
 - Root `DESIGN.md` approved contract created.
 - 3-phase implementation plan created.
-- Shell V2 (checkpoint 1.1): primary nav reduced to Trabalho / Equipe / Conexões / Configurações; compact Project Switcher dropdown (switch, Novo projeto, Todos os projetos, Configurações do projeto); compact system status footer opening System Center; System Center shell with Atividade / Uso & Custo / Saúde / Orquestração / Diagnóstico; legacy views kept reachable via quiet "Áreas antigas" disclosure group in sidebar (compatibility routing, nothing deleted).
+
+### Phase 1 — Foundation + Trabalho
+- Shell V2 with primary navigation reduced to Trabalho / Equipe / Conexões / Configurações.
+- Compact Project Switcher with switch/new/all/settings actions.
+- Compact system status footer and System Center shell.
+- Legacy routes preserved under a quiet compatibility disclosure; nothing deleted prematurely.
+- Shared UX V2 primitives: tabs, status, empty state, drawer, page header.
+- Semantic Calm Control Room UX V2 tokens added to the current stylesheet.
+- New `TrabalhoView` is the primary workspace; old `DevChatView` remains compatibility-only.
+- Conversation-first layout with no permanent Run/Plan/Workforce column.
+- Compact execution summary in human language.
+- Activity/Execution drawer with steps, workers, recent runs and live activity.
+- Risk approvals remain explicit in the main conversation.
+- Queue/orient/interrupt behavior preserved with simplified user-facing language.
+- Contextual Inspector reuses the Workbench but hides empty tabs and humanizes labels.
+- Healthy Preview can open the Inspector contextually when it becomes useful.
+- Sala is a secondary mode inside Trabalho and preserves Agent Office's distinctive office visualization.
+- Permanent Event Stream removed from the primary work surface.
+- Responsive hardening: shrink-safe grid/flex, controlled prose wrapping, Inspector overlay at constrained widths, compact header behavior, sidebar/secondary surface handling and reduced-motion support.
+
+## Verification
+
+### Phase 1 final code gate — 2026-09-23
+Validated SHA: `b384dc462560ee3cb1117d141e595abf560ed84a`
+Workflow: `35909526584`
+
+- Release version consistency: PASS
+- Unit and integration tests: PASS
+- Deterministic benchmark: PASS
+- Release preflight: PASS
+- Typecheck: PASS
+- Build client and server: PASS
+- Tauri desktop build: PASS
+- Bundled backend smoke: PASS
+- Installed desktop runtime lifecycle: PASS
+- MSI verification: PASS
+- Release manifest: PASS
+- MSI artifact upload: PASS
+- Release diagnostics upload: PASS
+
+Backend architecture was not rewritten for UX V2.
 
 ## In progress
 
-Next: checkpoint 1.2 (design tokens + shared primitives: AppShell, PageHeader, Tabs, Drawer, EmptyState, Status, Modal, List) and 1.3 (Trabalho V2 conversation-first workspace merging Office + DevChat, execution summary, Inspector, Sala mode).
+None. Phase 1 is closed.
 
 ## Next exact action
 
-Continue Phase 1 on `ux-v2-redesign`:
+Start Phase 2 from the current remote `ux-v2-redesign` branch:
 
-1. extract design tokens from `App.css` Experience V2 variables into a documented token set (checkpoint 1.2);
-2. build shared primitives under `src/agent-office/shell/` or `src/agent-office/components/`;
-3. build Trabalho V2 (checkpoint 1.3): conversation-first layout with composer, compact execution status, contextual Preview/Inspector, Sala secondary mode;
-4. keep old OfficeView/DevChatView reachable until parity;
-5. verify typecheck/build/tests; commit and push each checkpoint.
+1. build Equipe V2 by merging Agent management + owned Team/Subagents into the approved Agent detail structure;
+2. move Project Manager/detail into Project Switcher flows;
+3. build Conexões V2 with IA + Integrações;
+4. build full System Center + reorganized Settings;
+5. verify functional parity before retiring legacy navigation/routes;
+6. preserve all Blocks 1–11 backend invariants.
+
+Recommended first Phase 2 checkpoint:
+
+`ux: merge Agents and Teams into Equipe V2`
+
+Do not redo Shell V2 or Trabalho V2 unless testing reveals a concrete defect.
 
 ## Known UX defects to eliminate
 
