@@ -318,6 +318,7 @@ export interface Team {
   slug: string;
   purpose: string;
   type: 'permanent' | 'system';
+  owner_agent_id: string | null;
   lead_agent_id: string | null;
   enabled: boolean;
   max_parallelism: number;
@@ -496,4 +497,46 @@ export interface AgentOverview {
   capabilities: AgentCapabilityV3[];
   performance: AgentPerformanceSummary;
   recent_activity: Array<{type:string;severity:string;title:string;detail:string;payload:Record<string,unknown>;created_at:string}>;
+}
+
+
+export interface TeamRoomEntry {
+  id: string;
+  team_id: string;
+  agent_id: string | null;
+  entry_type: 'activity'|'decision'|'memory'|'note'|'delegation'|'result';
+  content: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+export interface TeamRoom {
+  team_id: string;
+  instructions: string;
+  shared_context: Record<string, unknown>;
+  memory: Record<string, unknown>;
+  updated_at: string;
+  entries: TeamRoomEntry[];
+}
+export interface WorkforceMember {
+  dynamic_team_id: string;
+  agent_id: string;
+  role_name: string;
+  priority: number;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+}
+export interface Workforce {
+  id: string;
+  orchestration_run_id: string | null;
+  execution_plan_id: string | null;
+  purpose: string;
+  lead_agent_id: string | null;
+  max_parallelism: number;
+  max_delegation_depth: number;
+  allow_external_borrowing: boolean;
+  policy: TeamPolicy;
+  status: 'active'|'completed'|'cancelled';
+  members: WorkforceMember[];
+  created_at: string;
+  updated_at: string;
 }
