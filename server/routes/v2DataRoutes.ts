@@ -26,7 +26,6 @@ import { getFullAccessToolHealth } from '../agent-office/fullAccessTools.js';
 import { ProviderFallbackRepository, ProviderResilienceManager } from '../agent-office/providerResilience.js';
 import { AgentOperationsService } from '../agent-office/agentOperations.js';
 import { CapabilityRepository } from '../agent-office/capabilityCore.js';
-import { TeamService } from '../agent-office/teamService.js';
 
 export const v2DataRouter = Router();
 
