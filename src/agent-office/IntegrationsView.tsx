@@ -92,7 +92,7 @@ export function IntegrationsView({project}:{project:Project|null}){
       <div>
         <span className="office-kicker">External systems</span>
         <h1>Integrações</h1>
-        <p>Conexões externas separadas dos Providers. Tools continuam passando por policies, approval, audit e idempotência.</p>
+        <p>Conecte serviços externos que seus Agents podem usar quando o trabalho precisar.</p>
       </div>
       <div className="integration-project-context">
         <span>Project ativo</span>
@@ -160,7 +160,7 @@ export function IntegrationsView({project}:{project:Project|null}){
         <label>Autenticação<select value={draft.auth_mode} onChange={e=>setDraft({...draft,auth_mode:e.target.value})}>
           {(catalog.find(x=>x.driver===draft.driver)?.auth_modes??[]).map(mode=><option key={mode} value={mode}>{mode}</option>)}
         </select></label>
-        {draft.auth_mode==='token'&&<label>Token<input type="password" autoComplete="off" value={draft.secret} onChange={e=>setDraft({...draft,secret:e.target.value})} placeholder="Salvo criptografado fora do SQLite"/></label>}
+        {draft.auth_mode==='token'&&<label>Token<input type="password" autoComplete="off" value={draft.secret} onChange={e=>setDraft({...draft,secret:e.target.value})} placeholder="Salvo com segurança fora do banco local"/></label>}
         <p className="muted">Credenciais são mantidas fora do banco local de dados.</p>
         <div className="integration-actions"><button className="btn" onClick={()=>setDraft(null)}>Cancelar</button><button className="btn btn-primary" disabled={busy!==null} onClick={()=>void create()}>{busy==='create'?'Criando…':'Criar conexão'}</button></div>
       </div>
