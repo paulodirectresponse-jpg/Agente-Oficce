@@ -4,6 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import type { Database } from 'better-sqlite3';
+import { openAgentOfficeDatabase } from './database.js';
 
 const MAX_LOG=256*1024;
 interface ActivePreview{child:ChildProcess;projectId:string;sessionId:string;port:number;url:string}
@@ -42,16 +43,18 @@ export class PreviewService{
     const child=spawn(detected.command,{cwd:project.root_path,env,shell:true,windowsHide:true,stdio:['ignore','pipe','pipe']});
     this.db.prepare(`INSERT INTO preview_sessions(id,project_id,chat_run_id,process_id,pid,command,port,url,status,stdout,stderr,started_at,updated_at)VALUES(?,?,?,?,?,?,?,?, 'starting','','',?,?)`).run(sessionId,projectId,input.chat_run_id??null,sessionId,child.pid??null,detected.command,port,url,t,t);
     active.set(projectId,{child,projectId,sessionId,port,url});
-    const append=(kind:'stdout'|'stderr',chunk:any)=>{const row=this.db.prepare(`SELECT ${kind} value FROM preview_sessions WHERE id=?`).get(sessionId) as any;this.db.prepare(`UPDATE preview_sessions SET ${kind}=?,updated_at=? WHERE id=?`).run(bounded(String(row?.value??'')+String(chunk)),now(),sessionId)};
+    const append=(kind:'stdout'|'stderr',chunk:any)=>{const db=openAgentOfficeDatabase();try{const row=db.connection.prepare(`SELECT ${kind} value FROM preview_sessions WHERE id=?`).get(sessionId) as any;db.connection.prepare(`UPDATE preview_sessions SET ${kind}=?,updated_at=? WHERE id=?`).run(bounded(String(row?.value??'')+String(chunk)),now(),sessionId)}finally{db.connection.close()}};
     child.stdout?.on('data',x=>append('stdout',x));child.stderr?.on('data',x=>append('stderr',x));
-    child.on('exit',(code)=>{active.delete(projectId);const row=this.db.prepare('SELECT status FROM preview_sessions WHERE id=?').get(sessionId) as any;if(row?.status==='stopped')return;this.db.prepare("UPDATE preview_sessions SET status=?,updated_at=?,stopped_at=? WHERE id=?").run(code===0?'stopped':'failed',now(),now(),sessionId)});
+    child.on('exit',(code)=>{active.delete(projectId);const db=openAgentOfficeDatabase();try{const row=db.connection.prepare('SELECT status FROM preview_sessions WHERE id=?').get(sessionId) as any;if(row?.status==='stopped')return;db.connection.prepare("UPDATE preview_sessions SET status=?,updated_at=?,stopped_at=? WHERE id=?").run(code===0?'stopped':'failed',now(),now(),sessionId)}finally{db.connection.close()}});
     const healthy=await waitHealth(url,child);
     this.db.prepare('UPDATE preview_sessions SET status=?,updated_at=? WHERE id=?').run(healthy?'healthy':child.exitCode===null?'failed':'failed',now(),sessionId);
     return this.status(projectId);
   }
   status(projectId:string){
-    this.project(projectId);const row=this.db.prepare('SELECT * FROM preview_sessions WHERE project_id=? ORDER BY updated_at DESC LIMIT 1').get(projectId) as any;if(!row)return null;
-    const live=active.get(projectId);return{...row,running:Boolean(live&&live.child.exitCode===null&&!live.child.killed)};
+    this.project(projectId);let row=this.db.prepare('SELECT * FROM preview_sessions WHERE project_id=? ORDER BY updated_at DESC LIMIT 1').get(projectId) as any;if(!row)return null;
+    const live=active.get(projectId);
+    if((row.status==='starting'||row.status==='healthy')&&!live){const t=now();this.db.prepare("UPDATE preview_sessions SET status='stopped',updated_at=?,stopped_at=COALESCE(stopped_at,?) WHERE id=?").run(t,t,row.id);row=this.db.prepare('SELECT * FROM preview_sessions WHERE id=?').get(row.id) as any}
+    return{...row,running:Boolean(live&&live.child.exitCode===null&&!live.child.killed)};
   }
   logs(projectId:string){const s=this.status(projectId);return s?{id:s.id,status:s.status,stdout:s.stdout,stderr:s.stderr,command:s.command,url:s.url}:null}
   async stop(projectId:string){
@@ -66,7 +69,7 @@ export class PreviewService{
     if(row)this.db.prepare("UPDATE preview_sessions SET status='stopped',updated_at=?,stopped_at=? WHERE id=?").run(now(),now(),row.id);
     return this.status(projectId);
   }
-  async restart(projectId:string){const row=this.status(projectId);const command=row?.command;await this.stop(projectId);return this.start(projectId,{command})}
+  async restart(projectId:string){await this.stop(projectId);return this.start(projectId)}
   reconcileStale(){
     const ids=this.db.prepare("SELECT id FROM preview_sessions WHERE status IN ('starting','healthy')").all() as any[];for(const r of ids)this.db.prepare("UPDATE preview_sessions SET status='stopped',updated_at=?,stopped_at=? WHERE id=?").run(now(),now(),r.id);return ids.length
   }
