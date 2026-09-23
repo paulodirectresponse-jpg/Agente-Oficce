@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3 } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -98,6 +98,36 @@ export const api = {
     const query = afterSequence > 0 ? `?after=${afterSequence}` : '';
     return `${base}/api/agent-office/chat/runs/${runId}/stream${query}`;
   },
+
+  // V3 Dev Chat Workspace
+  getWorkspaceSnapshotV3: (projectId: string) =>
+    request<WorkspaceSnapshot>(`/api/agent-office/v3/workspace/projects/${projectId}/snapshot`),
+  listWorkspaceFilesV3: (projectId: string, path = '.') =>
+    request<WorkspaceFileEntry[]>(`/api/agent-office/v3/workspace/projects/${projectId}/files?path=${encodeURIComponent(path)}`),
+  readWorkspaceFileV3: (projectId: string, path: string) =>
+    request<WorkspaceFileContent>(`/api/agent-office/v3/workspace/projects/${projectId}/file?path=${encodeURIComponent(path)}`),
+  getWorkspaceGitStatusV3: (projectId: string) =>
+    request<WorkspaceGitStatus>(`/api/agent-office/v3/workspace/projects/${projectId}/git/status`),
+  getWorkspaceGitDiffV3: (projectId: string, path?: string) =>
+    request<WorkspaceGitDiff>(`/api/agent-office/v3/workspace/projects/${projectId}/git/diff${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  listWorkspaceRunsV3: (projectId: string) =>
+    request<ChatRun[]>(`/api/agent-office/v3/workspace/projects/${projectId}/runs`),
+  getWorkspaceRunV3: (runId: string) =>
+    request<WorkspaceRunInspection>(`/api/agent-office/v3/workspace/runs/${runId}`),
+  getWorkspacePlanV3: (planId: string) =>
+    request<WorkspacePlan>(`/api/agent-office/v3/workspace/plans/${planId}`),
+  sendWorkspaceCommandV3: (projectId: string, input: { command_type: 'orient'|'enqueue'|'interrupt'; message: string; target?: string; chat_run_id?: string; execution_plan_id?: string }) =>
+    request<WorkspaceCommand>(`/api/agent-office/v3/workspace/projects/${projectId}/commands`, { method: 'POST', body: JSON.stringify(input) }),
+  getPreviewV3: (projectId: string) =>
+    request<PreviewSession | null>(`/api/agent-office/v3/workspace/projects/${projectId}/preview`),
+  getPreviewLogsV3: (projectId: string) =>
+    request<Pick<PreviewSession,'id'|'status'|'stdout'|'stderr'|'command'|'url'> | null>(`/api/agent-office/v3/workspace/projects/${projectId}/preview/logs`),
+  startPreviewV3: (projectId: string, input: { chat_run_id?: string; command?: string } = {}) =>
+    request<PreviewSession>(`/api/agent-office/v3/workspace/projects/${projectId}/preview/start`, { method: 'POST', body: JSON.stringify(input) }),
+  stopPreviewV3: (projectId: string) =>
+    request<PreviewSession | null>(`/api/agent-office/v3/workspace/projects/${projectId}/preview/stop`, { method: 'POST' }),
+  restartPreviewV3: (projectId: string) =>
+    request<PreviewSession>(`/api/agent-office/v3/workspace/projects/${projectId}/preview/restart`, { method: 'POST' }),
 
   // V2 dynamic data model
   providerEngineCapabilities: () =>
