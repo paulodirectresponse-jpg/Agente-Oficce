@@ -3,6 +3,8 @@ import { CapabilityRepository, type CapabilityRequirement, type AgentCapability 
 import { TeamService, type WorkerRef } from './teamService.js';
 import { AgentOperationsService } from './agentOperations.js';
 import { SubagentService } from './subagentService.js';
+import { ToolRegistry } from './toolRegistry.js';
+import { IntegrationRegistryService } from './integrationRegistry.js';
 
 export type GapResolution='active_agent'|'active_subagent'|'dynamic_team'|'existing_team'|'inactive_agent_available'|'missing_tool'|'missing_integration'|'missing_capability';
 export interface CapabilityGap{
@@ -36,8 +38,28 @@ export class GapAnalysisService{
   private caps:CapabilityRepository;
   constructor(private db:Database){this.caps=new CapabilityRepository(db)}
 
-  analyze(requirements:CapabilityRequirement[],requiredTools:string[]=[]):GapAnalysisResult{
+  analyze(requirements:CapabilityRequirement[],requiredTools:string[]=[],options:{project_id?:string|null}={}):GapAnalysisResult{
     this.caps.seed();
+    const registeredTools=new Set(new ToolRegistry().listDefinitions().map(tool=>tool.name));
+    const missingTools=[...new Set(requiredTools.filter(tool=>!registeredTools.has(tool)))];
+    if(missingTools.length){
+      return{
+        resolution:'missing_tool',selected_agent_ids:[],selected_subagent_ids:[],workforce_resources:[],inactive_agent_ids:[],
+        uncovered_requirements:missingTools,
+        gaps:missingTools.map(tool=>({key:'tool:'+tool,domain:'tools',required_level:1,reason:'Required tool is not registered.',blocking:true,frequency_hint:0,candidate_alternatives:[],missing_tool:tool,confidence:1,discovered_at:'preflight'})),
+        explanation:'One or more required Tools are not registered in the Agent Office.'
+      };
+    }
+    const integrations=new IntegrationRegistryService(this.db);
+    const missingIntegrations=requiredTools.map(tool=>({tool,availability:integrations.availabilityForTool(tool,options.project_id)})).filter(item=>item.availability.managed&&!item.availability.available);
+    if(missingIntegrations.length){
+      return{
+        resolution:'missing_integration',selected_agent_ids:[],selected_subagent_ids:[],workforce_resources:[],inactive_agent_ids:[],
+        uncovered_requirements:missingIntegrations.map(item=>String(item.availability.driver)),
+        gaps:missingIntegrations.map(item=>({key:'integration:'+String(item.availability.driver),domain:'integrations',required_level:1,reason:'Required Integration is unavailable, disabled or needs authentication.',blocking:true,frequency_hint:0,candidate_alternatives:[],missing_tool:item.tool,missing_integration:String(item.availability.driver),confidence:1,discovered_at:'preflight'})),
+        explanation:'A required external Integration is not available for this Project.'
+      };
+    }
     const defs=new Map(this.caps.list().map(d=>[d.key,d]));
     for(const r of requirements)if(!defs.has(r.key))throw new Error('CAPABILITY_NOT_FOUND');
     const mandatory=requirements.filter(r=>r.mandatory!==false),candidates=this.candidates();
