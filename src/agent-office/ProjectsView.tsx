@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Project, ProjectDetail, ProjectRootSetting, ProjectSummary } from './types.js';
 import { api } from './api.js';
 import { V2EmptyState, V2PageHeader, V2Status, V2Tabs } from './shell/V2Primitives.js';
@@ -42,8 +42,6 @@ export function ProjectsView({activeProject,onSelectProject,onOpenWork,intent}:{
   const addBlocker=async()=>{if(!detail||!blocker.trim())return;setBusy('blocker');try{await api.addProjectBlockerV3(detail.project.id,{title:blocker.trim()});setBlocker('');await loadDetail(detail.project.id)}finally{setBusy(null)}};
   const resolve=async(id:string)=>{if(!detail)return;setBusy(id);try{await api.resolveProjectBlockerV3(detail.project.id,id,'Resolvido pelo usuário.');await loadDetail(detail.project.id)}finally{setBusy(null)}};
   const saveResult=async(finalize:boolean)=>{if(!detail)return;setBusy('result');try{await api.saveProjectResultV3(detail.project.id,{status:finalize?'final':'draft',summary:resultSummary.trim(),result:resultText.trim(),artifact_ids:selectedArtifacts,complete_project:finalize});await refresh()}finally{setBusy(null)}};
-
-  const currentSummary=useMemo(()=>summaries.find(x=>x.project.id===activeProject?.id),[summaries,activeProject?.id]);
 
   return <div className="projects-v3-page">
     <V2PageHeader title="Projects" subtitle="Contextos persistentes do que você está construindo." actions={<button className="v2-primary-button" onClick={()=>setShowCreate(v=>!v)}>{showCreate?'Fechar':'+ Novo Project'}</button>}/>
