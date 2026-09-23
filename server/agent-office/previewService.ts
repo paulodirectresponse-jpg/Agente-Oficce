@@ -45,7 +45,8 @@ export class PreviewService{
     child.stdout?.on('data',x=>{entry.stdout=bounded(entry.stdout+String(x))});child.stderr?.on('data',x=>{entry.stderr=bounded(entry.stderr+String(x))});
     child.on('exit',(code)=>{entry.exitCode=code??0});
     const healthy=await waitHealth(url,child);
-    this.db.prepare('UPDATE preview_sessions SET status=?,updated_at=? WHERE id=?').run(healthy?'healthy':child.exitCode===null?'failed':'failed',now(),sessionId);
+    if(!healthy&&child.exitCode===null){try{if(process.platform==='win32'&&child.pid)execFileSync('taskkill',['/PID',String(child.pid),'/T','/F'],{stdio:'ignore',windowsHide:true});else child.kill('SIGTERM')}catch{}active.delete(projectId)}
+    this.db.prepare('UPDATE preview_sessions SET status=?,updated_at=?,stopped_at=? WHERE id=?').run(healthy?'healthy':'failed',now(),healthy?null:now(),sessionId);
     return this.status(projectId);
   }
   status(projectId:string){

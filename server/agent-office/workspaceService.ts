@@ -21,7 +21,7 @@ export class WorkspaceService{
     const project=this.project(projectId);
     const activeRun=this.db.prepare("SELECT * FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL AND status IN ('created','running') ORDER BY started_at DESC LIMIT 1").get(projectId) as any;
     const latestRun=activeRun??this.db.prepare('SELECT * FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL ORDER BY started_at DESC LIMIT 1').get(projectId) as any;
-    const plan=latestRun?.metadata_json?this.planForRun(latestRun):this.db.prepare("SELECT * FROM execution_plans WHERE project_id=? AND status IN ('validated','running') ORDER BY created_at DESC LIMIT 1").get(projectId) as any;
+    const plan=(latestRun?this.planForRun(latestRun):null)??this.db.prepare("SELECT * FROM execution_plans WHERE project_id=? AND status IN ('validated','running') ORDER BY created_at DESC LIMIT 1").get(projectId) as any;
     const workforce=latestRun?this.db.prepare('SELECT id FROM dynamic_team_instances WHERE chat_run_id=? ORDER BY created_at DESC LIMIT 1').get(latestRun.id) as any:null;
     const approvals=this.db.prepare("SELECT * FROM tool_approvals WHERE project_id=? AND status='pending' ORDER BY created_at").all(projectId) as any[];
     const commands=this.db.prepare("SELECT * FROM workspace_run_commands WHERE project_id=? AND status='pending' ORDER BY created_at").all(projectId) as any[];
