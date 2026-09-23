@@ -156,6 +156,23 @@ After review:
 
 ## Verification log
 
+### 2026-09-23 — ChatGPT (review checkpoint C: operational 2D office)
+
+**Completed**
+- Rebuilt the Sala scene as an original top-down 2D office with warm flooring, project room, meeting area, lounge, operations board, plants and distinct workstations.
+- Added modular room components: OfficeMap, AgentStation, AgentAvatar and room types.
+- Agent role/capability wording influences station style: development, research/review, lead or operations.
+- Agent identity is deterministic per Agent and visually differentiated without external sprites.
+- Real provider/state/activity/progress data drives idle, working, thinking, waiting, blocked, error and offline visuals.
+- Existing target selection and live handoff information remain connected to real Agents.
+- Shared room chat now uses the same rich safe renderer as Trabalho conversation.
+- Open-source review documented; no third-party assets or engine were imported.
+
+**Licensing**
+- No new dependency or asset license added.
+- Research references documented in docs/plans/OFFICE_2D_OPEN_SOURCE_REVIEW.md.
+
+
 ### 2026-09-23 — ChatGPT (review checkpoint B: native viewport room)
 
 **Completed**

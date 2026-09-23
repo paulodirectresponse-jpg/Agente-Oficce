@@ -11,6 +11,8 @@ import type {
   UniversalProvider,
 } from './types.js';
 import { api } from './api.js';
+import { MessageContent } from './conversation/MessageContent.js';
+import { OfficeMap } from './room/OfficeMap.js';
 
 type OfficeFocus = 'office' | 'chat';
 type VisualState =
@@ -556,115 +558,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           </div>
         </header>
 
-        <div className="office-scene-card">
-          <div className="office-back-wall">
-            <div className="wall-poster left">GOOD<br />AGENTS<br />GREAT<br />THINGS</div>
-            <div className="office-sign">
-              <strong>Agent Office</strong>
-              <span>LOCAL IDEAS. REAL PROGRESS.</span>
-            </div>
-            <div className="wall-poster right">PLAN<br />DELEGATE<br />ITERATE<br />SHIP</div>
-          </div>
-
-          <div className="office-room">
-            <div className="office-plant plant-a">✦</div>
-            <div className="office-plant plant-b">✦</div>
-            <div className="office-plant plant-c">✦</div>
-
-            <div className={`agent-stations agent-count-${Math.min(visibleAgents.length, 10)}`}>
-              {visibleAgents.map((agent, index) => {
-                const persisted = stateByAgent.get(agent.id);
-                const visualState = deriveVisualState(agent, persisted, liveStates[agent.id], providers);
-                const provider = agent.provider_id ? providerById.get(agent.provider_id) : undefined;
-                const activityText = liveStates[agent.id]?.activity || persisted?.activity || STATE_LABELS[visualState];
-                const selected = target === agent.id || target === agent.slug;
-                return (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    className={`agent-station state-${visualState} ${selected ? 'selected' : ''}`}
-                    onClick={() => setTarget(selected ? 'auto' : agent.id)}
-                    title={visualState === 'offline'
-                      ? `${agent.name} precisa de provider/modelo disponível`
-                      : `Enviar a próxima mensagem diretamente para ${agent.name}`}
-                    disabled={visualState === 'offline'}
-                  >
-                    <div className="agent-floating-card">
-                      <div className="agent-floating-title">
-                        <span className="agent-state-dot" />
-                        <strong>{agent.name}</strong>
-                      </div>
-                      <span>{activityText || STATE_LABELS[visualState]}</span>
-                      <div className="agent-progress-track">
-                        <span style={{ width: persisted?.progress != null ? `${Math.max(8, persisted.progress * 100)}%` : visualState === 'idle' || visualState === 'resting' ? '18%' : '62%' }} />
-                      </div>
-                    </div>
-
-                    <div className="desk-illustration">
-                      <div className="desk-monitor monitor-left"><span /></div>
-                      <div className="desk-monitor monitor-main"><span /></div>
-                      <div className={`agent-character character-${index % 3}`}>
-                        <div className="character-head">
-                          <span className="character-hair" />
-                          <span className="character-face" />
-                          <span className="character-headset" />
-                        </div>
-                        <div className="character-body" />
-                      </div>
-                      <div className="desk-surface">
-                        <span className="keyboard" />
-                        <span className="desk-mug">•</span>
-                        <span className="desk-plant">✦</span>
-                      </div>
-                      <div className="desk-legs left" />
-                      <div className="desk-legs right" />
-                    </div>
-
-                    <div className="agent-nameplate">
-                      <strong>{agent.name}</strong>
-                      <span>{agent.role || 'AI Agent'}</span>
-                      <small>
-                        {provider?.name ?? 'Provider não configurado'} · {STATE_LABELS[visualState]}
-                      </small>
-                    </div>
-                  </button>
-                );
-              })}
-
-              {visibleAgents.length === 0 && (
-                <div className="office-no-agents">
-                  <strong>Nenhum agente configurado</strong>
-                  <span>Na Fase F você poderá criar e posicionar agentes pelo painel.</span>
-                </div>
-              )}
-            </div>
-
-            <div className="office-handoff-line">
-              {lastHandoff ? (
-                <>
-                  <span className="handoff-node">{lastHandoff.from}</span>
-                  <span className="handoff-arrow">────→</span>
-                  <span className="handoff-bubble">Handoff</span>
-                  <span className="handoff-arrow">────→</span>
-                  <span className="handoff-node">{lastHandoff.to}</span>
-                </>
-              ) : (
-                <>
-                  <span className="shared-context-dot" />
-                  <span>Mesmo contexto · múltiplos agentes · handoffs ao vivo</span>
-                </>
-              )}
-            </div>
-
-            <div className="office-lounge">
-              <div className="office-sofa">
-                <span /><span /><span />
-              </div>
-              <div className="office-table"><span>✦</span></div>
-              <div className="office-rug">A CALMER<br />MORE CAPABLE<br />YOU</div>
-            </div>
-          </div>
-        </div>
+        <OfficeMap agents={visibleAgents} providers={providers} states={states} liveStates={liveStates} target={target} onTarget={setTarget} lastHandoff={lastHandoff}/>
 
         <section className="office-chat-card" aria-label="Chat">
           <div className="chat-header">
@@ -692,7 +586,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <strong>{item.role === 'user' ? 'Você' : agent?.name || item.agent_id || 'Agente'}</strong>
                       <span>{formatTime(item.created_at)}</span>
                     </div>
-                    <p>{item.content}</p>
+                    <MessageContent content={item.content}/>
                   </div>
                 </div>
               );
@@ -713,7 +607,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <strong>{agent?.name || agentId}</strong>
                       <span className="typing-indicator">respondendo ao vivo</span>
                     </div>
-                    <p>{text}<span className="stream-caret">▍</span></p>
+                    <MessageContent content={text} streaming/>
                   </div>
                 </div>
               );
