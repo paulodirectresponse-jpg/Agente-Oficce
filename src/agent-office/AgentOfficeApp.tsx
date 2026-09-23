@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AgentProfile, Project, UniversalProvider } from './types.js';
 import { ProjectsView } from './ProjectsView.js';
-import { AnalyticsView } from './AnalyticsView.js';
 import { ConfiguracoesView } from './ConfiguracoesView.js';
-import { OfficeView } from './OfficeView.js';
 import { EquipeView } from './EquipeView.js';
 import { ConexoesView } from './ConexoesView.js';
-import { IntegrationsView } from './IntegrationsView.js';
-import { TeamsView } from './TeamsView.js';
-import { OrchestratorView } from './OrchestratorView.js';
-import { WorkforcesView } from './WorkforcesView.js';
-import { DevChatView } from './DevChatView.js';
 import { TrabalhoView } from './TrabalhoView.js';
 import { ProjectSwitcher } from './shell/ProjectSwitcher.js';
 import type { ProjectMenuAction } from './shell/ProjectSwitcher.js';
@@ -30,6 +23,7 @@ export function AgentOfficeApp() {
   const [runtimeState, setRuntimeState] = useState<RuntimeState>('checking');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [projectIntent, setProjectIntent] = useState<ProjectMenuAction>('all');
+  const [shellReady, setShellReady] = useState(false);
 
   const loadShellData = useCallback(async () => {
     try {
@@ -46,8 +40,10 @@ export function AgentOfficeApp() {
         if (current) return nextProjects.find((project) => project.id === current.id) ?? nextProjects.find((project) => project.id === selection.project_id) ?? nextProjects[0] ?? null;
         return nextProjects.find((project) => project.id === selection.project_id) ?? nextProjects[0] ?? null;
       });
+      setShellReady(true);
     } catch {
       // Runtime banner handles connectivity; individual pages keep their own errors.
+      setShellReady(true);
     }
   }, []);
 
@@ -137,28 +133,21 @@ export function AgentOfficeApp() {
         <SystemStatusFooter runtimeState={runtimeState} onOpenSystem={() => navigate('system')} />
       </aside>
 
-      <main className="app-main experience-main">
+      <main className="app-main experience-main" id="main-content">
         {runtimeState === 'offline' && (
           <div className="runtime-banner" role="alert">
             O runtime local não respondeu. A interface permanece disponível e voltará a sincronizar automaticamente.
           </div>
         )}
 
-        {view === 'trabalho' && <TrabalhoView project={activeProject} />}
-        {view === 'equipe' && <EquipeView agents={agents} providers={providers} onChanged={loadShellData} />}
-        {view === 'conexoes' && <ConexoesView providers={providers} project={activeProject} onChanged={loadShellData} />}
-        {view === 'configuracoes' && <ConfiguracoesView providers={providers} />}
-        {view === 'system' && <SystemCenterView runtimeState={runtimeState} providers={providers} activeProject={activeProject} />}
+        {!shellReady && <div className="ux2-shell-loading" role="status" aria-live="polite"><span className="ux2-loading-dot" aria-hidden="true"/><strong>Preparando Agent Office…</strong><small>Carregando Projects, equipe e conexões.</small></div>}
+        {shellReady && view === 'trabalho' && <TrabalhoView project={activeProject} />}
+        {shellReady && view === 'equipe' && <EquipeView agents={agents} providers={providers} onChanged={loadShellData} />}
+        {shellReady && view === 'conexoes' && <ConexoesView providers={providers} project={activeProject} onChanged={loadShellData} />}
+        {shellReady && view === 'configuracoes' && <ConfiguracoesView providers={providers} />}
+        {shellReady && view === 'system' && <SystemCenterView runtimeState={runtimeState} providers={providers} activeProject={activeProject} />}
 
-        {view === 'office' && <OfficeView project={activeProject} focus="office" />}
-        {view === 'chat' && <DevChatView project={activeProject} />}
-        {view === 'orchestrator' && <OrchestratorView providers={providers} />}
-        {view === 'teams' && <TeamsView agents={agents} />}
-        {view === 'workforces' && <WorkforcesView />}
-        {view === 'integrations' && <div className="legacy-view-wrap"><IntegrationsView project={activeProject} /></div>}
-        {view === 'analytics' && <div className="legacy-view-wrap"><AnalyticsView /></div>}
-
-        {view === 'projects' && (
+        {shellReady && view === 'projects' && (
           <ProjectsView
             activeProject={activeProject}
             intent={projectIntent}
