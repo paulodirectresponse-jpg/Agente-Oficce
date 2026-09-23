@@ -3,6 +3,7 @@ import type { Database } from 'better-sqlite3';
 import { CapabilityMatcher, type CapabilityRequirement } from './capabilityCore.js';
 import { TeamService, type TeamKind, emitTeamEvent } from './teamService.js';
 import { AgentOperationsService } from './agentOperations.js';
+import { SubagentService } from './subagentService.js';
 
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const parse=<T>(v:string|undefined|null,f:T):T=>{try{return v?JSON.parse(v):f}catch{return f}};
@@ -56,6 +57,32 @@ export class DelegationService{
  returned(delegationId:string){
   const row=this.db.prepare(`SELECT d.*,p.project_id FROM runtime_delegations d JOIN execution_plans p ON p.id=d.plan_id WHERE d.id=?`).get(delegationId) as any;if(!row)throw new Error('DELEGATION_NOT_FOUND');if(row.status!=='active')throw new Error('DELEGATION_NOT_ACTIVE');
   this.db.prepare(`UPDATE runtime_delegations SET status='returned',returned_at=? WHERE id=?`).run(now(),delegationId);emitTeamEvent(this.db,row.project_id,'agent.returned','Agente retornou',{delegation_id:delegationId,plan_id:row.plan_id,team_id:row.team_id,child_agent_id:row.child_agent_id},row.child_agent_id);if(row.team_id&&row.team_kind!=='dynamic'&&this.teams.get(row.team_id)?.owner_agent_id)this.teams.appendRoomEntry(row.team_id,{agent_id:row.child_agent_id,entry_type:'result',content:'Subagente concluiu e retornou a delegação.',payload:{delegation_id:delegationId,plan_id:row.plan_id}});return true;
+ }
+ validateWorker(req:{plan_id:string;step_id?:string|null;workforce_id:string;parent?:{kind:'agent'|'subagent';id:string}|null;child:{kind:'agent'|'subagent';id:string};ancestor_chain?:string[];required_capabilities?:CapabilityRequirement[];required_tools?:string[];delegation_scope?:string[];remaining_budget?:{agents?:number;cost_usd?:number;tokens?:number;tool_calls?:number}}){
+  const plan=this.db.prepare('SELECT budget_json,status FROM execution_plans WHERE id=?').get(req.plan_id) as any;if(!plan)throw new Error('EXECUTION_PLAN_NOT_FOUND');if(['completed','failed','cancelled','superseded'].includes(plan.status))throw new Error('DELEGATION_PLAN_TERMINAL');
+  const wf=this.teams.getWorkforce(req.workforce_id);if(!wf||wf.lifecycle_status!=='active')throw new Error('WORKFORCE_NOT_ACTIVE');
+  const resolved=this.teams.resolveWorkforceWorkers(req.workforce_id),subs=new SubagentService(this.db),ops=new AgentOperationsService(this.db);
+  const member=req.child.kind==='agent'?resolved.agent_ids.includes(req.child.id):resolved.subagent_ids.includes(req.child.id);if(!member&&!wf.allow_external_borrowing)throw new Error('DELEGATION_EXTERNAL_BORROWING_DISABLED');
+  if(req.child.kind==='agent'&&!ops.isEligible(req.child.id))throw new Error('DELEGATION_AGENT_UNAVAILABLE');
+  if(req.child.kind==='subagent'&&!subs.isEligible(req.child.id))throw new Error('DELEGATION_SUBAGENT_UNAVAILABLE');
+  const chain=[...(req.ancestor_chain??[])],childKey=`${req.child.kind}:${req.child.id}`,parentKey=req.parent?`${req.parent.kind}:${req.parent.id}`:null;if(parentKey&&!chain.includes(parentKey))chain.push(parentKey);if(chain.includes(childKey))throw new Error('DELEGATION_CYCLE');
+  const depth=chain.length;if(depth>wf.max_delegation_depth)throw new Error('DELEGATION_DEPTH_EXCEEDED');
+  const caps=req.child.kind==='agent'?this.db.prepare('SELECT * FROM agent_capabilities WHERE agent_id=? AND enabled=1').all(req.child.id) as any[]:subs.listCapabilities(req.child.id);
+  const defs=new Map((this.db.prepare('SELECT key,parent_key FROM capability_definitions').all() as any[]).map(x=>[x.key,x]));
+  const covers=(r:CapabilityRequirement)=>caps.some((cap:any)=>{if(!cap.enabled)return false;const value=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence??0);if(value<(r.minimum??0))return false;if(cap.capability_key===r.key)return true;if(r.allow_hierarchy!==false){let d:any=defs.get(cap.capability_key),seen=new Set<string>();while(d?.parent_key&&!seen.has(d.parent_key)){if(d.parent_key===r.key)return true;seen.add(d.parent_key);d=defs.get(d.parent_key)}}return false});
+  if(!(req.required_capabilities??[]).every(covers))throw new Error('DELEGATION_CAPABILITY_MISMATCH');
+  const remaining=req.remaining_budget??{};if(remaining.agents!==undefined&&remaining.agents<=0)throw new Error('DELEGATION_BUDGET_EXHAUSTED');if(remaining.cost_usd!==undefined&&remaining.cost_usd<=0)throw new Error('DELEGATION_BUDGET_EXHAUSTED');if(remaining.tokens!==undefined&&remaining.tokens<=0)throw new Error('DELEGATION_BUDGET_EXHAUSTED');if(remaining.tool_calls!==undefined&&remaining.tool_calls<(req.required_tools?.length??0))throw new Error('DELEGATION_BUDGET_EXHAUSTED');
+  return{allowed:true,depth,max_depth:wf.max_delegation_depth,external_borrowed:!member,ancestor_chain:chain};
+ }
+ delegateWorker(req:{plan_id:string;step_id?:string|null;workforce_id:string;parent?:{kind:'agent'|'subagent';id:string}|null;child:{kind:'agent'|'subagent';id:string};ancestor_chain?:string[];required_capabilities?:CapabilityRequirement[];required_tools?:string[];delegation_scope?:string[];remaining_budget?:{agents?:number;cost_usd?:number;tokens?:number;tool_calls?:number}}){
+  const checked=this.validateWorker(req),active=(this.db.prepare("SELECT COUNT(*) n FROM runtime_worker_delegations WHERE plan_id=? AND workforce_id=? AND status='active'").get(req.plan_id,req.workforce_id) as any).n,wf=this.teams.getWorkforce(req.workforce_id)!;
+  if(active>=wf.max_parallelism)throw new Error('DELEGATION_TEAM_PARALLELISM_EXCEEDED');
+  const did=id(),t=now();this.db.prepare(`INSERT INTO runtime_worker_delegations(id,plan_id,step_id,workforce_id,parent_kind,parent_id,child_kind,child_id,ancestor_chain_json,depth,delegation_scope_json,required_capabilities_json,required_tools_json,status,budget_snapshot_json,created_at)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?)`).run(did,req.plan_id,req.step_id??null,req.workforce_id,req.parent?.kind??null,req.parent?.id??null,req.child.kind,req.child.id,JSON.stringify(checked.ancestor_chain),checked.depth,JSON.stringify(req.delegation_scope??[]),JSON.stringify(req.required_capabilities??[]),JSON.stringify(req.required_tools??[]),JSON.stringify(req.remaining_budget??{}),t);
+  const plan=this.db.prepare('SELECT project_id FROM execution_plans WHERE id=?').get(req.plan_id) as any;emitTeamEvent(this.db,plan.project_id,'workforce.delegated','Worker delegado',{delegation_id:did,workforce_id:req.workforce_id,parent:req.parent??null,child:req.child,depth:checked.depth,external_borrowed:checked.external_borrowed},req.child.kind==='agent'?req.child.id:null);return{id:did,...checked};
+ }
+ returnedWorker(delegationId:string){
+  const row=this.db.prepare('SELECT d.*,p.project_id FROM runtime_worker_delegations d JOIN execution_plans p ON p.id=d.plan_id WHERE d.id=?').get(delegationId) as any;if(!row)throw new Error('DELEGATION_NOT_FOUND');if(row.status!=='active')throw new Error('DELEGATION_NOT_ACTIVE');
+  this.db.prepare("UPDATE runtime_worker_delegations SET status='returned',returned_at=? WHERE id=?").run(now(),delegationId);emitTeamEvent(this.db,row.project_id,'workforce.worker.returned','Worker retornou',{delegation_id:delegationId,workforce_id:row.workforce_id,child_kind:row.child_kind,child_id:row.child_id},row.child_kind==='agent'?row.child_id:null);return true;
  }
  private assertEffectiveGraphAcyclic(parent:string|null,child:string,chain:string[]){
   if(!parent)return;const edges=new Map<string,Set<string>>(),add=(a:string,b:string)=>{if(!edges.has(a))edges.set(a,new Set());edges.get(a)!.add(b)};
