@@ -315,6 +315,29 @@ export class ProviderResilienceManager {
     `).run(provider.id, model, state.lastSuccessAt, nowIso());
   }
 
+  recordModelFailure(provider: Provider, model: string, error: any): void {
+    const httpStatus = Number(error?.status);
+    const status = httpStatus === 401 || httpStatus === 403
+      ? 'auth_error'
+      : httpStatus === 400 || error?.code === 'PROVIDER_SECRET_MISSING'
+        ? 'misconfigured'
+        : httpStatus === 429 || error?.code === 'PROVIDER_RATE_LIMITED'
+          ? 'rate_limited'
+          : 'degraded';
+    const failureAt = nowIso();
+    const lastError = String(error?.message || error?.code || 'Model request failed').slice(0, 1000);
+    this.database.prepare(`
+      INSERT INTO provider_model_runtime_state (
+        provider_id, model_id, operational_status, last_success_at, last_failure_at, last_error, updated_at
+      ) VALUES (?, ?, ?, NULL, ?, ?, ?)
+      ON CONFLICT(provider_id,model_id) DO UPDATE SET
+        operational_status=excluded.operational_status,
+        last_failure_at=excluded.last_failure_at,
+        last_error=excluded.last_error,
+        updated_at=excluded.updated_at
+    `).run(provider.id, model, status, failureAt, lastError, nowIso());
+  }
+
   recordFailure(provider: Provider, model: string, error: any): void {
     const state = this.state(provider.id);
     const config = resilienceConfig(provider);
