@@ -346,3 +346,49 @@ export interface RuntimeToolHealth {
   status: 'healthy' | 'degraded' | 'unavailable' | 'unconfigured' | string;
   detail: string;
 }
+
+
+export interface ProviderRuntimeSnapshot {
+  provider_id: string;
+  operational_status: string;
+  active_requests: number;
+  queued_requests: number;
+  rpm_used: number;
+  tpm_used: number;
+  rpm_limit: number;
+  tpm_limit: number;
+  cooldown_until: string | null;
+  circuit_state: 'closed' | 'open' | 'half_open';
+  consecutive_failures: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_error: string | null;
+  updated_at: string;
+}
+
+export interface ProviderModelRuntimeState {
+  provider_id: string;
+  model_id: string;
+  operational_status: string;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_error: string | null;
+  updated_at: string;
+}
+
+export interface ProviderRuntimeStatus {
+  runtime: ProviderRuntimeSnapshot;
+  models: ProviderModelRuntimeState[];
+}
+
+export interface ProviderFallback {
+  id: string;
+  source_provider_id: string;
+  source_model: string | null;
+  target_provider_id: string;
+  target_model: string | null;
+  priority: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
