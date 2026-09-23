@@ -1124,7 +1124,74 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_preview_project_status
         ON preview_sessions(project_id,status,updated_at DESC);
     `,
-  }
+  },
+  {
+    version: 21,
+    sql: `
+      ALTER TABLE projects ADD COLUMN objective TEXT NOT NULL DEFAULT '';
+      ALTER TABLE projects ADD COLUMN lifecycle_status TEXT NOT NULL DEFAULT 'active'
+        CHECK(lifecycle_status IN ('active','paused','completed','archived'));
+      ALTER TABLE projects ADD COLUMN completed_at TEXT;
+      ALTER TABLE projects ADD COLUMN archived_at TEXT;
+      ALTER TABLE projects ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';
+
+      CREATE TABLE IF NOT EXISTS project_decisions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        chat_run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        execution_plan_id TEXT REFERENCES execution_plans(id) ON DELETE SET NULL,
+        execution_step_id TEXT REFERENCES execution_steps(id) ON DELETE SET NULL,
+        source_type TEXT NOT NULL DEFAULT 'manual',
+        source_id TEXT,
+        title TEXT NOT NULL DEFAULT '',
+        decision TEXT NOT NULL,
+        rationale TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_decisions_project
+        ON project_decisions(project_id,created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS project_blockers (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        chat_run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        execution_plan_id TEXT REFERENCES execution_plans(id) ON DELETE SET NULL,
+        execution_step_id TEXT REFERENCES execution_steps(id) ON DELETE SET NULL,
+        type TEXT NOT NULL DEFAULT 'general',
+        title TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved','dismissed')),
+        opened_at TEXT NOT NULL,
+        resolved_at TEXT,
+        resolution TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_blockers_project
+        ON project_blockers(project_id,status,opened_at DESC);
+
+      CREATE TABLE IF NOT EXISTS project_results (
+        project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','final')),
+        summary TEXT NOT NULL DEFAULT '',
+        result TEXT NOT NULL DEFAULT '',
+        completed_at TEXT,
+        completed_by TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS project_result_artifacts (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        artifact_id TEXT NOT NULL REFERENCES execution_artifacts(id) ON DELETE CASCADE,
+        label TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(project_id,artifact_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_result_artifacts_project
+        ON project_result_artifacts(project_id,created_at);
+    `,
+  },
+
 ];
 
 function assertMigrationPlan(): void {

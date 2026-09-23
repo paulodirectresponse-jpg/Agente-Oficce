@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -60,6 +60,23 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ path }),
     }),
+  // V3 Projects
+  listProjectSummariesV3: () => request<ProjectSummary[]>('/api/agent-office/v3/projects'),
+  getProjectDetailV3: (projectId: string) => request<ProjectDetail>(`/api/agent-office/v3/projects/${projectId}`),
+  updateProjectV3: (projectId: string, patch: Partial<Pick<Project,'name'|'objective'|'lifecycle_status'|'metadata'>>) =>
+    request<ProjectSummary>(`/api/agent-office/v3/projects/${projectId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  addProjectDecisionV3: (projectId: string, input: Partial<ProjectDecision> & { decision: string }) =>
+    request<ProjectDecision>(`/api/agent-office/v3/projects/${projectId}/decisions`, { method: 'POST', body: JSON.stringify(input) }),
+  addProjectBlockerV3: (projectId: string, input: Partial<ProjectBlocker> & { title: string }) =>
+    request<ProjectBlocker>(`/api/agent-office/v3/projects/${projectId}/blockers`, { method: 'POST', body: JSON.stringify(input) }),
+  resolveProjectBlockerV3: (projectId: string, blockerId: string, resolution = '') =>
+    request<ProjectBlocker>(`/api/agent-office/v3/projects/${projectId}/blockers/${blockerId}/resolve`, { method: 'POST', body: JSON.stringify({ resolution }) }),
+  saveProjectResultV3: (projectId: string, input: { status?: 'draft'|'final'; summary?: string; result?: string; completed_by?: string; artifact_ids?: string[]; complete_project?: boolean; metadata?: Record<string,unknown> }) =>
+    request<ProjectResult>(`/api/agent-office/v3/projects/${projectId}/result`, { method: 'PUT', body: JSON.stringify(input) }),
+  getActiveProjectSelectionV3: () => request<{project_id:string|null}>('/api/agent-office/v3/projects/active-selection'),
+  setActiveProjectSelectionV3: (projectId: string | null) =>
+    request<{project_id:string|null}>('/api/agent-office/v3/projects/active-selection', { method: 'PUT', body: JSON.stringify({ project_id: projectId }) }),
+
   getConversation: (projectId: string) =>
     request<Conversation>(`/api/agent-office/projects/${projectId}/conversation`),
   listTasks: (projectId: string) => request<Task[]>(`/api/agent-office/projects/${projectId}/tasks`),

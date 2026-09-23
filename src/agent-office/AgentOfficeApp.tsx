@@ -46,17 +46,18 @@ export function AgentOfficeApp() {
 
   const loadShellData = useCallback(async () => {
     try {
-      const [nextProjects, nextProviders, nextAgents] = await Promise.all([
+      const [nextProjects, nextProviders, nextAgents, selection] = await Promise.all([
         api.listProjects(),
         api.listProvidersV2(),
         api.listAgentsV2(),
+        api.getActiveProjectSelectionV3().catch(() => ({ project_id: null })),
       ]);
       setProjects(nextProjects);
       setProviders(nextProviders);
       setAgents(nextAgents);
       setActiveProject((current) => {
-        if (current) return nextProjects.find((project) => project.id === current.id) ?? nextProjects[0] ?? null;
-        return nextProjects[0] ?? null;
+        if (current) return nextProjects.find((project) => project.id === current.id) ?? nextProjects.find((project) => project.id === selection.project_id) ?? nextProjects[0] ?? null;
+        return nextProjects.find((project) => project.id === selection.project_id) ?? nextProjects[0] ?? null;
       });
     } catch {
       // Runtime banner handles connectivity; individual pages keep their own errors.
@@ -121,6 +122,7 @@ export function AgentOfficeApp() {
             onChange={(event) => {
               const selected = projects.find((project) => project.id === event.target.value) ?? null;
               setActiveProject(selected);
+              void api.setActiveProjectSelectionV3(selected?.id ?? null).catch(() => undefined);
               setView('office');
             }}
           >
@@ -204,6 +206,7 @@ export function AgentOfficeApp() {
               activeProject={activeProject}
               onSelectProject={(project) => {
                 setActiveProject(project);
+                void api.setActiveProjectSelectionV3(project.id).catch(() => undefined);
                 void loadShellData();
               }}
             />
