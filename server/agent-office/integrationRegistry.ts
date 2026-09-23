@@ -6,6 +6,7 @@ import type { Database } from 'better-sqlite3';
 import { DevelopmentSecretStore, type SecretStore } from './secretStore.js';
 import { getAgentOfficeConfig } from './config.js';
 import { executeFullAccessTool } from './fullAccessTools.js';
+import { redactSecrets } from './securitySanitizer.js';
 
 const execFileAsync=promisify(execFile);
 const now=()=>new Date().toISOString();
@@ -187,13 +188,16 @@ export class IntegrationRegistryService{
     if(!connection.enabled)return{ok:false,error:'INTEGRATION_DISABLED'};
     if(connection.health_status==='auth_error')return{ok:false,error:'INTEGRATION_AUTH_REQUIRED'};
     this.event(connection.id,ctx.project_id,ctx.run_id,'action_started','info',toolName,'Integration action started.',{tool_name:toolName});
+    const binding=this.db.prepare('SELECT scope_json FROM project_integration_bindings WHERE project_id=? AND integration_id=?').get(ctx.project_id,connection.id) as {scope_json:string}|undefined;
+    const scope=binding?json<Record<string,unknown>>(binding.scope_json,{}):{};
+    const effectiveInput={...scope,...input};
     try{
-      const result=await this.executeDriver(connection,toolName,input,ctx);
+      const result=await this.executeDriver(connection,toolName,effectiveInput,ctx);
       this.event(connection.id,ctx.project_id,ctx.run_id,'action_completed','info',toolName,'Integration action completed.',{tool_name:toolName});
-      return{ok:true,data:{...result,integration_id:connection.id,integration_driver:connection.driver,operation:toolName}};
+      return{ok:true,data:{...result,integration_id:connection.id,integration_driver:connection.driver,operation:toolName,external_untrusted:true}};
     }catch(error:any){
-      const norm=normalizeError(error);this.event(connection.id,ctx.project_id,ctx.run_id,'action_failed','error',toolName,norm.detail.slice(0,500),{code:norm.code,retryable:norm.retryable});
-      return{ok:false,error:norm.code,data:{detail:norm.detail.slice(0,1000),retryable:norm.retryable,integration_id:connection.id,integration_driver:connection.driver,operation:toolName}};
+      const norm=normalizeError(error);const safeDetail=String(redactSecrets(norm.detail));this.event(connection.id,ctx.project_id,ctx.run_id,'action_failed','error',toolName,safeDetail.slice(0,500),{code:norm.code,retryable:norm.retryable});
+      return{ok:false,error:norm.code,data:{detail:String(redactSecrets(norm.detail)).slice(0,1000),retryable:norm.retryable,integration_id:connection.id,integration_driver:connection.driver,operation:toolName,external_untrusted:true}};
     }
   }
 
