@@ -169,6 +169,8 @@ export const api = {
     request<AgentOverview>(`/api/agent-office/v2/agents/${agentId}/performance-events`, { method: 'POST', body: JSON.stringify(input) }),
   listCapabilitiesV3: () => request<CapabilityDefinitionV3[]>('/api/agent-office/v3/capabilities'),
   listAgentCapabilitiesV3: (agentId: string) => request<AgentCapabilityV3[]>(`/api/agent-office/v3/agents/${agentId}/capabilities`),
+  inferAgentCapabilitiesV3: (agentId: string) =>
+    request<AgentCapabilityV3[]>(`/api/agent-office/v3/agents/${agentId}/capabilities/infer`, { method: 'POST' }),
   saveAgentCapabilitiesV3: (agentId: string, capabilities: Array<{ capability_key: string; declared_score?: number; enabled?: boolean; source?: 'manual'|'seed'|'learned' }>) =>
     request<AgentCapabilityV3[]>(`/api/agent-office/v3/agents/${agentId}/capabilities`, { method: 'PUT', body: JSON.stringify({ capabilities }) }),
   listAgentsV2: () => request<AgentProfile[]>('/api/agent-office/v2/agents'),
