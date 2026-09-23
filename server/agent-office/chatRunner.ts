@@ -743,7 +743,7 @@ export class ChatRunnerService {
     stage: 'planner' | 'responder' | 'reviewer';
     messages: UniversalMessage[];
     signal?: AbortSignal;
-  }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number }> {
+  }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number; effective_provider: string; effective_model: string }> {
     const { rootRun, childRun, binding, stage, signal } = input;
     const policy = this.toolPolicies.get(binding.agent.id);
     const definitions = toolRegistry.definitionsForPolicy(policy);
@@ -751,6 +751,8 @@ export class ChatRunnerService {
     let usage: UniversalUsage | undefined;
     let requestCount = 0;
     let toolSteps = 0;
+    let effectiveProvider = binding.provider.id;
+    let effectiveModel = binding.model.model_id;
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
@@ -773,6 +775,8 @@ export class ChatRunnerService {
 
       requestCount += 1;
       usage = this.mergeUsage(usage, result.usage);
+      effectiveProvider = result.provider_id ?? effectiveProvider;
+      effectiveModel = result.model_id ?? effectiveModel;
 
       if (!result.tool_calls?.length) {
         if (result.text) {
@@ -790,6 +794,8 @@ export class ChatRunnerService {
           finish_reason: result.finish_reason,
           request_count: requestCount,
           tool_steps: toolSteps,
+          effective_provider: effectiveProvider,
+          effective_model: effectiveModel,
         };
       }
 
@@ -1008,6 +1014,8 @@ export class ChatRunnerService {
       finishReason = toolResult.finish_reason;
       requestCount = toolResult.request_count;
       toolSteps = toolResult.tool_steps;
+      effectiveProvider = toolResult.effective_provider;
+      effectiveModel = toolResult.effective_model;
     } else {
     const streamingSupported = binding.model.capabilities.streaming !== false;
     if (streamingSupported) {
@@ -1093,8 +1101,6 @@ export class ChatRunnerService {
         final: isFinal,
         tools_enabled: toolsEnabled,
         tool_steps: toolSteps,
-        effective_provider: effectiveProvider,
-        effective_model: effectiveModel,
       },
     });
 
@@ -1111,6 +1117,8 @@ export class ChatRunnerService {
         duration_ms: duration,
         tools_enabled: toolsEnabled,
         tool_steps: toolSteps,
+        effective_provider: effectiveProvider,
+        effective_model: effectiveModel,
       },
     });
 
