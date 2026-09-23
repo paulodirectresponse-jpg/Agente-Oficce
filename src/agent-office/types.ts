@@ -563,10 +563,41 @@ export interface WorkforceMember {
   enabled: boolean;
   metadata: Record<string, unknown>;
 }
+export interface WorkforceSubagentMember {
+  dynamic_team_id: string;
+  subagent_id: string;
+  role_name: string;
+  priority: number;
+  enabled: boolean;
+  metadata: Record<string, unknown>;
+}
+export interface WorkforceTeamMember {
+  dynamic_team_id: string;
+  team_id: string;
+  team_version_id: string | null;
+  snapshot: Record<string, any>;
+  reason: string;
+  priority: number;
+  enabled: boolean;
+  created_at: string;
+}
+export interface WorkforceResource {
+  dynamic_team_id: string;
+  worker_kind: 'agent'|'subagent'|'team';
+  worker_id: string;
+  reason: string;
+  capability_keys: string[];
+  source_team_id: string | null;
+  source_owner_id: string | null;
+  score: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
 export interface Workforce {
   id: string;
   orchestration_run_id: string | null;
   execution_plan_id: string | null;
+  chat_run_id: string | null;
   purpose: string;
   lead_agent_id: string | null;
   max_parallelism: number;
@@ -574,15 +605,14 @@ export interface Workforce {
   allow_external_borrowing: boolean;
   policy: TeamPolicy;
   status: 'active'|'completed'|'cancelled';
+  lifecycle_status: 'forming'|'active'|'completed'|'failed'|'cancelled';
+  started_at: string | null;
+  completed_at: string | null;
+  metadata: Record<string, unknown>;
   members: WorkforceMember[];
-  subagents?: Array<{
-    dynamic_team_id: string;
-    subagent_id: string;
-    role_name: string;
-    priority: number;
-    enabled: boolean;
-    metadata: Record<string, unknown>;
-  }>;
+  subagents: WorkforceSubagentMember[];
+  teams: WorkforceTeamMember[];
+  resources: WorkforceResource[];
   created_at: string;
   updated_at: string;
 }
