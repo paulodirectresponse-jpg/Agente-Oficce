@@ -961,6 +961,17 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_subagent_usage_created
         ON subagent_usage_snapshots(subagent_id, created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS subagent_states (
+        subagent_id TEXT NOT NULL REFERENCES subagents(id) ON DELETE CASCADE,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        state TEXT NOT NULL DEFAULT 'idle',
+        activity TEXT NOT NULL DEFAULT '',
+        progress REAL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(subagent_id, project_id)
+      );
+
       CREATE TABLE IF NOT EXISTS workforce_subagent_members (
         dynamic_team_id TEXT NOT NULL REFERENCES dynamic_team_instances(id) ON DELETE CASCADE,
         subagent_id TEXT NOT NULL REFERENCES subagents(id) ON DELETE CASCADE,
