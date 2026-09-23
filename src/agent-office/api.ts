@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport, IntegrationConnection, IntegrationCatalogEntry, ProjectIntegrationBinding, IntegrationHealthResult, IntegrationEvent } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -97,6 +97,24 @@ export const api = {
     return request<AnalyticsSnapshot>(`/api/agent-office/v3/analytics${query ? `?${query}` : ''}`);
   },
   getReleasePreflightV3: (activeTools = false) => request<ReleasePreflightReport>(`/api/agent-office/v3/release/preflight${activeTools ? '?active_tools=1' : ''}`),
+  listIntegrationCatalogV3: () => request<IntegrationCatalogEntry[]>('/api/agent-office/v3/integrations/catalog'),
+  listIntegrationsV3: () => request<IntegrationConnection[]>('/api/agent-office/v3/integrations'),
+  createIntegrationV3: (input: {driver:string;name?:string;auth_mode?:string;secret?:string;config?:Record<string,unknown>;metadata?:Record<string,unknown>;enabled?:boolean}) =>
+    request<IntegrationConnection>('/api/agent-office/v3/integrations',{method:'POST',body:JSON.stringify(input)}),
+  updateIntegrationV3: (integrationId:string, patch: {name?:string;enabled?:boolean;auth_mode?:string;secret?:string|null;config?:Record<string,unknown>;metadata?:Record<string,unknown>}) =>
+    request<IntegrationConnection>(`/api/agent-office/v3/integrations/${integrationId}`,{method:'PATCH',body:JSON.stringify(patch)}),
+  deleteIntegrationV3: (integrationId:string) =>
+    request<{deleted:boolean}>(`/api/agent-office/v3/integrations/${integrationId}`,{method:'DELETE'}),
+  testIntegrationV3: (integrationId:string) =>
+    request<IntegrationHealthResult>(`/api/agent-office/v3/integrations/${integrationId}/test`,{method:'POST'}),
+  listIntegrationEventsV3: (limit=100) =>
+    request<IntegrationEvent[]>(`/api/agent-office/v3/integrations-events?limit=${limit}`),
+  listProjectIntegrationsV3: (projectId:string) =>
+    request<ProjectIntegrationBinding[]>(`/api/agent-office/v3/projects/${projectId}/integrations`),
+  bindProjectIntegrationV3: (projectId:string,integrationId:string,scope:Record<string,unknown>={},metadata:Record<string,unknown>={}) =>
+    request<ProjectIntegrationBinding>(`/api/agent-office/v3/projects/${projectId}/integrations/${integrationId}`,{method:'PUT',body:JSON.stringify({scope,metadata})}),
+  unbindProjectIntegrationV3: (projectId:string,integrationId:string) =>
+    request<{deleted:boolean}>(`/api/agent-office/v3/projects/${projectId}/integrations/${integrationId}`,{method:'DELETE'}),
   getProviderConfig: (providerId: string) =>
     request<ProviderConfig>(`/api/agent-office/providers/${providerId}/config`),
   saveProviderConfig: (providerId: string, config: ProviderConfig) =>
