@@ -27,7 +27,7 @@ export function VoiceInputButton({onTranscript,disabled=false}:{onTranscript:(te
   const sampleRateRef=useRef(48000);
   const timerRef=useRef<number|null>(null);
 
-  useEffect(()=>{void api.getVoiceStatus().then(setStatus).catch(()=>setStatus(null));return()=>stopCapture(false)},[]);
+  useEffect(()=>{void api.getVoiceStatus().then(setStatus).catch(()=>setStatus(null));return()=>{void stopCapture(false)}},[]);
   useEffect(()=>{
     if(state!=='recording')return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();stopCapture(false)}};
