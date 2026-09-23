@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport, IntegrationConnection, IntegrationCatalogEntry, ProjectIntegrationBinding, IntegrationHealthResult, IntegrationEvent, ResourceFile, KnowledgeItem, SkillDefinition } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange, ReleasePreflightReport, IntegrationConnection, IntegrationCatalogEntry, ProjectIntegrationBinding, IntegrationHealthResult, IntegrationEvent, ResourceFile, KnowledgeItem, SkillDefinition, VoiceStatus, VoiceTranscript } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -47,6 +47,14 @@ async function uploadBinary<T>(path:string,file:File):Promise<T>{
   return payload.data as T;
 }
 
+async function postAudio<T>(path:string,blob:Blob):Promise<T>{
+  const apiBase=await resolveApiBase();
+  const response=await fetch(`${apiBase}${path}`,{method:'POST',headers:{'Content-Type':'audio/wav'},body:blob});
+  const payload=await response.json() as {ok:boolean;data?:T;error?:{message?:string}};
+  if(!response.ok||!payload.ok)throw new Error(payload.error?.message||`Voice request failed (${response.status})`);
+  return payload.data as T;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithStartupRetry(path, init);
   const payload = (await response.json()) as { ok: boolean; data?: T; error?: { message?: string } };
@@ -58,6 +66,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request<{ service: string; storage: string }>('/api/agent-office/health'),
+  getVoiceStatus: () => request<VoiceStatus>('/api/agent-office/voice/status'),
+  transcribeVoice: (wav:Blob,language='pt') => postAudio<VoiceTranscript>(`/api/agent-office/voice/transcribe?language=${encodeURIComponent(language)}`,wav),
   listProjects: () => request<Project[]>('/api/agent-office/projects'),
   createProject: (input: { name: string; root_path?: string }) =>
     request<Project>('/api/agent-office/projects', { method: 'POST', body: JSON.stringify(input) }),
