@@ -18,7 +18,7 @@ export interface ReleasePreflightReport {
   checks:ReleasePreflightCheck[];
 }
 
-export async function runReleasePreflight(db:Database,activeTools=false):Promise<ReleasePreflightReport>{
+export async function runReleasePreflight(db:Database,activeTools=false,options:{toolHealth?:Array<Record<string,unknown>>}={}):Promise<ReleasePreflightReport>{
   const checks:ReleasePreflightCheck[]=[];
   const add=(id:string,label:string,status:ReleasePreflightCheck['status'],detail:string,blocking:boolean)=>checks.push({id,label,status,detail,blocking});
 
@@ -45,7 +45,7 @@ export async function runReleasePreflight(db:Database,activeTools=false):Promise
   const agents=Number((db.prepare('SELECT COUNT(*) n FROM agents WHERE enabled=1').get() as any)?.n??0);
   add('agents.enabled','Enabled agents',agents>0?'pass':'warn',String(agents)+' enabled',false);
 
-  const tools=await getFullAccessToolHealth(root.path,activeTools);
+  const tools=options.toolHealth??await getFullAccessToolHealth(root.path,activeTools);
   for(const id of ['files','shell','git']){
     const tool=tools.find(x=>x.id===id) as any;
     add('runtime.'+id,'Runtime '+id,tool?.status==='healthy'?'pass':'fail',String(tool?.detail??'Unavailable'),true);
