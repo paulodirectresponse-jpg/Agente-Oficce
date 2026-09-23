@@ -127,8 +127,15 @@ export class AgentOperationsService {
   list():AgentOverview[]{return new AgentRepositoryV2(this.db).list(true).map(a=>this.overview(a.id))}
 
   isEligible(agentId:string):boolean{
-    const o=this.overview(agentId);
-    return o.administrative_state==='active' && !['inactive','paused','incomplete','provider_unavailable','model_unavailable','error'].includes(o.readiness);
+    const agent=new AgentRepositoryV2(this.db).get(agentId);if(!agent||!agent.enabled||agent.paused||!agent.provider_id||!agent.model_id)return false;
+    const provider=this.db.prepare('SELECT * FROM providers WHERE id=?').get(agent.provider_id) as any;
+    const model=this.db.prepare('SELECT * FROM provider_models WHERE id=?').get(agent.model_id) as any;
+    if(!provider?.enabled||!model?.enabled||model.provider_id!==provider.id)return false;
+    const pr=this.db.prepare('SELECT operational_status FROM provider_runtime_state WHERE provider_id=?').get(provider.id) as any;
+    const mr=this.db.prepare('SELECT operational_status FROM provider_model_runtime_state WHERE provider_id=? AND model_id=?').get(provider.id,model.model_id) as any;
+    const ps=String(pr?.operational_status??provider.health_status??'unknown'),ms=String(mr?.operational_status??'unknown');
+    if(['auth_error','misconfigured','unavailable'].includes(ps)||['auth_error','misconfigured','unavailable'].includes(ms))return false;
+    return true;
   }
 
   private readiness(agent:Agent,provider:any,model:any,pr:any,mr:any,state:any):{status:AgentReadiness;reason:string}{
