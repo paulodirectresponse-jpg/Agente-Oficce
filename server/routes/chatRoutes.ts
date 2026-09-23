@@ -95,6 +95,7 @@ chatRouter.post('/runs', async (request, response) => {
       orchestration_run_id: orchestration.orchestration_run_id,
       routing_level: orchestration.level,
       routing_decision: decision as unknown as Record<string, unknown>,
+      attachment_ids: Array.isArray(request.body?.attachment_ids) ? request.body.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [],
     });
 
     const receipt = service.receipt(prepared);
