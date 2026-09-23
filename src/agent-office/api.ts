@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -216,6 +216,16 @@ export const api = {
     request<ActivityEventV2[]>(`/api/agent-office/v2/projects/${projectId}/activity`),
   listAgentStatesV2: (projectId: string) =>
     request<AgentState[]>(`/api/agent-office/v2/projects/${projectId}/agent-states`),
+
+  // V3 Central Orchestrator
+  getOrchestratorSettingsV3: () => request<OrchestratorSettings>('/api/agent-office/v3/orchestrator/settings'),
+  saveOrchestratorSettingsV3: (input: Partial<OrchestratorSettings>) =>
+    request<OrchestratorSettings>('/api/agent-office/v3/orchestrator/settings', { method: 'PUT', body: JSON.stringify(input) }),
+  getOrchestratorStatusV3: () => request<OrchestratorStatus>('/api/agent-office/v3/orchestrator/status'),
+  listOrchestrationRunsV3: (limit = 100) =>
+    request<OrchestrationRun[]>(`/api/agent-office/v3/orchestrator/runs?limit=${limit}`),
+  listOrchestrationEventsV3: (limit = 200) =>
+    request<OrchestrationEvent[]>(`/api/agent-office/v3/orchestrator/events?limit=${limit}`),
 
   // V3.6 Teams + Subagents
   listTeamsV3: () => request<Team[]>('/api/agent-office/v3/teams'),
