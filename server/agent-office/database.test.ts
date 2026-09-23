@@ -60,6 +60,28 @@ describe('Agent Office local database', () => {
   });
 
 
+  it('upgrades migration 21 usage rows to analytics traceability without data loss', () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-analytics-upgrade-'));
+    const databasePath = path.join(dataDir, 'office.sqlite');
+    const legacy = new Database(databasePath);
+    legacy.exec('PRAGMA foreign_keys = ON;');
+    legacy.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);');
+    for (const migration of agentOfficeMigrations.filter((item) => item.version <= 21)) {
+      legacy.exec(migration.sql);
+      legacy.prepare('INSERT INTO schema_migrations(version,applied_at) VALUES(?,?)').run(migration.version, new Date().toISOString());
+    }
+    legacy.prepare(`INSERT INTO usage_snapshots(id,agent_id,provider,source,raw_json,normalized_json,created_at)
+      VALUES('legacy-usage','kimi','kimi','run','{}','{"input_tokens":42}','2026-09-01T00:00:00.000Z')`).run();
+    legacy.close();
+
+    const upgraded = openAgentOfficeDatabase({ dataDir, databasePath, logLevel: 'silent' });
+    expect(upgraded.connection.prepare("SELECT agent_id,normalized_json,project_id,run_id,model_id,cost_kind FROM usage_snapshots WHERE id='legacy-usage'").get())
+      .toEqual({ agent_id: 'kimi', normalized_json: '{"input_tokens":42}', project_id: null, run_id: null, model_id: null, cost_kind: 'unknown' });
+    expect(upgraded.connection.prepare('SELECT MAX(version) version FROM schema_migrations').get()).toEqual({ version: 22 });
+    upgraded.connection.close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it('fails closed when persisted foreign-key corruption is detected', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-integrity-'));
     const config = { dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' as const };
