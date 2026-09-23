@@ -1,9 +1,102 @@
 export interface Project {
   id: string;
   name: string;
+  objective: string;
+  lifecycle_status: 'active' | 'paused' | 'completed' | 'archived';
   root_path: string;
   git_enabled: boolean;
   git_branch: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProjectSummary {
+  project: Project;
+  operational_state: string;
+  last_activity_at: string;
+  counts: {
+    runs: { total: number; root: number; active: number };
+    plans: { total: number; completed: number; active: number; failed: number };
+    steps: { total: number; completed: number; running: number; blocked: number; queued: number; failed: number };
+    blockers: { total: number; open: number };
+    artifacts: number;
+  };
+  active_run: Record<string, unknown> | null;
+  active_plan: Record<string, unknown> | null;
+}
+
+export interface ProjectDecision {
+  id: string;
+  project_id: string;
+  chat_run_id: string | null;
+  execution_plan_id: string | null;
+  execution_step_id: string | null;
+  source_type: string;
+  source_id: string | null;
+  title: string;
+  decision: string;
+  rationale: string;
+  created_at: string;
+}
+
+export interface ProjectBlocker {
+  id: string;
+  project_id: string;
+  chat_run_id: string | null;
+  execution_plan_id: string | null;
+  execution_step_id: string | null;
+  type: string;
+  title: string;
+  detail: string;
+  status: 'open' | 'resolved' | 'dismissed';
+  opened_at: string;
+  resolved_at: string | null;
+  resolution: string;
+}
+
+export interface ProjectResult {
+  project_id: string;
+  status: 'draft' | 'final';
+  summary: string;
+  result: string;
+  completed_at: string | null;
+  completed_by: string | null;
+  metadata: Record<string, unknown>;
+  artifacts: Array<Record<string, unknown>>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  conversation: Record<string, unknown> | null;
+  workspace: WorkspaceSnapshot;
+  runs: ChatRun[];
+  orchestration_runs: OrchestrationRun[];
+  plans: Array<Record<string, any>>;
+  workforces: Workforce[];
+  participants: {
+    agents: Array<Record<string, unknown>>;
+    subagents: Array<Record<string, unknown>>;
+    teams: Array<Record<string, unknown>>;
+  };
+  artifacts: Array<Record<string, any>>;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cost_usd: number | null;
+    tool_calls: number;
+    execution_ms: number;
+    elapsed_ms: number;
+    cost_complete: boolean;
+  };
+  decisions: ProjectDecision[];
+  blockers: ProjectBlocker[];
+  result: ProjectResult | null;
+  timeline: Array<Record<string, any>>;
 }
 
 export type TaskStatus =
