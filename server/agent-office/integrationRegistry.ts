@@ -134,6 +134,9 @@ export class IntegrationRegistryService{
     if(!this.db.prepare('SELECT 1 FROM projects WHERE id=?').get(projectId))throw new Error('PROJECT_NOT_FOUND');
     if(!this.get(integrationId))throw new Error('INTEGRATION_NOT_FOUND');
     const ts=now();
+    const connection=this.get(integrationId)!;
+    this.db.prepare('DELETE FROM project_integration_bindings WHERE project_id=? AND integration_id IN (SELECT id FROM integration_connections WHERE driver=? AND id<>?)')
+      .run(projectId,connection.driver,integrationId);
     this.db.prepare('INSERT INTO project_integration_bindings(project_id,integration_id,scope_json,metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(project_id,integration_id) DO UPDATE SET scope_json=excluded.scope_json,metadata_json=excluded.metadata_json,updated_at=excluded.updated_at')
       .run(projectId,integrationId,JSON.stringify(scope),JSON.stringify(metadata),ts,ts);
     return this.listProjectBindings(projectId).find(x=>x.integration_id===integrationId)!;
