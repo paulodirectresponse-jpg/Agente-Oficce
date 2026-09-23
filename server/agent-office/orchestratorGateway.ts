@@ -2,9 +2,10 @@ import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import { CapabilityMatcher, CapabilityRepository, type CapabilityRequirement } from './capabilityCore.js';
 import { GapAnalysisService } from './gapAnalysis.js';
-import { TeamService } from './teamService.js';
+import { TeamService, type WorkerRef } from './teamService.js';
 import { addOrchestratorEvent, getOrchestratorSettings, type OrchestratorLLMEnvelope, type OrchestratorTelemetry } from './orchestratorRuntime.js';
 import { AgentOperationsService } from './agentOperations.js';
+import { SubagentService } from './subagentService.js';
 
 export type OrchestratorLevel='deterministic'|'fast'|'deep'|'fallback';
 export type TargetMode='direct_agent'|'dynamic_team'|'existing_team'|'needs_gap_analysis';
@@ -12,7 +13,7 @@ export interface RoutingDecision {
   request_id:string; normalized_goal:string; target_mode:TargetMode; target_agent_id?:string; target_team_id?:string;
   required_capabilities:CapabilityRequirement[]; required_tools:string[]; optional_capabilities:CapabilityRequirement[];
   complexity:'low'|'medium'|'high'; risk:'low'|'medium'|'high'; requires_plan:boolean; candidate_scope:string[];
-  quality_controls:string[]; explanation:string; confidence:number;
+  workforce_resources:WorkerRef[]; quality_controls:string[]; explanation:string; confidence:number;
 }
 export interface OrchestratorInput { project_id:string; conversation_id?:string|null; user_message_id?:string|null; message:string; target?:string; continuation_agent_id?:string|null }
 export interface OrchestratorLLM { requires_configured_model?: boolean; decide(level:'fast'|'deep',input:{message:string;domains:string[];constraints:Record<string,unknown>}):Promise<unknown|OrchestratorLLMEnvelope> }
@@ -26,7 +27,8 @@ function unwrap(raw:unknown):{decision:unknown;telemetry?:OrchestratorTelemetry}
 function validateDecision(raw:any,defs:Set<string>):RoutingDecision|null{
   if(!raw||typeof raw!=='object')return null;const modes=new Set(['direct_agent','dynamic_team','existing_team','needs_gap_analysis']);if(!modes.has(raw.target_mode))return null;
   const req=Array.isArray(raw.required_capabilities)?raw.required_capabilities.filter((x:any)=>x&&typeof x.key==='string'&&defs.has(x.key)).map((x:any)=>({key:x.key,importance:Number.isFinite(x.importance)?Math.max(0,x.importance):1,minimum:Number.isFinite(x.minimum)?Math.max(0,Math.min(1,x.minimum)):.1,mandatory:x.mandatory!==false,allow_hierarchy:x.allow_hierarchy!==false})):[];
-  return{request_id:typeof raw.request_id==='string'?raw.request_id:id(),normalized_goal:String(raw.normalized_goal||''),target_mode:raw.target_mode,target_agent_id:typeof raw.target_agent_id==='string'?raw.target_agent_id:undefined,target_team_id:typeof raw.target_team_id==='string'?raw.target_team_id:undefined,required_capabilities:req,required_tools:Array.isArray(raw.required_tools)?raw.required_tools.filter((x:any)=>typeof x==='string'):[],optional_capabilities:[],complexity:['low','medium','high'].includes(raw.complexity)?raw.complexity:'medium',risk:['low','medium','high'].includes(raw.risk)?raw.risk:'low',requires_plan:Boolean(raw.requires_plan),candidate_scope:Array.isArray(raw.candidate_scope)?raw.candidate_scope.filter((x:any)=>typeof x==='string'):[],quality_controls:Array.isArray(raw.quality_controls)?raw.quality_controls.filter((x:any)=>typeof x==='string'):[],explanation:String(raw.explanation||'Structured orchestration decision.'),confidence:Number.isFinite(raw.confidence)?Math.max(0,Math.min(1,raw.confidence)):.5}
+  const workforce_resources:Array<WorkerRef>=Array.isArray(raw.workforce_resources)?raw.workforce_resources.filter((x:any)=>x&&['agent','subagent','team'].includes(x.kind)&&typeof x.id==='string').map((x:any)=>({kind:x.kind,id:x.id,reason:typeof x.reason==='string'?x.reason:'',capability_keys:Array.isArray(x.capability_keys)?x.capability_keys.filter((k:any)=>typeof k==='string'):[],score:Number.isFinite(x.score)?Number(x.score):undefined})):[];
+  return{request_id:typeof raw.request_id==='string'?raw.request_id:id(),normalized_goal:String(raw.normalized_goal||''),target_mode:raw.target_mode,target_agent_id:typeof raw.target_agent_id==='string'?raw.target_agent_id:undefined,target_team_id:typeof raw.target_team_id==='string'?raw.target_team_id:undefined,required_capabilities:req,required_tools:Array.isArray(raw.required_tools)?raw.required_tools.filter((x:any)=>typeof x==='string'):[],optional_capabilities:[],complexity:['low','medium','high'].includes(raw.complexity)?raw.complexity:'medium',risk:['low','medium','high'].includes(raw.risk)?raw.risk:'low',requires_plan:Boolean(raw.requires_plan),candidate_scope:Array.isArray(raw.candidate_scope)?raw.candidate_scope.filter((x:any)=>typeof x==='string'):[],workforce_resources,quality_controls:Array.isArray(raw.quality_controls)?raw.quality_controls.filter((x:any)=>typeof x==='string'):[],explanation:String(raw.explanation||'Structured orchestration decision.'),confidence:Number.isFinite(raw.confidence)?Math.max(0,Math.min(1,raw.confidence)):.5}
 }
 
 export class OrchestratorGateway {
@@ -95,7 +97,7 @@ export class OrchestratorGateway {
     const event=(type:string,title:string,detail='',payload?:Record<string,unknown>,severity:'debug'|'info'|'warning'|'error'='info')=>staged.push({type,severity,title,detail,payload});
     event('orchestrator.received','Solicitação recebida',input.message.slice(0,240),{target});
     this.capturePreviousFeedback(input,event);
-    const base=(mode:TargetMode,explanation:string):RoutingDecision=>({request_id:requestId,normalized_goal:input.message.trim().slice(0,1000),target_mode:mode,required_capabilities:infer(input.message,keys),required_tools:[],optional_capabilities:[],complexity:complexity(input.message),risk:risk(input.message),requires_plan:complexity(input.message)==='high',candidate_scope:[],quality_controls:[],explanation,confidence:.8});
+    const base=(mode:TargetMode,explanation:string):RoutingDecision=>({request_id:requestId,normalized_goal:input.message.trim().slice(0,1000),target_mode:mode,required_capabilities:infer(input.message,keys),required_tools:[],optional_capabilities:[],complexity:complexity(input.message),risk:risk(input.message),requires_plan:complexity(input.message)==='high',candidate_scope:[],workforce_resources:[],quality_controls:[],explanation,confidence:.8});
 
     if(target!=='auto'&&target!=='team'){
       const a=this.db.prepare('SELECT id,slug FROM agents WHERE (id=? OR slug=?) AND enabled=1 LIMIT 1').get(target,target) as any;
@@ -135,10 +137,11 @@ export class OrchestratorGateway {
     decision=this.policyValidate(decision,keys);
     if((decision.required_capabilities.length||decision.required_tools.length)&&(decision.target_mode==='needs_gap_analysis'||(decision.target_mode==='dynamic_team'&&!decision.candidate_scope.length)||(decision.target_mode==='existing_team'&&!decision.target_team_id)||(decision.target_mode==='direct_agent'&&!decision.target_agent_id))){
       const gap=new GapAnalysisService(this.db).analyze(decision.required_capabilities,decision.required_tools);
-      if(gap.resolution==='active_agent'&&gap.selected_agent_ids.length===1)decision={...decision,target_mode:'direct_agent',target_agent_id:gap.selected_agent_ids[0],candidate_scope:gap.selected_agent_ids,explanation:gap.explanation,confidence:.95};
-      else if(gap.resolution==='existing_team'&&gap.selected_team_id)decision={...decision,target_mode:'existing_team',target_team_id:gap.selected_team_id,candidate_scope:[],explanation:gap.explanation,confidence:.95};
-      else if(gap.resolution==='dynamic_team'&&gap.selected_agent_ids.length)decision={...decision,target_mode:'dynamic_team',candidate_scope:gap.selected_agent_ids,explanation:gap.explanation,confidence:.95};
-      event('orchestrator.candidates','Recursos avaliados',gap.explanation,{resolution:gap.resolution,candidates:decision.candidate_scope});
+      if(gap.resolution==='active_agent'&&gap.selected_agent_ids.length===1)decision={...decision,target_mode:'direct_agent',target_agent_id:gap.selected_agent_ids[0],candidate_scope:gap.selected_agent_ids,workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
+      else if(gap.resolution==='active_subagent'&&gap.selected_subagent_ids.length===1)decision={...decision,target_mode:'dynamic_team',candidate_scope:[],workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
+      else if(gap.resolution==='existing_team'&&gap.selected_team_id)decision={...decision,target_mode:'existing_team',target_team_id:gap.selected_team_id,candidate_scope:[],workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
+      else if(gap.resolution==='dynamic_team'&&gap.workforce_resources.length)decision={...decision,target_mode:'dynamic_team',candidate_scope:gap.selected_agent_ids,workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
+      event('orchestrator.candidates','Recursos avaliados',gap.explanation,{resolution:gap.resolution,candidates:decision.candidate_scope,workforce_resources:gap.workforce_resources});
     }
 
     decision=this.policyValidate(decision,keys);const oid=id();
@@ -149,10 +152,16 @@ export class OrchestratorGateway {
       inputTokens||null,outputTokens||null,Date.now()-started,error?JSON.stringify({code:'ORCHESTRATOR_FALLBACK',message:error instanceof Error?error.message:String(error)}):null,now()
     );
 
-    if(decision.target_mode==='dynamic_team'&&decision.candidate_scope.length&&!decision.target_team_id){
-      const dyn=new TeamService(this.db).createWorkforce({orchestration_run_id:oid,purpose:decision.normalized_goal,member_ids:decision.candidate_scope,policy:{allowed_tools:decision.required_tools}});
-      event('orchestrator.workforce','Workforce temporária criada','Agentes existentes foram requisitados para esta execução sem alterar suas equipes permanentes.',{workforce_id:dyn.id,members:decision.candidate_scope});
-      decision={...decision,target_team_id:dyn.id};this.db.prepare('UPDATE orchestration_runs SET decision_json=? WHERE id=?').run(JSON.stringify(decision),oid);
+    if(decision.target_mode==='dynamic_team'&&!decision.target_team_id){
+      const resources=decision.workforce_resources.length?decision.workforce_resources:decision.candidate_scope.map(id=>({kind:'agent' as const,id,reason:'Selected by orchestration.'}));
+      if(resources.length){
+        const dyn=new TeamService(this.db).createWorkforce({
+          orchestration_run_id:oid,purpose:decision.normalized_goal,resources,
+          metadata:{required_tools:decision.required_tools,required_capabilities:decision.required_capabilities}
+        });
+        event('orchestrator.workforce','Workforce temporária criada','A menor composição elegível foi requisitada sem alterar Teams permanentes.',{workforce_id:dyn.id,resources});
+        decision={...decision,target_team_id:dyn.id,workforce_resources:resources};this.db.prepare('UPDATE orchestration_runs SET decision_json=? WHERE id=?').run(JSON.stringify(decision),oid);
+      }
     }
     event('orchestrator.routed','Roteamento concluído',decision.explanation,{level,target_mode:decision.target_mode,target_agent_id:decision.target_agent_id??null,target_team_id:decision.target_team_id??null,confidence:decision.confidence});
     for(const e of staged)addOrchestratorEvent(this.db,{run_id:oid,project_id:input.project_id,event_type:e.type,severity:e.severity,title:e.title,detail:e.detail,payload:e.payload});
@@ -163,9 +172,16 @@ export class OrchestratorGateway {
     const req=d.required_capabilities.filter(x=>keys.has(x.key));
     const allowedTools=new Set((this.db.prepare('SELECT allowed_tools_json FROM agent_tool_policies WHERE enabled=1').all() as any[]).flatMap(r=>{try{return JSON.parse(r.allowed_tools_json)}catch{return[]}}));
     const tools=d.required_tools.filter(x=>allowedTools.has(x));
-    const scope=d.candidate_scope.filter(agent=>this.agentEligible(agent));let target=d.target_agent_id,team=d.target_team_id;
+    const scope=d.candidate_scope.filter(agent=>this.agentEligible(agent));
+    const subs=new SubagentService(this.db);
+    const resources=(d.workforce_resources??[]).filter(r=>{
+      if(r.kind==='agent')return this.agentEligible(r.id);
+      if(r.kind==='subagent')return subs.isEligible(r.id);
+      const t=new TeamService(this.db).get(r.id);return Boolean(t?.enabled&&t.owner_agent_id);
+    });
+    let target=d.target_agent_id,team=d.target_team_id;
     if(target&&!this.agentEligible(target)){target=undefined;if(d.target_mode==='direct_agent')d={...d,target_mode:'needs_gap_analysis',explanation:d.explanation+' Invalid or unavailable target removed.'}}
     if(team&&!this.db.prepare('SELECT 1 FROM teams WHERE id=? AND enabled=1').get(team)){team=undefined;if(d.target_mode==='existing_team')d={...d,target_mode:'needs_gap_analysis',explanation:d.explanation+' Invalid or disabled team target removed.'}}
-    return{...d,required_capabilities:req,required_tools:tools,candidate_scope:scope,target_agent_id:target,target_team_id:team}
+    return{...d,required_capabilities:req,required_tools:tools,candidate_scope:scope,workforce_resources:resources,target_agent_id:target,target_team_id:team}
   }
 }
