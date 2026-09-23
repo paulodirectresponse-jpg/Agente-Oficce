@@ -85,7 +85,10 @@ function connectionExe(name:string){return process.platform==='win32'?name+'.exe
 
 export class IntegrationRegistryService{
   private secrets:SecretStore;
-  constructor(private db:Database,secrets?:SecretStore){this.secrets=secrets??new DevelopmentSecretStore(getAgentOfficeConfig().dataDir)}
+  constructor(private db:Database,secrets?:SecretStore){
+    this.secrets=secrets??new DevelopmentSecretStore(getAgentOfficeConfig().dataDir);
+    this.ensureLocalConnections();
+  }
 
   catalog(){return INTEGRATION_CATALOG}
   list():IntegrationConnection[]{return (this.db.prepare('SELECT * FROM integration_connections ORDER BY name,id').all() as any[]).map(r=>this.hydrate(r))}
@@ -241,6 +244,14 @@ export class IntegrationRegistryService{
     if(driver==='supabase')return[connectionExe('supabase'),['projects','list','--output','json']];
     throw new Error('INTEGRATION_DRIVER_UNSUPPORTED');
   }
+  private ensureLocalConnections(){
+    const existing=this.db.prepare("SELECT id FROM integration_connections WHERE driver='browser' LIMIT 1").get() as {id:string}|undefined;
+    if(existing){this.seedCapabilities(existing.id,'browser');return}
+    const ts=now(),id='local-browser';
+    this.db.prepare("INSERT OR IGNORE INTO integration_connections(id,driver,name,enabled,auth_mode,secret_ref,health_status,config_json,metadata_json,created_at,updated_at) VALUES(?, 'browser','Browser local',1,'none',NULL,'unknown','{}','{}',?,?)").run(id,ts,ts);
+    this.seedCapabilities(id,'browser');
+  }
+
   private seedCapabilities(id:string,driver:string){
     const cat=INTEGRATION_CATALOG.find(x=>x.driver===driver);if(!cat)return;
     const stmt=this.db.prepare('INSERT OR IGNORE INTO integration_capabilities(integration_id,capability_key,tool_name,risk,enabled,metadata_json) VALUES(?,?,?,?,1,?)');
