@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -83,4 +84,3 @@ export class WorkspaceService{
   markCommand(id:string,status:'applied'|'dispatched'|'cancelled'){this.db.prepare('UPDATE workspace_run_commands SET status=?,applied_at=? WHERE id=?').run(status,new Date().toISOString(),id)}
   private previewRow(x:any){return{...x}}
 }
-import crypto from 'node:crypto';
