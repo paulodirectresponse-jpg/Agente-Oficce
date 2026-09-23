@@ -806,7 +806,25 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         PRIMARY KEY(provider_id, model_id)
       );
     `,
-  }
+  },
+  {
+    version: 15,
+    sql: `
+      CREATE TABLE IF NOT EXISTS orchestration_events (
+        id TEXT PRIMARY KEY,
+        orchestration_run_id TEXT REFERENCES orchestration_runs(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'info' CHECK(severity IN ('debug','info','warning','error')),
+        title TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT '',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_orchestration_events_project ON orchestration_events(project_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_orchestration_events_run ON orchestration_events(orchestration_run_id,created_at ASC);
+    `,
+  },
 ];
 
 function assertMigrationPlan(): void {

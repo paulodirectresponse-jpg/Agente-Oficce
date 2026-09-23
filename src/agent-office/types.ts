@@ -392,3 +392,49 @@ export interface ProviderFallback {
   created_at: string;
   updated_at: string;
 }
+
+
+export interface OrchestratorModelRef { provider_id: string | null; model_id: string | null }
+export interface OrchestratorSettings {
+  enabled: boolean;
+  principal: OrchestratorModelRef;
+  fast: OrchestratorModelRef | null;
+  deep: OrchestratorModelRef | null;
+  fast_confidence_threshold: number;
+  deep_confidence_threshold: number;
+  deep_for_high_risk: boolean;
+  updated_at: string | null;
+}
+export interface OrchestratorModelStatus extends OrchestratorModelRef {
+  provider_name?: string;
+  model_name?: string;
+  enabled?: boolean;
+  status?: string;
+  circuit_state?: string;
+  queued_requests?: number;
+  fallback_count?: number;
+}
+export interface OrchestratorStatus {
+  settings: OrchestratorSettings;
+  principal: OrchestratorModelStatus | null;
+  fast: OrchestratorModelStatus | null;
+  deep: OrchestratorModelStatus | null;
+  last_effective: { provider_name: string | null; model_id: string | null; model_name: string | null; level: string; created_at: string } | null;
+  stats_24h: {
+    total: number; deterministic: number; fast: number; deep: number; fallback: number;
+    avg_duration_ms: number; input_tokens: number; output_tokens: number;
+  };
+  latest_run_at: string | null;
+  healthy: boolean;
+}
+export interface OrchestrationRun {
+  id: string; project_id: string; conversation_id: string | null; user_message_id: string | null;
+  level_used: 'deterministic'|'fast'|'deep'|'fallback'; decision: Record<string, any> | null;
+  status: string; provider_id: string | null; model_id: string | null; provider_name?: string | null; effective_model_id?: string | null; model_name?: string | null; input_tokens: number | null;
+  output_tokens: number | null; duration_ms: number; error: Record<string, unknown> | null; created_at: string;
+}
+export interface OrchestrationEvent {
+  id: string; orchestration_run_id: string | null; project_id: string; event_type: string;
+  severity: 'debug'|'info'|'warning'|'error'; title: string; detail: string;
+  payload: Record<string, unknown>; created_at: string;
+}

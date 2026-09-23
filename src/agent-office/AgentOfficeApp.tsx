@@ -7,15 +7,17 @@ import { OfficeView } from './OfficeView.js';
 import { AgentManagerView } from './AgentManagerView.js';
 import { ProviderManagerView } from './ProviderManagerView.js';
 import { TeamsView } from './TeamsView.js';
+import { OrchestratorView } from './OrchestratorView.js';
 import { api } from './api.js';
 import './App.css';
 
-type ViewKey = 'office' | 'chat' | 'agents' | 'teams' | 'providers' | 'projects' | 'usage' | 'settings';
+type ViewKey = 'office' | 'chat' | 'orchestrator' | 'agents' | 'teams' | 'providers' | 'projects' | 'usage' | 'settings';
 type RuntimeState = 'checking' | 'online' | 'offline';
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: string }[] = [
   { key: 'office', label: 'Office', icon: '⌂' },
   { key: 'chat', label: 'Chat', icon: '◌' },
+  { key: 'orchestrator', label: 'Orquestrador', icon: '◆' },
   { key: 'agents', label: 'Agentes', icon: '◉' },
   { key: 'teams', label: 'Teams', icon: '◎' },
   { key: 'providers', label: 'Providers', icon: '⌁' },
@@ -188,6 +190,7 @@ export function AgentOfficeApp() {
           <OfficeView project={activeProject} focus={view === 'chat' ? 'chat' : 'office'} />
         )}
 
+        {view === 'orchestrator' && <OrchestratorView providers={providers} />}
         {view === 'agents' && <AgentManagerView agents={agents} providers={providers} onChanged={loadShellData} />}
         {view === 'teams' && <TeamsView agents={agents} />}
         {view === 'providers' && <ProviderManagerView providers={providers} onChanged={loadShellData} />}
