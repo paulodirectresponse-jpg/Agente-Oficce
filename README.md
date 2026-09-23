@@ -1,125 +1,110 @@
-# Agent Office - Local-first Multi-Agent Orchestrator
+# Agent Office
 
-A standalone desktop application for orchestrating AI agents (Claude, Kimi, Codex) with local SQLite persistence, conversation memory, and autonomous task execution.
+Agent Office is a local-first Windows desktop orchestration environment for AI Agents, Subagents, Teams and temporary Workforces.
 
-## Architecture
+The current product includes:
+- Tauri desktop runtime with bundled Node backend;
+- local SQLite/WAL persistence;
+- Universal Providers and multiple models;
+- dynamic Agents;
+- permanent Teams with Subagents;
+- temporary Workforces;
+- Central Orchestrator with capability/gap routing;
+- durable Execution Plans/DAGs, retries, replanning and recovery;
+- Full Access tools with audit and approvals;
+- persistent Project workspaces;
+- Chat Workspace;
+- Analytics;
+- benchmark and release gates.
 
+## Core hierarchy
+
+```text
+Project
+  ├─ Chat / Runs
+  ├─ Execution Plans
+  ├─ Workforces (temporary)
+  └─ Agents
+       └─ Teams
+            └─ Subagents
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Agent Office                          │
-├─────────────────────────────────────────────────────────────┤
-│  Frontend (React + Vite)     │  Backend (Node + Express)   │
-│  - Workspace UI              │  - REST API                 │
-│  - Task Management           │  - Agent Adapters           │
-│  - Usage Monitoring          │  - Task Runner              │
-│  - Settings                  │  - SQLite + WAL + FTS5      │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────┴─────────┐
-                    ▼                   ▼
-              SQLite Database      Agent Adapters
-              - Projects           - Claude/Gateway
-              - Conversations      - Kimi
-              - Messages           - Codex
-              - Tasks
-              - Memory (FTS5)
-```
 
-## Quick Start
+An Agent does not become subordinate to another Agent. Delegated workers below an Agent are Subagents. Workforces are temporary execution compositions and do not replace permanent Team structure.
+
+## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Start development (client + server)
+npm ci
 npm run dev
-
-# Build for production
-npm run build
-
-# Run tests
 npm test
-
-# Type check
 npm run lint
+npm run build
 ```
 
-## Tauri Desktop App
+## Desktop
 
 ```bash
-# Development with Tauri
 npm run tauri:dev
-
-# Build desktop app
 npm run tauri:build
 ```
 
-## Project Structure
+The production desktop gate validates Windows build, bundled backend startup, dynamic loopback health, SQLite initialization, MSI installation and clean shutdown without leaving an orphan backend process.
 
-```
-agent-office/
-├── server/                    # Backend (Node + Express)
-│   ├── index.ts              # Entry point
-│   ├── routes/               # API routes
-│   │   └── agentOfficeRoutes.ts
-│   └── agent-office/         # Core modules
-│       ├── config.ts         # Configuration
-│       ├── logger.ts         # Logging (no secrets)
-│       ├── database.ts       # SQLite + WAL + migrations
-│       ├── projectRepository.ts
-│       ├── conversationRepository.ts
-│       ├── adapterFramework.ts
-│       ├── claudeAdapter.ts
-│       ├── taskRunManager.ts
-│       └── *.test.ts         # Unit/integration tests
-├── src/                       # Frontend (React + Vite)
-│   └── agent-office/
-│       └── AgentOfficeHealthPage.tsx
-├── docs/
-│   └── agent-office/         # Blueprint docs (12 files)
-├── dist/                      # Build output
-├── data/                      # SQLite database (gitignored)
-├── package.json
-├── tsconfig.json
-├── tsconfig.server.json
-├── vite.config.ts
-├── vitest.config.ts
-├── .env.example
-├── .gitignore
-├── BUILD_STATUS.md
-└── MIGRATION_REPORT.md
+## Benchmark and release
+
+The standard deterministic gate does not call paid providers:
+
+```bash
+npm run benchmark
+npm run release:preflight
+npm run release:gate
 ```
 
-## Core Concepts
+Additional release commands:
 
-### Projects
-Each project maps to a local folder with optional Git integration. One canonical conversation per project.
+```bash
+npm run benchmark:stress
+npm run release:version
+npm run release:manifest
+```
 
-### Conversations
-Single conversation per project containing all messages (user, assistant, system, events).
+Benchmark results and release metadata are written under:
 
-### Agents
-- **Kimi**: UI/frontend, common features, CRUD, refactor, bugs
-- **Claude**: Exploration, audit, review, tests, docs, large context, fallback
-- **Codex**: Architecture, auth, billing, security, high-risk, release gate
+```text
+artifacts/release/
+  benchmark-results.json
+  preflight.json
+  release-manifest.json
+```
 
-### Tasks
-Autonomous work units with writer lock (per project), retry logic, crash recovery.
+The release manifest records product version, Git SHA, migration version, benchmark/preflight result and MSI SHA-256 when an MSI is available.
 
-### Memory
-- Project Memory: summary, architecture, rules
-- Working Memory: current task context
-- Task Memory: task-specific
-- Retrieved Memory: FTS5 search
-- Handoff: agent-to-agent transitions
+## Release gates
 
-## Configuration
+Every PR to `main` runs the desktop gate with:
+- dependency install;
+- version consistency;
+- unit/integration tests;
+- deterministic benchmark;
+- release preflight;
+- typecheck;
+- frontend/server build;
+- Tauri/MSI build;
+- bundled backend smoke;
+- installed desktop lifecycle smoke;
+- MSI verification;
+- release diagnostics artifact.
 
-Copy `.env.example` to `.env` and configure:
-- `AGENT_OFFICE_DATA_DIR`: Data directory (default: `./data`)
-- `AGENT_OFFICE_DATABASE_PATH`: SQLite path (default: `./data/office.sqlite`)
-- Provider credentials: Use secure storage, not `.env`
+The heavier `Agent Office Release Gate` is manual/tag-driven and additionally runs stress benchmarks plus an MSI upgrade test that installs the previous build, persists local data, upgrades to the current build, and verifies that Project/conversation/settings survive.
 
-## License
+## Data and secrets
 
-MIT
+The application is local-first. Provider secrets are stored outside SQLite by the encrypted local secret store. Audit/log payloads must not expose secrets.
+
+Migrations are additive and existing user data must be preserved across upgrades.
+
+## Current version
+
+`0.3.0`
+
+Current detailed state is tracked in `BUILD_STATUS.md`. Architectural blueprints live under `docs/`, but code on the latest `main` is the operational source of truth.
