@@ -8,7 +8,7 @@ function parentPath(value:string){const parts=value.split('/').filter(Boolean);p
 function outputOf(value:unknown){if(!value||typeof value!=='object')return'';const x=value as Record<string,unknown>;return [typeof x.stdout==='string'?x.stdout:'',typeof x.stderr==='string'?x.stderr:''].filter(Boolean).join('\n')}
 function eventLabel(e:ChatStreamEnvelope){const d=e.data;return String(d.message??d.title??d.activity??d.tool_name??e.event)}
 
-export function Workbench({project,snapshot,runId,liveEvents}:{project:Project;snapshot:WorkspaceSnapshot|null;runId:string|null;liveEvents:ChatStreamEnvelope[]}){
+export function Workbench({project,snapshot,runId,liveEvents,contextual=false}:{project:Project;snapshot:WorkspaceSnapshot|null;runId:string|null;liveEvents:ChatStreamEnvelope[];contextual?:boolean}){
   const [tab,setTab]=useState<Tab>('live');
   const [inspection,setInspection]=useState<WorkspaceRunInspection|null>(null);
   const [dir,setDir]=useState('.');
@@ -48,9 +48,22 @@ export function Workbench({project,snapshot,runId,liveEvents}:{project:Project;s
   const stopPreview=async()=>{setBusy(true);try{setPreview(await api.stopPreviewV3(project.id))}finally{setBusy(false)}};
   const restartPreview=async()=>{setBusy(true);try{setPreview(await api.restartPreviewV3(project.id))}catch(e){setError(e instanceof Error?e.message:'Falha ao reiniciar preview.')}finally{setBusy(false)}};
 
-  const tabs: Array<[Tab,string]>=[['live','Live'],['files','Files'],['code','Code'],['changes','Changes'],['tests','Tests'],['terminal','Terminal'],['preview','Preview'],['artifacts','Artifacts'],['logs','Logs']];
-  return <aside className="dev-workbench">
-    <div className="dev-workbench-tabs">{tabs.map(([key,label])=><button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}</button>)}</div>
+  const allTabs: Array<[Tab,string]>=[['live','Live'],['files','Files'],['code','Code'],['changes','Changes'],['tests','Tests'],['terminal','Terminal'],['preview','Preview'],['artifacts','Artifacts'],['logs','Logs']];
+  const tabs=useMemo(()=>contextual?allTabs.filter(([key])=>{
+    if(key==='live')return Boolean(snapshot?.active_run||liveEvents.length||inspection);
+    if(key==='files')return Boolean(entries.length||snapshot?.git.files.length);
+    if(key==='code')return Boolean(file);
+    if(key==='changes')return Boolean((snapshot?.git.files.length??0)>0||(diff?.diff&&diff.diff.trim()));
+    if(key==='tests')return tests.length>0;
+    if(key==='terminal')return terminal.length>0;
+    if(key==='preview')return Boolean(preview);
+    if(key==='artifacts')return Boolean(inspection?.artifacts?.length);
+    if(key==='logs')return logs.length>0;
+    return false;
+  }):allTabs,[contextual,snapshot?.active_run,snapshot?.git.files.length,liveEvents.length,inspection,entries.length,file,diff?.diff,tests.length,terminal.length,preview,logs.length]);
+  useEffect(()=>{if(contextual&&tabs.length&&!tabs.some(([key])=>key===tab))setTab(tabs[0][0])},[contextual,tabs.map(([key])=>key).join(','),tab]);
+  return <aside className={'dev-workbench '+(contextual?'contextual':'')}>
+    <div className="dev-workbench-tabs">{tabs.length?tabs.map(([key,label])=><button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}</button>)}):<span className="wb-tabs-empty">Detalhes aparecerão quando houver algo para inspecionar.</span>}</div>
     <div className="dev-workbench-body">
       {tab==='live'&&<div className="wb-live">
         <div className="wb-section-title"><strong>Execução atual</strong><span>{snapshot?.active_run?.status??'idle'}</span></div>
