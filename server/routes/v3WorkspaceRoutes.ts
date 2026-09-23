@@ -30,6 +30,9 @@ v3WorkspaceRouter.post('/projects/:projectId/commands',(req,res)=>{
   }catch(e){const c=code(e);res.status(status(c)).json({ok:false,error:{code:c,message:c}})}finally{db.connection.close()}
 });
 
+v3WorkspaceRouter.post('/commands/:commandId/dispatched',(req,res)=>{const db=openAgentOfficeDatabase();try{new WorkspaceService(db.connection).markCommand(req.params.commandId,'dispatched');res.json({ok:true,data:{id:req.params.commandId,status:'dispatched'}})}finally{db.connection.close()}});
+v3WorkspaceRouter.post('/commands/:commandId/cancel',(req,res)=>{const db=openAgentOfficeDatabase();try{new WorkspaceService(db.connection).markCommand(req.params.commandId,'cancelled');res.json({ok:true,data:{id:req.params.commandId,status:'cancelled'}})}finally{db.connection.close()}});
+
 v3WorkspaceRouter.get('/projects/:projectId/preview',(req,res)=>{const db=openAgentOfficeDatabase();try{res.json({ok:true,data:new PreviewService(db.connection).status(req.params.projectId)})}finally{db.connection.close()}});
 v3WorkspaceRouter.get('/projects/:projectId/preview/logs',(req,res)=>{const db=openAgentOfficeDatabase();try{res.json({ok:true,data:new PreviewService(db.connection).logs(req.params.projectId)})}finally{db.connection.close()}});
 v3WorkspaceRouter.post('/projects/:projectId/preview/start',async(req,res)=>{const db=openAgentOfficeDatabase();try{const data=await new PreviewService(db.connection).start(req.params.projectId,{chat_run_id:req.body?.chat_run_id??null,command:typeof req.body?.command==='string'?req.body.command:undefined});res.status(201).json({ok:true,data})}catch(e){const c=code(e);res.status(status(c)).json({ok:false,error:{code:c,message:c}})}finally{db.connection.close()}});
