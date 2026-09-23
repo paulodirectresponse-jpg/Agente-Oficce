@@ -18,6 +18,7 @@ export function TeamsView({agents}:Props){
  const selected=creating?null:teams.find(x=>x.id===selectedId)??null;
  const agentMap=useMemo(()=>new Map(agents.map(a=>[a.id,a])),[agents]);
  const ownerIds=useMemo(()=>new Set(teams.map(t=>t.owner_agent_id).filter(Boolean) as string[]),[teams]);
+ const permanentParent=useMemo(()=>{const map=new Map<string,string>();for(const t of teams)if(t.owner_agent_id)for(const m of t.members)map.set(m.agent_id,t.owner_agent_id);return map},[teams]);
 
  const load=async()=>{
   const [next,nextWorkforces,nextOverviews]=await Promise.all([api.listTeamsV3(),api.listWorkforcesV3(30),api.listAgentOverviewsV2()]);
@@ -117,14 +118,14 @@ export function TeamsView({agents}:Props){
      </div>
 
      <div className="manager-form-grid team-basic-settings">
-      <div className="manager-field"><label>Agente principal</label><select value={draft.owner_agent_id} disabled={Boolean(selected?.owner_agent_id)} onChange={e=>{const id=e.target.value,a=agentMap.get(id);setDraft(x=>({...x,owner_agent_id:id,name:x.name||`${a?.name??'Agent'} Team`,slug:x.slug||slugify(`${a?.name??'agent'}-team`)}));setMembers(cur=>cur.filter(m=>m.agent_id!==id))}}><option value="">Selecione</option>{agents.map(a=><option key={a.id} value={a.id} disabled={!selected&&ownerIds.has(a.id)}>{a.name}{ownerIds.has(a.id)&&a.id!==draft.owner_agent_id?' · já possui equipe':''}</option>)}</select></div>
+      <div className="manager-field"><label>Agente principal</label><select value={draft.owner_agent_id} disabled={Boolean(selected?.owner_agent_id)} onChange={e=>{const id=e.target.value,a=agentMap.get(id);setDraft(x=>({...x,owner_agent_id:id,name:x.name||`${a?.name??'Agent'} Team`,slug:x.slug||slugify(`${a?.name??'agent'}-team`)}));setMembers(cur=>cur.filter(m=>m.agent_id!==id))}}><option value="">Selecione</option>{agents.map(a=><option key={a.id} value={a.id} disabled={ownerIds.has(a.id)&&a.id!==draft.owner_agent_id}>{a.name}{ownerIds.has(a.id)&&a.id!==draft.owner_agent_id?' · já possui equipe':''}</option>)}</select></div>
       <div className="manager-field"><label>Nome</label><input value={draft.name} onChange={e=>setDraft(x=>({...x,name:e.target.value,slug:selected?x.slug:slugify(e.target.value)}))}/></div>
       <div className="manager-field span-2"><label>Propósito</label><input value={draft.purpose} onChange={e=>setDraft(x=>({...x,purpose:e.target.value}))} placeholder="Como esta equipe ajuda o agente principal?"/></div>
      </div>
 
      <div className="agent-tool-card team-subagent-picker">
       <div className="binding-title"><div><strong>Subagentes</strong><span>Os membros abaixo passam a responder estruturalmente ao owner. Um subagente não é duplicado.</span></div><span>{members.length}</span></div>
-      <div className="tool-chip-grid">{availableMembers.map(a=>{const m=members.find(x=>x.agent_id===a.id),o=overviews.get(a.id);return <div key={a.id} className={`tool-chip ${m?'selected':''}`}><button type="button" onClick={()=>toggleMember(a.id)}>{m?'✓':'+'} {a.name}</button><small>{a.role||'Agent'} · {o?.readiness??'unknown'}</small>{m&&<input value={m.role_name} placeholder="Função na equipe" onChange={e=>setMembers(cur=>cur.map(x=>x.agent_id===a.id?{...x,role_name:e.target.value}:x))}/>}</div>})}</div>
+      <div className="tool-chip-grid">{availableMembers.map(a=>{const m=members.find(x=>x.agent_id===a.id),o=overviews.get(a.id),parent=permanentParent.get(a.id),blocked=Boolean(parent&&parent!==draft.owner_agent_id);return <div key={a.id} className={`tool-chip ${m?'selected':''} ${blocked?'locked':''}`}><button type="button" disabled={blocked} onClick={()=>toggleMember(a.id)}>{m?'✓':blocked?'↳':'+'} {a.name}</button><small>{blocked?`Já é subagente de ${agentMap.get(parent!)?.name??parent}`:`${a.role||'Agent'} · ${o?.readiness??'unknown'}`}</small>{m&&<input value={m.role_name} placeholder="Função na equipe" onChange={e=>setMembers(cur=>cur.map(x=>x.agent_id===a.id?{...x,role_name:e.target.value}:x))}/>}</div>})}</div>
      </div>
 
      <div className="team-room-card">
