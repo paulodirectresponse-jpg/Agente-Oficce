@@ -760,7 +760,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       CREATE INDEX IF NOT EXISTS idx_runtime_delegations_child ON runtime_delegations(child_agent_id,status);
       CREATE INDEX IF NOT EXISTS idx_execution_team_snapshot_plan ON execution_team_snapshots(plan_id,team_kind,team_id);
     `,
-  },,
+  },
   {
     version: 14,
     sql: `
