@@ -40,6 +40,7 @@ export interface UniversalCompletionInput {
 
 export interface UniversalRequestOptions {
   signal?: AbortSignal;
+  onResolvedModel?: (providerId: string, modelId: string) => void;
 }
 
 export interface UniversalUsage {
@@ -60,7 +61,7 @@ export interface UniversalCompletionResult {
 export type UniversalStreamEvent =
   | { type: 'text_delta'; text: string }
   | { type: 'usage'; usage: UniversalUsage }
-  | { type: 'completed'; finish_reason?: string; provider_id?: string; model_id?: string }
+  | { type: 'completed'; finish_reason?: string }
   | { type: 'error'; message: string };
 
 export interface DiscoveredModel {
@@ -1200,12 +1201,12 @@ export class UniversalProviderEngine {
         const driver = createProtocolDriver(provider.protocol_driver);
         const secret = await this.secret(provider);
         const response = await this.transport.request(provider, driver.prepareCompletion(provider, { ...input, model: candidate.model }, true), secret, options);
+        options.onResolvedModel?.(provider.id, candidate.model);
         let tokenTotal = 0;
         for await (const event of driver.stream(provider, response)) {
           if (event.type === 'usage') tokenTotal += (event.usage.input_tokens ?? 0) + (event.usage.output_tokens ?? 0);
           if (event.type === 'text_delta') emitted = true;
-          if (event.type === 'completed') yield { ...event, provider_id: provider.id, model_id: candidate.model };
-          else yield event;
+          yield event;
         }
         this.resilience.recordSuccess(provider, candidate.model, Math.max(0, tokenTotal - this.estimatedTokens(input)));
         return;
