@@ -3,9 +3,9 @@
 ## Estado atual
 - Atualizado: 2026-09-23
 - Branch estável: `main`
-- Base do Bloco 10: `78b34413c6a1ab39dc76cf0b3d0d221668de3c30`
-- Versão de release em preparação: `0.3.0`
-- Migration atual: `22`
+- Último bloco estrutural concluído: Bloco 11
+- Versão atual: `0.4.0`
+- Migration atual: `23`
 - Desktop: Windows/Tauri/MSI
 - Banco: SQLite/WAL
 - Regra de continuidade: sempre partir da `main` mais recente; não usar backups antigos como fonte de verdade.
@@ -24,6 +24,7 @@
 | 8 | Projects persistent workspace | DONE |
 | 9 | Analytics | DONE |
 | 10 | Benchmark + Release Gate | DONE — PR #41 |
+| 11 | Integration Registry + External Actions | DONE — PR #42 |
 
 ## Bloco 9 — referência estável
 - PR: #40
@@ -43,6 +44,31 @@
 - release preflight — PASS
 - typecheck/build/Tauri/MSI/lifecycle — PASS
 - Production Release Gate manual/tag-driven implementado para stress + MSI upgrade preservation.
+
+## Bloco 11 — concluído
+- PR: #42
+- merge SHA: `eb4e53ed6388e2a7ed50bd934caeff7707f317f8`
+- desktop gate: `35897268465` — PASS
+- Migration 23 — PASS
+- deterministic benchmark com Integration Registry — PASS
+- release preflight — PASS
+- typecheck/build/Tauri/MSI/lifecycle — PASS
+- versão: `0.4.0`
+
+Entregas principais:
+- Integration Registry persistente;
+- múltiplas conexões por driver;
+- secrets fora do SQLite;
+- capabilities por integração;
+- Project bindings com uma conexão ativa por driver;
+- GitHub, Railway, Supabase e Browser;
+- Tool Registry bridge;
+- approvals e idempotência automática para mutações externas;
+- Gap Analysis distingue missing Tool / missing Integration / missing Worker;
+- Orchestrator infere integrações externas;
+- modelo com tool calling explicitamente desativado é inelegível;
+- Integration Manager no desktop;
+- eventos/health/preflight/benchmark integrados.
 
 ## Bloco 10 — objetivo
 Transformar testes, CI, recovery e desktop gates já existentes em um critério formal e repetível de release.
@@ -93,9 +119,10 @@ Uma release não pode ser considerada pronta se ocorrer:
 - backend órfão após fechar o desktop.
 
 ## Roadmap V3 histórico
-Os documentos em `docs/v3/` continuam úteis como blueprint de arquitetura, mas a numeração V3.7–V3.11 não representa o release train atual de Blocos 1–10. Funcionalidades desses documentos só devem ser marcadas DONE quando existirem no código e tiverem gate próprio.
+Os documentos em `docs/v3/` continuam úteis como blueprint de arquitetura, mas a numeração V3.7–V3.11 não representa o release train atual de Blocos 1–11. Funcionalidades desses documentos só devem ser marcadas DONE quando existirem no código e tiverem gate próprio.
 
 ## Próximo passo exato
-1. realizar o pente fino de produto/UX quando priorizado;
-2. usar o Production Release Gate manual antes de uma distribuição formal/tag;
-3. manter `main` como única fonte de verdade para qualquer próximo bloco.
+1. realizar o pente fino completo de produto/UX e testes manuais dos Blocos 1–11;
+2. corrigir bugs/inconsistências encontrados sem reabrir arquitetura já validada sem necessidade;
+3. executar o Production Release Gate manual antes de uma distribuição formal/tag;
+4. manter `main` como única fonte de verdade.
