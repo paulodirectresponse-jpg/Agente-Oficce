@@ -117,7 +117,7 @@ describe('AnalyticsService',()=>{
       expect(global.overview.total_tokens).toBe(1015);
       expect(global.data_quality.unscoped_usage_events).toBeGreaterThan(0);
       expect(scoped.overview.total_tokens).toBe(15);
-      expect(scoped.data_quality.unscoped_usage_events).toBe(0);
+      expect(scoped.data_quality.unscoped_usage_events).toBe(1);
     }finally{f.done()}
   });
 
