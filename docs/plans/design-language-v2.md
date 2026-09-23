@@ -1,6 +1,6 @@
 # Agent Office Design Language V2 — Proposal
 
-Status: proposed, not yet the canonical `DESIGN.md`.
+Status: APPROVED. Canonical contract is now root `DESIGN.md`.
 
 This proposal intentionally evolves the current Agent Office identity instead of replacing it.
 
@@ -89,6 +89,6 @@ Rejected because the product must borrow simplicity principles, not appearance o
 ### IDE-first
 Rejected because the primary user is a vibe coder; code/terminal are inspection tools, not the home screen.
 
-## Approval gate
+## Approval result
 
-After approval, this proposal should be converted into root `DESIGN.md` using the repository's `$design-md` skill and real code/tokens as evidence. Implementation should not begin with visual polish before Shell/IA contracts are established.
+Approved. Root `DESIGN.md` is now the canonical implementation contract. This file remains the decision record for the selected visual direction.
