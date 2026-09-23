@@ -1048,6 +1048,30 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         ON dynamic_team_instances(lifecycle_status, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_workforce_resource_reason
         ON workforce_resource_metadata(dynamic_team_id, worker_kind, worker_id);
+
+      CREATE TABLE IF NOT EXISTS runtime_worker_delegations (
+        id TEXT PRIMARY KEY,
+        plan_id TEXT NOT NULL REFERENCES execution_plans(id) ON DELETE CASCADE,
+        step_id TEXT REFERENCES execution_steps(id) ON DELETE CASCADE,
+        workforce_id TEXT REFERENCES dynamic_team_instances(id) ON DELETE CASCADE,
+        parent_kind TEXT CHECK(parent_kind IN ('agent','subagent')),
+        parent_id TEXT,
+        child_kind TEXT NOT NULL CHECK(child_kind IN ('agent','subagent')),
+        child_id TEXT NOT NULL,
+        ancestor_chain_json TEXT NOT NULL DEFAULT '[]',
+        depth INTEGER NOT NULL CHECK(depth >= 0),
+        delegation_scope_json TEXT NOT NULL DEFAULT '[]',
+        required_capabilities_json TEXT NOT NULL DEFAULT '[]',
+        required_tools_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','returned','blocked','cancelled')),
+        budget_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        returned_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_worker_delegations_plan
+        ON runtime_worker_delegations(plan_id,status,depth);
+      CREATE INDEX IF NOT EXISTS idx_worker_delegations_child
+        ON runtime_worker_delegations(child_kind,child_id,status);
     `,
   }
 ];
