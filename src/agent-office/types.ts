@@ -429,7 +429,7 @@ export interface OrchestratorStatus {
 export interface OrchestrationRun {
   id: string; project_id: string; conversation_id: string | null; user_message_id: string | null;
   level_used: 'deterministic'|'fast'|'deep'|'fallback'; decision: Record<string, any> | null;
-  status: string; provider_id: string | null; model_id: string | null; input_tokens: number | null;
+  status: string; provider_id: string | null; model_id: string | null; provider_name?: string | null; effective_model_id?: string | null; model_name?: string | null; input_tokens: number | null;
   output_tokens: number | null; duration_ms: number; error: Record<string, unknown> | null; created_at: string;
 }
 export interface OrchestrationEvent {
