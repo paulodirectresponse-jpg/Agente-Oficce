@@ -21,6 +21,7 @@ export function ProjectsView({activeProject,onSelectProject,onOpenWork,intent}:{
   const [showCreate,setShowCreate]=useState(false);
   const [name,setName]=useState('');
   const [objective,setObjective]=useState('');
+  const [projectName,setProjectName]=useState('');
   const [resultSummary,setResultSummary]=useState('');
   const [resultText,setResultText]=useState('');
   const [selectedArtifacts,setSelectedArtifacts]=useState<string[]>([]);
@@ -30,7 +31,7 @@ export function ProjectsView({activeProject,onSelectProject,onOpenWork,intent}:{
   const [error,setError]=useState<string|null>(null);
 
   const loadList=useCallback(async()=>{const [s,r]=await Promise.all([api.listProjectSummariesV3(),api.getProjectRootSetting()]);setSummaries(s);setRoot(r);setRootDraft(r.path)},[]);
-  const loadDetail=useCallback(async(id:string)=>{const d=await api.getProjectDetailV3(id);setDetail(d);setObjective(d.project.objective??'');setResultSummary(d.result?.summary??'');setResultText(d.result?.result??'');setSelectedArtifacts((d.result?.artifacts??[]).map((x:any)=>String(x.artifact_id)))},[]);
+  const loadDetail=useCallback(async(id:string)=>{const d=await api.getProjectDetailV3(id);setDetail(d);setProjectName(d.project.name);setObjective(d.project.objective??'');setResultSummary(d.result?.summary??'');setResultText(d.result?.result??'');setSelectedArtifacts((d.result?.artifacts??[]).map((x:any)=>String(x.artifact_id)))},[]);
   const refresh=useCallback(async()=>{try{setError(null);await loadList();if(activeProject)await loadDetail(activeProject.id);else setDetail(null)}catch(e){setError(e instanceof Error?e.message:'Falha ao carregar Projects.')}},[activeProject?.id,loadList,loadDetail]);
   useEffect(()=>{void refresh()},[refresh]);
   useEffect(()=>{if(intent==='new')setShowCreate(true);if(intent==='settings'&&activeProject)setTab('settings');if(intent==='all')setShowCreate(false)},[intent,activeProject?.id]);
@@ -91,7 +92,7 @@ export function ProjectsView({activeProject,onSelectProject,onOpenWork,intent}:{
             </>}
 
             {tab==='settings'&&<>
-              <div className="v2-form-grid"><label>Nome<input value={detail.project.name} onChange={()=>{}} readOnly/><small className="v2-help">Renomeação poderá ser adicionada no pente fino; o identificador do Project permanece estável.</small></label><label>Estado<select value={detail.project.lifecycle_status} onChange={e=>void patch({lifecycle_status:e.target.value as Project['lifecycle_status']})}><option value="active">Ativo</option><option value="paused">Pausado</option><option value="completed">Concluído</option><option value="archived">Arquivado</option></select></label></div>
+              <div className="v2-form-grid"><label>Nome<input value={projectName} onChange={e=>setProjectName(e.target.value)} onBlur={()=>{if(projectName.trim()&&projectName.trim()!==detail.project.name)void patch({name:projectName.trim()})}}/><small className="v2-help">O identificador interno e o histórico permanecem estáveis.</small></label><label>Estado<select value={detail.project.lifecycle_status} onChange={e=>void patch({lifecycle_status:e.target.value as Project['lifecycle_status']})}><option value="active">Ativo</option><option value="paused">Pausado</option><option value="completed">Concluído</option><option value="archived">Arquivado</option></select></label></div>
               <section className="projects-v3-settings-section"><h3>Workspace</h3><code>{detail.project.root_path}</code><small>Branch atual: {detail.workspace.git.branch??'—'}</small></section>
               <section className="projects-v3-settings-section"><h3>Resultado final</h3><input value={resultSummary} onChange={e=>setResultSummary(e.target.value)} placeholder="Resumo do resultado"/><textarea rows={7} value={resultText} onChange={e=>setResultText(e.target.value)} placeholder="Resultado final, entregáveis e observações"/><div><button onClick={()=>void saveResult(false)} disabled={busy==='result'}>Salvar rascunho</button><button className="v2-primary-button" onClick={()=>void saveResult(true)} disabled={busy==='result'}>Finalizar Project</button></div></section>
               <details className="v2-disclosure"><summary>Pasta padrão para novos Projects</summary><div className="projects-v3-inline"><input value={rootDraft} onChange={e=>setRootDraft(e.target.value)}/><button onClick={()=>void saveRoot()} disabled={busy==='root'}>Salvar</button></div><p>{root?.configured?'Configurada':'Ainda não configurada'}.</p></details>
