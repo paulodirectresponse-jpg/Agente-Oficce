@@ -156,6 +156,20 @@ After review:
 
 ## Verification log
 
+### 2026-09-23 — ChatGPT (review checkpoint D: hardening)
+
+**Completed**
+- Added explicit paused and recently-completed room states; paused Agents no longer count as active.
+- Hardened many-Agent layouts with internal station scrolling and minimum station rows.
+- Added reduced-motion behavior and visible keyboard focus for interactive room/activity controls.
+- Hardened long names, compact shared-chat rich content, user-message wrapping and code focus treatment.
+- Added regression tests for Markdown structure, fenced code, tables, JSON, unsafe links/raw HTML escaping, real Agent station identity, paused and disconnected states.
+
+**Verification target**
+- Full remote gate: tests, TypeScript, client/server build and desktop build.
+- Final results recorded after CI verification.
+
+
 ### 2026-09-23 — ChatGPT (review checkpoint C: operational 2D office)
 
 **Completed**

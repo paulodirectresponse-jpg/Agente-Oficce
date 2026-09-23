@@ -323,6 +323,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   }, [activity, liveEvents, currentRun, project]);
 
   const activeCount = visibleAgents.filter((agent) => {
+    if (agent.paused) return false;
     const visual = deriveVisualState(agent, stateByAgent.get(agent.id), liveStates[agent.id], providers);
     return visual !== 'offline' && visual !== 'resting';
   }).length;

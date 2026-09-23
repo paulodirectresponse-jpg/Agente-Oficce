@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from 'react';
 
-function safeHref(value:string){
+export function safeHref(value:string){
   const href=value.trim();
   if(/^https?:\/\//i.test(href)||/^mailto:/i.test(href))return href;
   return undefined;
@@ -27,7 +27,7 @@ function inline(text:string,keyPrefix='i'):ReactNode[]{
   return tokens;
 }
 
-function isJson(value:string){
+export function isJson(value:string){
   const v=value.trim();
   if(!((v.startsWith('{')&&v.endsWith('}'))||(v.startsWith('[')&&v.endsWith(']'))))return false;
   try{JSON.parse(v);return true}catch{return false}
@@ -86,10 +86,10 @@ export function MessageContent({content,streaming=false}:{content:string;streami
     while(i<lines.length&&lines[i].trim()&&!/^\`\`\`/.test(lines[i])&&!/^(#{1,4})\s+/.test(lines[i])&&!/^>\s?/.test(lines[i])&&!/^\s*[-+*]\s+/.test(lines[i])&&!/^\s*\d+[.)]\s+/.test(lines[i])&&!/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(lines[i])){paragraph.push(lines[i]);i++}
     nodes.push(<p key={'p'+serial++}>{paragraph.map((x,n)=><Fragment key={n}>{inline(x,'p'+n)}{n<paragraph.length-1&&<br/>}</Fragment>)}</p>);
   }
-  return <div className="message-rich">{nodes}{streaming&&<i className="work-v2-caret">▍</i>}</div>;
+  return <div className="message-rich" aria-live={streaming?'polite':undefined}>{nodes}{streaming&&<i className="work-v2-caret" aria-hidden="true">▍</i>}</div>;
 }
 
 function CodeBlock({code,language}:{code:string;language?:string}){
   const label=(language||'texto').toLowerCase();
-  return <div className="message-code"><div className="message-code-head"><span>{label}</span><button type="button" onClick={()=>copy(code)}>Copiar</button></div><pre><code>{code}</code></pre></div>;
+  return <div className="message-code"><div className="message-code-head"><span>{label}</span><button type="button" onClick={()=>copy(code)} aria-label="Copiar bloco de código">Copiar</button></div><pre><code>{code}</code></pre></div>;
 }
