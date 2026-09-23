@@ -849,6 +849,7 @@ export class ChatRunnerService {
     costUsd: number | undefined,
     requestCount: number,
     durationMs: number,
+    trace: { projectId: string; runId: string; modelId: string },
   ): void {
     if (binding.worker_kind === 'agent') {
       this.usage.recordRunUsage(binding.agent.id, providerId, {
@@ -857,12 +858,19 @@ export class ChatRunnerService {
         cost_usd: costUsd,
         request_count: requestCount,
         duration_ms: durationMs,
+      }, {
+        projectId: trace.projectId,
+        runId: trace.runId,
+        modelId: trace.modelId,
+        costKind: costUsd == null ? 'unknown' : 'estimated',
       });
       return;
     }
     this.database.prepare(`
-      INSERT INTO subagent_usage_snapshots(id,subagent_id,provider_id,input_tokens,output_tokens,cost_usd,request_count,duration_ms,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?)
+      INSERT INTO subagent_usage_snapshots(
+        id,subagent_id,provider_id,input_tokens,output_tokens,cost_usd,request_count,duration_ms,created_at,
+        project_id,run_id,model_id,cost_kind
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(
       crypto.randomUUID(),
       binding.subagent_id,
@@ -873,6 +881,10 @@ export class ChatRunnerService {
       requestCount,
       durationMs,
       new Date().toISOString(),
+      trace.projectId,
+      trace.runId,
+      trace.modelId,
+      costUsd == null ? 'unknown' : 'estimated',
     );
   }
 
@@ -1334,6 +1346,7 @@ export class ChatRunnerService {
       estimateCostUsd(effectivePricingModel, usage),
       requestCount,
       duration,
+      { projectId: rootRun.project_id, runId: childRun.id, modelId: effectivePricingModel.id },
     );
 
     if (usage) {

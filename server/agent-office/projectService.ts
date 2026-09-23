@@ -169,26 +169,25 @@ export class ProjectService {
   }
 
   private usage(projectId: string) {
-    const runs = this.db.prepare('SELECT parent_run_id,input_tokens,output_tokens,started_at,ended_at,status FROM chat_runs WHERE project_id=?').all(projectId) as any[];
-    let inputTokens = 0, outputTokens = 0, executionMs = 0;
-    for (const run of runs) {
-      inputTokens += Number(run.input_tokens ?? 0);
-      outputTokens += Number(run.output_tokens ?? 0);
-      if (!run.parent_run_id) executionMs += durationMs(run.started_at, run.ended_at);
+    const rootRuns = this.db.prepare('SELECT started_at,ended_at FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL').all(projectId) as any[];
+    const agentUsage = this.db.prepare("SELECT normalized_json,cost_kind FROM usage_snapshots WHERE source='run' AND project_id=?").all(projectId) as any[];
+    const subagentUsage = this.db.prepare('SELECT input_tokens,output_tokens,cost_usd,cost_kind FROM subagent_usage_snapshots WHERE project_id=?').all(projectId) as any[];
+    let inputTokens = 0, outputTokens = 0, costUsd = 0, costKnown = 0, usageEvents = 0;
+    for (const row of agentUsage) {
+      const u = json<any>(row.normalized_json, {});
+      inputTokens += Number(u.input_tokens ?? 0);
+      outputTokens += Number(u.output_tokens ?? 0);
+      usageEvents += 1;
+      if (u.cost_usd !== undefined && u.cost_usd !== null) { costUsd += Number(u.cost_usd) || 0; costKnown += 1; }
     }
-    const attempts = this.db.prepare(`
-      SELECT a.usage_json
-      FROM step_attempts a
-      JOIN execution_steps s ON s.id=a.step_id
-      JOIN execution_plans p ON p.id=s.plan_id
-      WHERE p.project_id=?
-    `).all(projectId) as any[];
-    let costUsd = 0, costKnown = false, toolCalls = 0;
-    for (const attempt of attempts) {
-      const u = json<any>(attempt.usage_json, {});
-      if (u.cost_usd !== undefined && u.cost_usd !== null) { costUsd += Number(u.cost_usd) || 0; costKnown = true; }
-      toolCalls += Number(u.tool_calls ?? 0);
+    for (const row of subagentUsage) {
+      inputTokens += Number(row.input_tokens ?? 0);
+      outputTokens += Number(row.output_tokens ?? 0);
+      usageEvents += 1;
+      if (row.cost_usd !== undefined && row.cost_usd !== null) { costUsd += Number(row.cost_usd) || 0; costKnown += 1; }
     }
+    const toolCalls = Number((this.db.prepare('SELECT COUNT(*) n FROM tool_audit_events WHERE project_id=?').get(projectId) as any)?.n ?? 0);
+    const executionMs = rootRuns.reduce((sum,run)=>sum+durationMs(run.started_at,run.ended_at),0);
     const project = this.projectRow(projectId);
     return {
       input_tokens: inputTokens,
@@ -198,7 +197,7 @@ export class ProjectService {
       tool_calls: toolCalls,
       execution_ms: executionMs,
       elapsed_ms: durationMs(project.created_at, project.completed_at ?? null),
-      cost_complete: costKnown,
+      cost_complete: usageEvents > 0 && costKnown === usageEvents,
     };
   }
 

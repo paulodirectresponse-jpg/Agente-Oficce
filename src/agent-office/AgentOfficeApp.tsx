@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AgentProfile, Project, UniversalProvider } from './types.js';
 import { WorkspaceView } from './WorkspaceView.js';
-import { UsageView } from './UsageView.js';
+import { AnalyticsView } from './AnalyticsView.js';
 import { SettingsView } from './SettingsView.js';
 import { OfficeView } from './OfficeView.js';
 import { AgentManagerView } from './AgentManagerView.js';
@@ -13,7 +13,7 @@ import { DevChatView } from './DevChatView.js';
 import { api } from './api.js';
 import './App.css';
 
-type ViewKey = 'office' | 'chat' | 'orchestrator' | 'agents' | 'teams' | 'workforces' | 'providers' | 'projects' | 'usage' | 'settings';
+type ViewKey = 'office' | 'chat' | 'orchestrator' | 'agents' | 'teams' | 'workforces' | 'providers' | 'projects' | 'analytics' | 'settings';
 type RuntimeState = 'checking' | 'online' | 'offline';
 
 const NAV_ITEMS: { key: ViewKey; label: string; icon: string }[] = [
@@ -25,7 +25,7 @@ const NAV_ITEMS: { key: ViewKey; label: string; icon: string }[] = [
   { key: 'workforces', label: 'Workforces', icon: '◇' },
   { key: 'providers', label: 'Providers', icon: '⌁' },
   { key: 'projects', label: 'Projetos', icon: '□' },
-  { key: 'usage', label: 'Uso', icon: '↯' },
+  { key: 'analytics', label: 'Analytics', icon: '↯' },
   { key: 'settings', label: 'Configurações', icon: '⚙' },
 ];
 
@@ -213,7 +213,7 @@ export function AgentOfficeApp() {
           </div>
         )}
 
-        {view === 'usage' && <div className="legacy-view-wrap"><UsageView /></div>}
+        {view === 'analytics' && <div className="legacy-view-wrap"><AnalyticsView /></div>}
         {view === 'settings' && <div className="legacy-view-wrap"><SettingsView /></div>}
 
         {view !== 'office' && view !== 'chat' && (

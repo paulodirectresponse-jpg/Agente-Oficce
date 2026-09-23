@@ -21,6 +21,7 @@ import { v3DurableExecutionRouter } from './v3DurableExecutionRoutes.js';
 import { v3TeamsRouter } from './v3TeamsRoutes.js';
 import { v3WorkspaceRouter } from './v3WorkspaceRoutes.js';
 import { v3ProjectsRouter } from './v3ProjectsRoutes.js';
+import { v3AnalyticsRouter } from './v3AnalyticsRoutes.js';
 
 export const agentOfficeRouter = Router();
 
@@ -34,6 +35,7 @@ agentOfficeRouter.use('/agent-office/v3/durable', v3DurableExecutionRouter);
 agentOfficeRouter.use('/agent-office/v3', v3TeamsRouter);
 agentOfficeRouter.use('/agent-office/v3/workspace', v3WorkspaceRouter);
 agentOfficeRouter.use('/agent-office/v3', v3ProjectsRouter);
+agentOfficeRouter.use('/agent-office/v3', v3AnalyticsRouter);
 agentOfficeRouter.use('/agent-office/chat', chatRouter);
 
 // Health check - validates local SQLite foundation

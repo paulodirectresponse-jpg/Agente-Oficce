@@ -99,6 +99,157 @@ export interface ProjectDetail extends ProjectSummary {
   timeline: Array<Record<string, any>>;
 }
 
+
+export type AnalyticsRange = '24h' | '7d' | '30d' | 'all' | 'custom';
+
+export interface AnalyticsUsageTotals {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  requests: number;
+  cost_usd: number | null;
+  cost_coverage_pct: number;
+  cost_known_events: number;
+  cost_unknown_events: number;
+  cost_reported_events: number;
+  cost_estimated_events: number;
+  average_duration_ms: number | null;
+  usage_events: number;
+  scoped_events: number;
+  unscoped_events: number;
+}
+
+export interface AnalyticsWorker extends AnalyticsUsageTotals {
+  worker_kind: 'agent' | 'subagent';
+  id: string;
+  name: string;
+  role: string;
+  owner_agent_id: string | null;
+  team_id: string | null;
+  provider_id: string | null;
+  model_id: string | null;
+  runs: number;
+  completed_runs: number;
+  failed_runs: number;
+  cancelled_runs: number;
+  success_rate: number | null;
+  first_pass_rate: number | null;
+  rework_rate: number | null;
+  quality_signals: number;
+  average_run_duration_ms: number | null;
+}
+
+export interface AnalyticsProject extends AnalyticsUsageTotals {
+  id: string;
+  name: string;
+  lifecycle_status: string;
+  runs: number;
+  completed_runs: number;
+  failed_runs: number;
+  success_rate: number | null;
+  plans: number;
+  completed_plans: number;
+  failed_plans: number;
+  workforces: number;
+  failed_workforces: number;
+  open_blockers: number;
+}
+
+export interface AnalyticsProvider extends AnalyticsUsageTotals {
+  id: string;
+  name: string;
+  enabled: boolean;
+  health_status: string;
+  operational_status: string;
+  circuit_state: string | null;
+  active_requests: number;
+  queued_requests: number;
+  consecutive_failures: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  models: Array<AnalyticsUsageTotals & { id:string; model_id:string; name:string; enabled:boolean }>;
+}
+
+export interface AnalyticsTool {
+  name: string;
+  calls: number;
+  completed: number;
+  failed: number;
+  average_duration_ms: number | null;
+  approvals: number;
+  approved: number;
+  denied: number;
+  pending: number;
+}
+
+export interface AnalyticsSnapshot {
+  generated_at: string;
+  filters: {
+    range: AnalyticsRange;
+    from: string | null;
+    to: string;
+    project_id: string | null;
+    agent_id: string | null;
+    subagent_id: string | null;
+    provider_id: string | null;
+    model_id: string | null;
+  };
+  data_quality: {
+    usage_source: string;
+    run_source: string;
+    anti_double_counting: boolean;
+    scoped_usage_events: number;
+    unscoped_usage_events: number;
+    cost_coverage_pct: number;
+    notes: string[];
+  };
+  overview: AnalyticsUsageTotals & {
+    runs: number;
+    completed_runs: number;
+    failed_runs: number;
+    cancelled_runs: number;
+    success_rate: number | null;
+    projects_touched: number;
+    rework_events: number;
+    operational_failures: number;
+  };
+  timeseries: Array<{
+    bucket: string;
+    runs: number;
+    completed: number;
+    failed: number;
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens: number;
+    cost_usd: number | null;
+    cost_known_events: number;
+    cost_events: number;
+    cost_coverage_pct: number;
+  }>;
+  workers: AnalyticsWorker[];
+  projects: AnalyticsProject[];
+  execution: {
+    plans:number; completed_plans:number; failed_plans:number; plan_success_rate:number|null;
+    steps:number; completed_steps:number; failed_steps:number; blocked_steps:number; step_success_rate:number|null;
+    attempts:number; retry_attempts:number; retry_rate:number|null; timed_out:number; budget_exceeded:number; replans:number;
+    average_attempt_duration_ms:number|null; tool_calls:number; tool_failures:number; approvals:number; approvals_pending:number; approvals_denied:number;
+    workforces: {
+      total:number; completed:number; failed:number; cancelled:number; active:number;
+      average_duration_ms:number|null; average_resources:number;
+      resource_kinds:{agent:number;subagent:number;team:number};
+    };
+  };
+  orchestrator: {
+    total:number; routed:number; failed:number; success_rate:number|null;
+    levels:{deterministic:number;fast:number;deep:number;fallback:number};
+    fallback_events:number; fallback_runs:number; fallback_rate:number|null;
+    execution_outcome:{linked:number;completed:number;failed:number;cancelled:number;running:number;success_rate:number|null};
+    input_tokens:number; output_tokens:number; average_duration_ms:number|null;
+  };
+  providers: AnalyticsProvider[];
+  tools: AnalyticsTool[];
+}
+
 export type TaskStatus =
   | 'queued'
   | 'running'
