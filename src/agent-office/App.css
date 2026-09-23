@@ -5022,3 +5022,23 @@ textarea {
 
 /* UX V2 review — hardening */
 .work-v2-message.user .message-rich{display:inline-block;max-width:min(680px,100%);margin-top:6px;padding:10px 12px;border:1px solid #273b50;border-radius:10px;background:#0c1823;color:#d4e0eb}.work-v2-message.user .message-rich p{display:block;margin:.25rem 0;padding:0;border:0;background:transparent;color:inherit}.room-stations{overflow:auto;align-content:start;grid-auto-rows:minmax(142px,1fr);scrollbar-width:thin;scrollbar-color:rgba(62,78,86,.35) transparent}.room-station.state-paused .room-status-dot{background:#87939a;box-shadow:0 0 0 3px rgba(135,147,154,.12)}.room-station.state-completed .room-status-dot{background:#4fb57a}.room-station.state-completed .room-status-card{border-color:rgba(79,181,122,.28)}.room-station:focus-visible{outline:3px solid rgba(53,151,220,.6);outline-offset:2px;border-radius:8px}.room-status-card small,.room-nameplate strong,.room-nameplate span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.message-code:focus-within{outline:2px solid rgba(71,164,226,.35);outline-offset:1px}.work-v2-activity-history summary:focus-visible,.work-v2-event-list.human button:focus-visible{outline:2px solid rgba(71,164,226,.45);outline-offset:2px}.chat-message-body .message-rich{font-size:10px;line-height:1.5}.chat-message-body .message-rich h2{font-size:12px}.chat-message-body .message-rich h3,.chat-message-body .message-rich h4{font-size:11px}.chat-message-body .message-code pre code{font-size:10px}.chat-message-body .message-table-wrap table{min-width:320px;font-size:9px}@media(max-height:820px){.room-stations{grid-auto-rows:minmax(112px,1fr)}}@media(prefers-reduced-motion:reduce){.room-avatar.state-responding,.room-avatar.state-coding,.room-avatar.state-testing,.room-avatar.state-reviewing{animation:none!important}.room-status-card{transition:none}}
+
+/* Files, knowledge and reusable Skills */
+.work-v2-composer-actions{display:flex;align-items:center;gap:8px}
+.work-v2-file-button{width:34px;height:34px;border:1px solid var(--v2-border,#d9d8d4);border-radius:10px;display:grid;place-items:center;cursor:pointer;font-size:19px;line-height:1;background:var(--v2-surface,#fff)}
+.work-v2-file-button:hover{background:rgba(0,0,0,.035)}
+.work-v2-file-button input,.knowledge-upload input{display:none}
+.work-v2-pending-files,.work-v2-attachments{display:flex;gap:7px;flex-wrap:wrap;margin:4px 0 8px}
+.work-v2-pending-files>span,.work-v2-attachment{display:flex;align-items:center;gap:7px;max-width:300px;padding:7px 9px;border:1px solid rgba(22,24,29,.1);border-radius:10px;background:rgba(255,255,255,.72);font-size:12px}
+.work-v2-pending-files b,.work-v2-attachment b{text-transform:capitalize;font-size:10px;opacity:.55}
+.work-v2-pending-files button{border:0;background:transparent;cursor:pointer;font-size:17px;line-height:1}
+.work-v2-attachment span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.work-v2-attachment small{opacity:.55;white-space:nowrap}
+.knowledge-upload{display:inline-flex;align-items:center;justify-content:center;padding:9px 13px;border-radius:10px;border:1px solid var(--v2-border,#d9d8d4);cursor:pointer;font-weight:700;margin:8px 0 12px}
+.knowledge-list,.skill-list{display:grid;gap:8px}
+.knowledge-list>div,.skill-list>label{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid rgba(22,24,29,.09);border-radius:12px;background:rgba(255,255,255,.54)}
+.knowledge-list>div>div,.skill-list>label>span{display:grid;gap:3px;min-width:0}
+.knowledge-list small,.skill-list small{opacity:.63;overflow:hidden;text-overflow:ellipsis}.knowledge-list button{border:0;background:transparent;cursor:pointer;opacity:.7}
+.skill-list>label{justify-content:flex-start;cursor:pointer}.skill-list>label input{flex:0 0 auto}
+.skill-create{display:grid;grid-template-columns:minmax(160px,.55fr) minmax(260px,1.45fr) auto;gap:9px;align-items:start;margin:10px 0 14px}
+.skill-create input,.skill-create textarea{width:100%}
+@media(max-width:900px){.skill-create{grid-template-columns:1fr}.work-v2-pending-files>span,.work-v2-attachment{max-width:100%}}
