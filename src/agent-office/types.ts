@@ -419,6 +419,7 @@ export interface OrchestratorStatus {
   principal: OrchestratorModelStatus | null;
   fast: OrchestratorModelStatus | null;
   deep: OrchestratorModelStatus | null;
+  last_effective: { provider_name: string | null; model_id: string | null; model_name: string | null; level: string; created_at: string } | null;
   stats_24h: {
     total: number; deterministic: number; fast: number; deep: number; fallback: number;
     avg_duration_ms: number; input_tokens: number; output_tokens: number;
