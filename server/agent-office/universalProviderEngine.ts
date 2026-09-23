@@ -1122,8 +1122,10 @@ export class UniversalProviderEngine {
       const secret = await this.secret(provider);
       const payload = await this.transport.json(provider, driver.prepareCompletion(provider, { ...input, model }, false), secret, options);
       const result = driver.parseCompletion(provider, payload);
-      this.resilience.recordSuccess(provider, model, (result.usage?.input_tokens ?? 0) + (result.usage?.output_tokens ?? 0));
-      return { ...result, raw: { provider_id: provider.id, model, payload: result.raw } };
+      this.resilience.recordSuccess(provider, model, Math.max(0,
+        (result.usage?.input_tokens ?? 0) + (result.usage?.output_tokens ?? 0) - this.estimatedTokens(input)
+      ));
+      return result;
     } catch (error) {
       this.resilience.recordFailure(provider, model, error);
       throw error;
@@ -1195,8 +1197,29 @@ export class UniversalProviderEngine {
     const payload = await this.transport.json(provider, request, secret);
     const models = driver.parseModels(provider, payload);
     if (persist) {
+      const discoveredIds = new Set(models.map(model => model.model_id));
       for (const model of models) {
         this.providers.upsertDiscoveredModel(provider.id, model);
+        this.database.prepare(`
+          INSERT INTO provider_model_runtime_state (
+            provider_id, model_id, operational_status, last_success_at, last_failure_at, last_error, updated_at
+          ) VALUES (?, ?, 'healthy', ?, NULL, NULL, ?)
+          ON CONFLICT(provider_id,model_id) DO UPDATE SET
+            operational_status='healthy', last_success_at=excluded.last_success_at,
+            last_error=NULL, updated_at=excluded.updated_at
+        `).run(provider.id, model.model_id, new Date().toISOString(), new Date().toISOString());
+      }
+      const existing = this.providers.listModels(provider.id, true);
+      for (const model of existing) {
+        if (discoveredIds.has(model.model_id)) continue;
+        this.database.prepare(`
+          INSERT INTO provider_model_runtime_state (
+            provider_id, model_id, operational_status, last_success_at, last_failure_at, last_error, updated_at
+          ) VALUES (?, ?, 'unavailable', NULL, ?, 'Model was not returned by provider discovery.', ?)
+          ON CONFLICT(provider_id,model_id) DO UPDATE SET
+            operational_status='unavailable', last_failure_at=excluded.last_failure_at,
+            last_error=excluded.last_error, updated_at=excluded.updated_at
+        `).run(provider.id, model.model_id, new Date().toISOString(), new Date().toISOString());
       }
     }
     return models;
@@ -1223,6 +1246,7 @@ export class UniversalProviderEngine {
         last_health_at: new Date().toISOString(),
         last_health_error: null,
       });
+      this.resilience.recordSuccess(provider, '__health__');
       return {
         provider_id: provider.id,
         status: 'healthy',
@@ -1231,6 +1255,7 @@ export class UniversalProviderEngine {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Provider connection failed.';
+      this.resilience.recordFailure(provider, '__health__', error);
       this.providers.update(provider.id, {
         health_status: 'unavailable',
         last_health_at: new Date().toISOString(),
