@@ -135,7 +135,7 @@ export class OrchestratorGateway {
     }
 
     decision=this.policyValidate(decision,keys);
-    if((decision.required_capabilities.length||decision.required_tools.length)&&(decision.target_mode==='needs_gap_analysis'||(decision.target_mode==='dynamic_team'&&!decision.candidate_scope.length)||(decision.target_mode==='existing_team'&&!decision.target_team_id)||(decision.target_mode==='direct_agent'&&!decision.target_agent_id))){
+    if((decision.required_capabilities.length||decision.required_tools.length)&&(decision.target_mode==='needs_gap_analysis'||(decision.target_mode==='dynamic_team'&&!decision.candidate_scope.length&&!decision.workforce_resources.length)||(decision.target_mode==='existing_team'&&!decision.target_team_id)||(decision.target_mode==='direct_agent'&&!decision.target_agent_id))){
       const gap=new GapAnalysisService(this.db).analyze(decision.required_capabilities,decision.required_tools);
       if(gap.resolution==='active_agent'&&gap.selected_agent_ids.length===1)decision={...decision,target_mode:'direct_agent',target_agent_id:gap.selected_agent_ids[0],candidate_scope:gap.selected_agent_ids,workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
       else if(gap.resolution==='active_subagent'&&gap.selected_subagent_ids.length===1)decision={...decision,target_mode:'dynamic_team',candidate_scope:[],workforce_resources:gap.workforce_resources,explanation:gap.explanation,confidence:.95};
@@ -170,8 +170,7 @@ export class OrchestratorGateway {
 
   private policyValidate(d:RoutingDecision,keys:Set<string>):RoutingDecision{
     const req=d.required_capabilities.filter(x=>keys.has(x.key));
-    const allowedTools=new Set((this.db.prepare('SELECT allowed_tools_json FROM agent_tool_policies WHERE enabled=1').all() as any[]).flatMap(r=>{try{return JSON.parse(r.allowed_tools_json)}catch{return[]}}));
-    const tools=d.required_tools.filter(x=>allowedTools.has(x));
+    const tools=[...new Set(d.required_tools.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim()))];
     const scope=d.candidate_scope.filter(agent=>this.agentEligible(agent));
     const subs=new SubagentService(this.db);
     const resources=(d.workforce_resources??[]).filter(r=>{
