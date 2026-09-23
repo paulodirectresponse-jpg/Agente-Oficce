@@ -17,6 +17,40 @@ export class CapabilityRepository{
  create(input:{key:string;label:string;domain:string;parent_key?:string|null;description?:string;metadata?:Record<string,unknown>}){const key=input.key.trim().toLowerCase(),domain=input.domain.trim().toLowerCase();if(!KEY.test(key)||!KEY.test(domain))throw new Error('CAPABILITY_KEY_INVALID');if(input.parent_key&&!this.get(input.parent_key))throw new Error('CAPABILITY_PARENT_NOT_FOUND');if(input.parent_key&&(input.parent_key===key||input.parent_key.startsWith(key+'.')))throw new Error('CAPABILITY_HIERARCHY_INVALID');const t=now();this.db.prepare(`INSERT INTO capability_definitions(key,label,domain,parent_key,description,version,status,metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,1,'active',?,?,?)`).run(key,input.label.trim()||key,domain,input.parent_key??null,input.description??'',JSON.stringify(input.metadata??{}),t,t);return this.get(key)!}
  listAgent(agentId:string):AgentCapability[]{return (this.db.prepare('SELECT * FROM agent_capabilities WHERE agent_id=? ORDER BY capability_key').all(agentId) as any[]).map(r=>({...r,enabled:Boolean(r.enabled)}))}
  replaceAgent(agentId:string,items:Array<{capability_key:string;declared_score?:number;enabled?:boolean;source?:CapabilitySource}>){if(!this.db.prepare('SELECT 1 FROM agents WHERE id=?').get(agentId))throw new Error('AGENT_NOT_FOUND');const seen=new Set<string>();for(const x of items){if(seen.has(x.capability_key))throw new Error('AGENT_CAPABILITY_DUPLICATE');seen.add(x.capability_key);if(!this.get(x.capability_key))throw new Error('CAPABILITY_NOT_FOUND')}this.db.transaction(()=>{const existing=new Map(this.listAgent(agentId).map(x=>[x.capability_key,x]));this.db.prepare('DELETE FROM agent_capabilities WHERE agent_id=?').run(agentId);const ins=this.db.prepare(`INSERT INTO agent_capabilities(agent_id,capability_key,declared_score,verified_score,confidence,evidence_count,source,enabled,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`);for(const x of items){const prev=existing.get(x.capability_key);const learned=prev?.source==='learned';ins.run(agentId,x.capability_key,Math.max(0,Math.min(1,x.declared_score??prev?.declared_score??0.5)),prev?.verified_score??null,prev?.confidence??0,prev?.evidence_count??0,learned?'learned':(x.source??prev?.source??'manual'),x.enabled===false?0:1,now())}})();return this.listAgent(agentId)}
+ inferAgent(agentId:string){
+    this.seed();
+    const agent=this.db.prepare('SELECT name,role,description,system_prompt FROM agents WHERE id=?').get(agentId) as any;
+    if(!agent)throw new Error('AGENT_NOT_FOUND');
+    const text=`${agent.name??''} ${agent.role??''} ${agent.description??''} ${agent.system_prompt??''}`.toLowerCase();
+    const defs=new Map(this.list().map(d=>[d.key,d]));
+    const rules:Array<[string,RegExp,number]>=[
+      ['software.frontend.react',/\breact\b|next\.?js|jsx|tsx/i,.9],
+      ['software.frontend',/frontend|front-end|interface|ui\b|css|html|landing page/i,.8],
+      ['software.backend',/backend|back-end|api\b|server|node\.?js|express|fastify|database|banco de dados/i,.85],
+      ['software.testing',/test|testing|qa\b|review|revis|debug|bug|quality assurance/i,.8],
+      ['software',/software|c[oó]digo|code\b|program|developer|engenheiro|engineer|aplicativo|app\b|site|sistema/i,.7],
+      ['marketing.copywriting',/copywriting|copywriter|copy\b|direct response|vsl|criativo|an[uú]ncio/i,.9],
+      ['marketing',/marketing|growth|tr[aá]fego|campaign|campanha/i,.75],
+      ['video.editing',/edi[cç][aã]o de v[ií]deo|video editing|editor de v[ií]deo|premiere|capcut|after effects/i,.9],
+      ['video',/v[ií]deo|video|ugc|cinematic|storyboard/i,.7],
+      ['research',/research|pesquisa|investigar|investigation|buscar fontes|fontes/i,.8],
+      ['operations',/opera[cç][oõ]es|operations|workflow|processo|gest[aã]o|coordena[cç][aã]o/i,.75],
+      ['data',/dados|data\b|analytics|sql\b|planilha|spreadsheet|estat[ií]stica/i,.8],
+      ['design',/design|designer|figma|ux\b|ui\b|visual|layout/i,.8],
+      ['security',/seguran[cç]a|security|auth|authentication|oauth|permission|vulnerab/i,.85],
+    ];
+    const inferred=new Map<string,number>();
+    for(const [key,regex,score] of rules)if(defs.has(key)&&regex.test(text))inferred.set(key,Math.max(inferred.get(key)??0,score));
+    const addParents=(key:string,score:number)=>{let cur=defs.get(key);while(cur?.parent_key){if(!inferred.has(cur.parent_key))inferred.set(cur.parent_key,Math.max(.55,score-.15));cur=defs.get(cur.parent_key)}};
+    for(const [key,score] of [...inferred])addParents(key,score);
+    const existing=new Map(this.listAgent(agentId).map(x=>[x.capability_key,x]));
+    const merged=[...existing.values()].map(x=>({capability_key:x.capability_key,declared_score:x.declared_score,enabled:x.enabled,source:x.source}));
+    for(const [key,score] of inferred){
+      if(existing.has(key))continue;
+      merged.push({capability_key:key,declared_score:score,enabled:true,source:'seed' as CapabilitySource});
+    }
+    return this.replaceAgent(agentId,merged);
+  }
  seedAgents(){this.seed();const agents=this.db.prepare('SELECT id,role,description FROM agents').all() as any[];const infer=(s:string)=>{const x=s.toLowerCase(),o:string[]=[];if(/architect|executor|develop|code|program|builder/.test(x))o.push('software');if(/review|test/.test(x))o.push('software.testing');if(/market|copy/.test(x))o.push('marketing');if(/video|edit/.test(x))o.push('video');if(/research/.test(x))o.push('research');return [...new Set(o)]};const ins=this.db.prepare(`INSERT OR IGNORE INTO agent_capabilities(agent_id,capability_key,declared_score,verified_score,confidence,evidence_count,source,enabled,updated_at) VALUES(?,?,0.45,NULL,0.35,0,'seed',1,?)`);this.db.transaction(()=>{for(const a of agents)for(const k of infer(`${a.role} ${a.description}`))ins.run(a.id,k,now())})()}
 }
 function ancestors(defs:Map<string,CapabilityDefinition>,key:string){const o:string[]=[];let c=defs.get(key);const seen=new Set<string>();while(c?.parent_key&&!seen.has(c.parent_key)){seen.add(c.parent_key);o.push(c.parent_key);c=defs.get(c.parent_key)}return o}
