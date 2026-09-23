@@ -124,7 +124,7 @@ export class OrchestratorGateway {
     }
 
     decision=this.policyValidate(decision,keys);
-    if((decision.required_capabilities.length||decision.required_tools.length)&&(decision.target_mode==='needs_gap_analysis'||(decision.target_mode==='dynamic_team'&&!decision.candidate_scope.length))){
+    if((decision.required_capabilities.length||decision.required_tools.length)&&(decision.target_mode==='needs_gap_analysis'||(decision.target_mode==='dynamic_team'&&!decision.candidate_scope.length)||(decision.target_mode==='existing_team'&&!decision.target_team_id)||(decision.target_mode==='direct_agent'&&!decision.target_agent_id))){
       const gap=new GapAnalysisService(this.db).analyze(decision.required_capabilities,decision.required_tools);
       if(gap.resolution==='active_agent'&&gap.selected_agent_ids.length===1)decision={...decision,target_mode:'direct_agent',target_agent_id:gap.selected_agent_ids[0],candidate_scope:gap.selected_agent_ids,explanation:gap.explanation,confidence:.95};
       else if(gap.resolution==='existing_team'&&gap.selected_team_id)decision={...decision,target_mode:'existing_team',target_team_id:gap.selected_team_id,candidate_scope:[],explanation:gap.explanation,confidence:.95};
