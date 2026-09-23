@@ -69,6 +69,16 @@ export function IntegrationsView({project}:{project:Project|null}){
     finally{setBusy(null)}
   }
 
+  async function removeConnection(connection:IntegrationConnection){
+    if(connection.driver==='browser')return;
+    setBusy('delete:'+connection.id);
+    try{
+      await api.deleteIntegrationV3(connection.id);
+      await load();
+    }catch(error){setMessage(error instanceof Error?error.message:'Falha ao remover integração.')}
+    finally{setBusy(null)}
+  }
+
   async function toggleEnabled(connection:IntegrationConnection){
     setBusy('enable:'+connection.id);
     try{await api.updateIntegrationV3(connection.id,{enabled:!connection.enabled});await load()}
@@ -123,6 +133,7 @@ export function IntegrationsView({project}:{project:Project|null}){
               <button className="btn" disabled={busy!==null} onClick={()=>void test(connection)}>{busy==='test:'+connection.id?'Testando…':'Testar'}</button>
               <button className="btn" disabled={busy!==null} onClick={()=>void toggleEnabled(connection)}>{connection.enabled?'Desativar':'Ativar'}</button>
               {project&&<button className={bound?'btn btn-primary':'btn'} disabled={busy!==null} onClick={()=>void toggleBinding(connection)}>{bound?'Vinculada ao Project':'Vincular ao Project'}</button>}
+              {connection.driver!=='browser'&&<button className="btn btn-danger" disabled={busy!==null} onClick={()=>void removeConnection(connection)}>{busy==='delete:'+connection.id?'Removendo…':'Remover'}</button>}
             </div>
           </article>
         })}
