@@ -15,7 +15,6 @@ import { OrchestratorView } from './OrchestratorView.js';
 import { WorkforcesView } from './WorkforcesView.js';
 import { DevChatView } from './DevChatView.js';
 import { TrabalhoView } from './TrabalhoView.js';
-import { LegacyNav } from './shell/LegacyNav.js';
 import { ProjectSwitcher } from './shell/ProjectSwitcher.js';
 import type { ProjectMenuAction } from './shell/ProjectSwitcher.js';
 import { SystemCenterView } from './shell/SystemCenterView.js';
@@ -137,8 +136,6 @@ export function AgentOfficeApp() {
         </nav>
 
         <div className="sidebar-spacer" />
-
-        {!sidebarCollapsed && <LegacyNav current={view} onNavigate={navigate} />}
 
         <SystemStatusFooter runtimeState={runtimeState} onOpenSystem={() => navigate('system')} />
       </aside>
