@@ -23,7 +23,8 @@
     "release:preflight": "tsx scripts/release-preflight.ts",
     "release:version": "node scripts/check-release-version.mjs",
     "release:manifest": "node scripts/release-manifest.mjs",
-    "release:gate": "npm run release:version && npm run test && npm run lint && npm run build && npm run benchmark && npm run release:preflight"
+    "release:gate": "npm run release:version && npm run test && npm run lint && npm run build && npm run benchmark && npm run release:preflight",
+    "release:provider-smoke": "tsx scripts/provider-smoke.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
