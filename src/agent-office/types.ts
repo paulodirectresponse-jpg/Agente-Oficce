@@ -312,6 +312,41 @@ export interface TeamMember {
   model_enabled?: boolean;
 }
 
+export interface SubagentCapability {
+  subagent_id: string;
+  capability_key: string;
+  declared_score: number;
+  verified_score: number | null;
+  confidence: number;
+  evidence_count: number;
+  source: 'manual' | 'seed' | 'learned';
+  enabled: boolean;
+  updated_at: string;
+}
+
+export interface Subagent {
+  id: string;
+  team_id: string;
+  owner_agent_id: string;
+  name: string;
+  slug: string;
+  role: string;
+  description: string;
+  avatar_key: string;
+  provider_id: string | null;
+  model_id: string | null;
+  system_prompt: string;
+  enabled: boolean;
+  paused: boolean;
+  sort_order: number;
+  metadata: Record<string, unknown>;
+  readiness: string;
+  readiness_reason: string;
+  capabilities: SubagentCapability[];
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Team {
   id: string;
   name: string;
@@ -329,6 +364,8 @@ export interface Team {
   current_version: number;
   policy: TeamPolicy;
   members: TeamMember[];
+  subagents: Subagent[];
+  legacy_members?: TeamMember[];
   created_at: string;
   updated_at: string;
 }
@@ -504,6 +541,7 @@ export interface TeamRoomEntry {
   id: string;
   team_id: string;
   agent_id: string | null;
+  subagent_id?: string | null;
   entry_type: 'activity'|'decision'|'memory'|'note'|'delegation'|'result';
   content: string;
   payload: Record<string, unknown>;
