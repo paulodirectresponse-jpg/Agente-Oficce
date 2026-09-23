@@ -156,12 +156,44 @@ After review:
 
 ## Verification log
 
+### 2026-09-23 — Final review gate for conversation/activity/room refresh
+
+**Verified code HEAD:** `9e322416bbe137d88960f59a7f184627691d5903`
+**PR:** #45 (kept open; no merge to main)
+**Workflow:** Agent Office Desktop Gate `35923542502` — PASS
+
+- Release version consistency: PASS (0.4.0)
+- Unit + integration tests: PASS — 47 files / 255 tests
+- New MessageContent regression tests: PASS — 4/4
+- New OfficeMap regression tests: PASS — 2/2
+- Deterministic benchmark: PASS — 9/9
+- Release preflight: PASS
+- TypeScript (`tsc --noEmit`): PASS
+- Client + server build: PASS
+- Tauri desktop build: PASS
+- Bundled backend runtime smoke: PASS
+- Installed desktop lifecycle smoke: PASS
+- MSI verification: PASS — `Agent Office_0.4.0_x64_en-US.msi` (49,311,416 bytes)
+- Release manifest + CI artifacts: PASS
+
+**Checkpoint commits**
+- A: `0353dbdb87a538400beba607b4b2019a15a1f557` — ux: polish conversation and activity
+- B: `17150d23c67bd8f50d60c2047054a17ca8d96496` — ux: fit room workspace to native viewport
+- C: `380b3d3bc94f3535ed6f90a9657e030aab9c22e0` — ux: rebuild office room experience
+- D: `ea4054e08ac5a2b19f8ba33f97fa74072f556006` — ux: harden room and conversation experience
+- Gate correction: `9e322416bbe137d88960f59a7f184627691d5903` — fix: clear UX hardening typecheck gate
+
+**Licensing/assets**
+- No new third-party dependency, engine, sprite, tileset or external visual asset was incorporated.
+- Open-source research and license review lives in `docs/plans/OFFICE_2D_OPEN_SOURCE_REVIEW.md`.
+
+
 ### 2026-09-23 — ChatGPT (hardening gate correction)
 
 - First review gate workflow 35923138775: unit/integration tests PASS (249), benchmark PASS, release preflight PASS; TypeScript stopped on one unused legacy constant in OfficeView after the scene replacement.
 - Removed the dead constant instead of suppressing TypeScript.
 - Updated Vitest include so the new frontend regression tests are executed by the standard test command rather than only typechecked.
-- A fresh PR gate is required after this correction.
+- Fresh PR gate `35923542502` completed successfully on Windows for code HEAD `9e322416bbe137d88960f59a7f184627691d5903`.
 
 
 ### 2026-09-23 — ChatGPT (review checkpoint D: hardening)
