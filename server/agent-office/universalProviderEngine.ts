@@ -1171,6 +1171,7 @@ export class UniversalProviderEngine {
     let lastError: unknown;
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
+      if (candidate.implicit && lastError && !this.isModelScopedTransient(lastError)) continue;
       try {
         return await this.completeCandidate(candidate.providerId, candidate.model, input, options);
       } catch (error) {
@@ -1190,6 +1191,7 @@ export class UniversalProviderEngine {
     let lastError: unknown;
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
+      if (candidate.implicit && lastError && !this.isModelScopedTransient(lastError)) continue;
       const provider = this.provider(candidate.providerId);
       let release: (() => void) | null = null;
       let emitted = false;
