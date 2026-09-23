@@ -72,7 +72,7 @@ describe('Block 11 Integration Registry',()=>{
       await service.create({driver:'github',name:'GitHub',auth_mode:'cli'});
       const registry=new ToolRegistry();
       const policy:AgentToolPolicy={agent_id:'a1',enabled:true,allowed_tools:registry.listDefinitions().map(x=>x.name),approval_mode:'safe',max_tool_steps:20,updated_at:new Date().toISOString()};
-      const context={database:f.db.connection,project_id:'p1',project_root:f.root,run_id:'r1',agent_id:'a1',idempotency_key:'merge-42'};
+      const context={database:f.db.connection,project_id:'p1',project_root:f.root,run_id:'r1',agent_id:'a1'};
       const first=await registry.execute('github_pr_merge',{repo:'owner/repo',number:42},policy,context);
       const second=await registry.execute('github_pr_merge',{repo:'owner/repo',number:42},policy,context);
       expect(first).toMatchObject({ok:false,error:'TOOL_APPROVAL_REQUIRED',approval_required:true});
