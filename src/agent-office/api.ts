@@ -165,7 +165,7 @@ export const api = {
   },
   listAgentOverviewsV2: () => request<AgentOverview[]>('/api/agent-office/v2/agent-overviews'),
   getAgentOverviewV2: (agentId: string) => request<AgentOverview>(`/api/agent-office/v2/agents/${agentId}/overview`),
-  recordAgentPerformanceV2: (agentId: string, input: { event_type: string; run_id?: string; project_id?: string; score?: number; detail?: string }) =>
+  recordAgentPerformanceV2: (agentId: string, input: { event_type: string; run_id?: string; project_id?: string; score?: number; source?: string; detail?: string }) =>
     request<AgentOverview>(`/api/agent-office/v2/agents/${agentId}/performance-events`, { method: 'POST', body: JSON.stringify(input) }),
   listCapabilitiesV3: () => request<CapabilityDefinitionV3[]>('/api/agent-office/v3/capabilities'),
   listAgentCapabilitiesV3: (agentId: string) => request<AgentCapabilityV3[]>(`/api/agent-office/v3/agents/${agentId}/capabilities`),
