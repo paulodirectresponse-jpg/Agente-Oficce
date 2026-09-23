@@ -4951,3 +4951,53 @@ textarea {
 .system-v2-diagnostic-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;padding:10px;border:1px solid var(--v2-line);border-radius:8px;background:#09141e}.system-v2-diagnostic-head>div{display:flex;align-items:center;gap:8px}.system-v2-diagnostic-head strong{font-size:12px}.system-v2-diagnostic-head span,.system-v2-diagnostic-head time{color:#5f778d;font-size:8px}.system-v2-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.system-v2-checks article{padding:10px;border:1px solid var(--v2-line);border-radius:8px;background:#09141e}.system-v2-checks article.pass{border-color:rgba(98,213,154,.16)}.system-v2-checks article.fail{border-color:rgba(235,135,149,.22)}.system-v2-checks strong{font-size:9px}.system-v2-checks p{margin:4px 0;color:#667e93;font-size:8px}.system-v2-checks small{color:#597187;font-size:7px}
 @media(max-width:950px){.settings-v2-section{flex-direction:column}.settings-v2-row{min-width:0;width:100%}.settings-v2-orch-levels>section{grid-template-columns:1fr}.system-v2-health-summary,.system-v2-orch-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.settings-v2-page,.system-v2-page{padding:18px 14px 36px}.settings-v2-tool-grid,.settings-v2-preflight,.system-v2-tool-health,.system-v2-orch-grid,.system-v2-checks{grid-template-columns:1fr}.system-v2-health-summary,.system-v2-orch-kpis{grid-template-columns:1fr}.system-v2-activity article{grid-template-columns:8px minmax(0,1fr)}.system-v2-activity time{grid-column:2;text-align:left}}
+
+
+/* =========================================================
+   UX V2 — Phase 3 polish, accessibility and reflow
+   ========================================================= */
+.ux2-skip-link{position:fixed;top:8px;left:8px;z-index:200;transform:translateY(-160%);padding:8px 11px;border-radius:8px;background:#e9f4ff;color:#071019;font-size:10px;font-weight:700;text-decoration:none;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.ux2-skip-link:focus{transform:none}
+:where(button,a,input,select,textarea,summary,[role="tab"],[role="menuitem"]):focus-visible{outline:2px solid #67adff;outline-offset:2px}
+:where(button,a,input,select,textarea):disabled{cursor:not-allowed}
+.v2-tabs button:focus-visible,.experience-nav-button:focus-visible,.ux2-switcher-button:focus-visible,.ux2-system-button:focus-visible{box-shadow:0 0 0 2px rgba(62,150,255,.22)}
+.ux2-shell-loading{height:100%;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#6e859a;text-align:center;padding:24px}
+.ux2-shell-loading strong{color:#cbdbe9;font-size:13px}.ux2-shell-loading small{font-size:9px}.ux2-loading-dot{width:8px;height:8px;border-radius:50%;background:var(--v2-live);box-shadow:0 0 12px rgba(78,201,217,.45);animation:ao-pulse-dot 1.5s ease-in-out infinite}
+.analytics-data-quality{margin-top:10px;border:1px solid rgba(111,148,191,.12);border-radius:9px;background:rgba(255,255,255,.01)}
+.analytics-data-quality>summary{cursor:pointer;padding:10px 12px;color:#71899f;font-size:9px;list-style:none}
+.analytics-data-quality>summary::-webkit-details-marker{display:none}
+.analytics-data-quality>summary::after{content:'+';float:right;color:#587188}
+.analytics-data-quality[open]>summary::after{content:'−'}
+.analytics-data-quality .analytics-quality{margin:0;padding:0 10px 10px}
+.v2-empty-state[aria-busy="true"]{opacity:.8}
+.runtime-banner{position:relative;z-index:50}
+.integration-modal:focus{outline:none}
+.integration-modal-backdrop{backdrop-filter:blur(3px)}
+.experience-main,.team-v2-detail,.projects-v3-detail,.connections-v2-detail,.settings-v2-panel,.system-v2-panel{min-width:0}
+.team-v2-panel p,.projects-v3-panel p,.connections-v2-panel p,.settings-v2-panel p,.system-v2-panel p{word-break:normal;overflow-wrap:break-word}
+.team-v2-panel code,.projects-v3-panel code,.connections-v2-panel code,.settings-v2-panel code,.system-v2-panel code{overflow-wrap:anywhere}
+@media(max-width:1366px){
+  .team-v2-page,.projects-v3-page,.connections-v2-page,.settings-v2-page,.system-v2-page{padding-left:20px;padding-right:20px}
+  .experience-sidebar{width:210px}
+  .experience-shell.sidebar-collapsed .experience-sidebar{width:62px}
+}
+@media(max-width:900px){
+  .experience-shell:not(.sidebar-collapsed){grid-template-columns:62px minmax(0,1fr)}
+  .experience-shell:not(.sidebar-collapsed) .brand-copy,
+  .experience-shell:not(.sidebar-collapsed) .ux2-switcher-name,
+  .experience-shell:not(.sidebar-collapsed) .ux2-switcher-caret,
+  .experience-shell:not(.sidebar-collapsed) .nav-label,
+  .experience-shell:not(.sidebar-collapsed) .ux2-system-text{display:none}
+  .experience-shell:not(.sidebar-collapsed) .experience-sidebar{width:62px}
+}
+@media(max-width:620px){
+  .v2-page-header{flex-direction:column;align-items:stretch}
+  .v2-page-actions{justify-content:flex-start}
+  .v2-tabs{width:100%;overflow-x:auto;scrollbar-width:thin}
+  .v2-tabs button{flex:0 0 auto}
+  .team-v2-list,.projects-v3-list,.connections-v2-list{grid-template-columns:1fr}
+  .projects-v3-kpis,.projects-v3-current{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.001ms!important;animation-duration:.001ms!important;animation-iteration-count:1!important}
+}
