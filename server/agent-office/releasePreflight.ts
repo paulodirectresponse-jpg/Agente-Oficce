@@ -29,7 +29,7 @@ export async function runReleasePreflight(db:Database,activeTools=false,options:
   add('database.foreign_keys','Foreign keys',fk.length?'fail':'pass',fk.length?String(fk.length)+' violations':'No violations',true);
 
   const migration=Number((db.prepare('SELECT MAX(version) version FROM schema_migrations').get() as any)?.version??0);
-  add('database.migrations','Migrations',migration>=22?'pass':'fail','Schema migration '+migration,true);
+  add('database.migrations','Migrations',migration>=23?'pass':'fail','Schema migration '+migration,true);
 
   const root=getProjectRootSetting(db);
   const rootExists=fs.existsSync(root.path);
