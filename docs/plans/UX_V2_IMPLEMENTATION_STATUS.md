@@ -6,12 +6,12 @@ Update it **before every work session ends**.
 
 ## Current state
 
-- Overall: READY TO START
+- Overall: PHASE 1 IN PROGRESS
 - Current macro phase: Phase 1 — Foundation + Trabalho
-- Current checkpoint: Shell V2
+- Current checkpoint: 1.1 Shell V2 (done) → next 1.2 design tokens/primitives, then 1.3 Trabalho V2
 - Implementation branch: `ux-v2-redesign`
 - Baseline from main: `c153ea4e61b3456ef18c435afaa83a360bb14fca`
-- Last implementation checkpoint: none yet
+- Last implementation checkpoint: `ux: establish V2 shell and project switcher` (see handoff below)
 - Blocked: no
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
 
@@ -23,26 +23,21 @@ Update it **before every work session ends**.
 - Repository-local UX/design skills installed.
 - Root `DESIGN.md` approved contract created.
 - 3-phase implementation plan created.
+- Shell V2 (checkpoint 1.1): primary nav reduced to Trabalho / Equipe / Conexões / Configurações; compact Project Switcher dropdown (switch, Novo projeto, Todos os projetos, Configurações do projeto); compact system status footer opening System Center; System Center shell with Atividade / Uso & Custo / Saúde / Orquestração / Diagnóstico; legacy views kept reachable via quiet "Áreas antigas" disclosure group in sidebar (compatibility routing, nothing deleted).
 
 ## In progress
 
-Implementation branch created and ready for Kimi Code.
+Next: checkpoint 1.2 (design tokens + shared primitives: AppShell, PageHeader, Tabs, Drawer, EmptyState, Status, Modal, List) and 1.3 (Trabalho V2 conversation-first workspace merging Office + DevChat, execution summary, Inspector, Sala mode).
 
 ## Next exact action
 
-Start Phase 1 on `ux-v2-redesign`:
+Continue Phase 1 on `ux-v2-redesign`:
 
-1. inspect `AgentOfficeApp.tsx`, `App.css`, `DevChatView.tsx`, `OfficeView.tsx` and Workbench;
-2. implement Shell V2 without deleting legacy views;
-3. reduce primary nav to Trabalho / Equipe / Conexões / Configurações;
-4. implement compact Project Switcher and System status entry;
-5. keep old views reachable internally until parity is achieved;
-6. verify typecheck/build;
-7. commit and push checkpoint.
-
-Recommended first commit:
-
-`ux: establish V2 shell and project switcher`
+1. extract design tokens from `App.css` Experience V2 variables into a documented token set (checkpoint 1.2);
+2. build shared primitives under `src/agent-office/shell/` or `src/agent-office/components/`;
+3. build Trabalho V2 (checkpoint 1.3): conversation-first layout with composer, compact execution status, contextual Preview/Inspector, Sala secondary mode;
+4. keep old OfficeView/DevChatView reachable until parity;
+5. verify typecheck/build/tests; commit and push each checkpoint.
 
 ## Known UX defects to eliminate
 
@@ -65,6 +60,14 @@ Recommended first commit:
 ## Verification log
 
 Add entries newest first.
+
+### 2026-09-23 — Kimi Code (checkpoint 1.1: Shell V2 + Project Switcher)
+
+- tests: `npm test` → 45 files / 249 tests passed
+- typecheck: `npm run lint` (tsc --noEmit) → clean
+- build: `npm run build` (vite client + tsc server) → clean
+- runtime code changed: frontend shell only (`src/agent-office/AgentOfficeApp.tsx`, new `src/agent-office/shell/*`, `App.css` new "UX V2 Shell" section); backend untouched
+- legacy views preserved via "Áreas antigas" group; no functionality deleted
 
 ### Planning baseline
 
