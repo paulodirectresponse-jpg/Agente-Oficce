@@ -1222,6 +1222,71 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
     `,
   },
 
+  {
+    version: 23,
+    sql: `
+      CREATE TABLE IF NOT EXISTS integration_connections (
+        id TEXT PRIMARY KEY,
+        driver TEXT NOT NULL,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        auth_mode TEXT NOT NULL DEFAULT 'none',
+        secret_ref TEXT,
+        health_status TEXT NOT NULL DEFAULT 'unknown'
+          CHECK(health_status IN ('unknown','healthy','degraded','auth_error','unavailable','misconfigured')),
+        last_health_at TEXT,
+        last_error TEXT,
+        config_json TEXT NOT NULL DEFAULT '{}',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_integrations_driver
+        ON integration_connections(driver,enabled,health_status);
+
+      CREATE TABLE IF NOT EXISTS integration_capabilities (
+        integration_id TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+        capability_key TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        risk TEXT NOT NULL CHECK(risk IN ('read','write','execute','external','destructive')),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        PRIMARY KEY(integration_id, capability_key, tool_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_integration_cap_tool
+        ON integration_capabilities(tool_name,enabled);
+
+      CREATE TABLE IF NOT EXISTS project_integration_bindings (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        integration_id TEXT NOT NULL REFERENCES integration_connections(id) ON DELETE CASCADE,
+        scope_json TEXT NOT NULL DEFAULT '{}',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(project_id,integration_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_integrations
+        ON project_integration_bindings(project_id,integration_id);
+
+      CREATE TABLE IF NOT EXISTS integration_events (
+        id TEXT PRIMARY KEY,
+        integration_id TEXT REFERENCES integration_connections(id) ON DELETE CASCADE,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        event_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'info',
+        operation TEXT NOT NULL DEFAULT '',
+        detail TEXT NOT NULL DEFAULT '',
+        payload_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_integration_events_connection
+        ON integration_events(integration_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_integration_events_project
+        ON integration_events(project_id,created_at DESC);
+    `,
+  },
+
 ];
 
 function assertMigrationPlan(): void {
