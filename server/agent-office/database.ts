@@ -988,6 +988,10 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
 
       ALTER TABLE team_room_entries ADD COLUMN subagent_id TEXT REFERENCES subagents(id) ON DELETE SET NULL;
 
+      DELETE FROM agent_relations
+      WHERE relation_type = 'supervises'
+        AND json_extract(metadata_json, '$.source') = 'owned_team';
+
       -- Owned teams move forward with true Subagents.
       -- Legacy team_members rows remain untouched for historical compatibility.
     `,
