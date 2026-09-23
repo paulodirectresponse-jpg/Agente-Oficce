@@ -35,6 +35,9 @@ chatRouter.post('/runs', async (request, response) => {
     const projectId = String(request.body?.project_id || '');
     const message = String(request.body?.message || '');
     const requestedTarget = typeof request.body?.target === 'string' ? request.body.target : 'auto';
+    if (!database.connection.prepare('SELECT 1 FROM projects WHERE id=?').get(projectId)) {
+      throw new Error('CHAT_PROJECT_NOT_FOUND');
+    }
 
     const orchestration = await new OrchestratorGateway(
       database.connection,
@@ -56,7 +59,7 @@ chatRouter.post('/runs', async (request, response) => {
       ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
     } else if (decision.target_mode === 'dynamic_team' && decision.target_team_id) {
       selectedAgentIds = (database.connection.prepare(
-        'SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? ORDER BY created_at'
+        'SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? AND enabled=1 ORDER BY priority,created_at'
       ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
     } else if (decision.candidate_scope.length) {
       selectedAgentIds = decision.candidate_scope;
