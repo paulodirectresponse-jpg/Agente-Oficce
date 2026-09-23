@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3 } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3 } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -241,8 +241,18 @@ export const api = {
   getOwnedTeamV3: (agentId: string) => request<Team | null>(`/api/agent-office/v3/agents/${agentId}/team`),
   createOwnedTeamV3: (agentId: string, input: { name: string; slug: string; purpose?: string; max_parallelism?: number; max_delegation_depth?: number; allow_external_borrowing?: boolean }) =>
     request<Team>(`/api/agent-office/v3/agents/${agentId}/team`, { method: 'POST', body: JSON.stringify(input) }),
-  saveOwnedSubagentsV3: (agentId: string, members: Array<Pick<TeamMember,'agent_id'|'role_name'|'priority'|'enabled'>>) =>
-    request<Team>(`/api/agent-office/v3/agents/${agentId}/team/subagents`, { method: 'PUT', body: JSON.stringify({ members }) }),
+  listOwnedSubagentsV3: (agentId: string) =>
+    request<Subagent[]>(`/api/agent-office/v3/agents/${agentId}/team/subagents`),
+  createOwnedSubagentV3: (agentId: string, input: Partial<Subagent> & { name: string }) =>
+    request<Subagent>(`/api/agent-office/v3/agents/${agentId}/team/subagents`, { method: 'POST', body: JSON.stringify(input) }),
+  listTeamSubagentsV3: (teamId: string) =>
+    request<Subagent[]>(`/api/agent-office/v3/teams/${teamId}/subagents`),
+  createTeamSubagentV3: (teamId: string, input: Partial<Subagent> & { name: string }) =>
+    request<Subagent>(`/api/agent-office/v3/teams/${teamId}/subagents`, { method: 'POST', body: JSON.stringify(input) }),
+  updateTeamSubagentV3: (teamId: string, subagentId: string, patch: Partial<Subagent>) =>
+    request<Subagent>(`/api/agent-office/v3/teams/${teamId}/subagents/${subagentId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteTeamSubagentV3: (teamId: string, subagentId: string) =>
+    request<{ deleted: boolean }>(`/api/agent-office/v3/teams/${teamId}/subagents/${subagentId}`, { method: 'DELETE' }),
   getTeamRoomV3: (teamId: string) => request<TeamRoom>(`/api/agent-office/v3/teams/${teamId}/room`),
   updateTeamRoomV3: (teamId: string, patch: Partial<Pick<TeamRoom,'instructions'|'shared_context'|'memory'>>) =>
     request<TeamRoom>(`/api/agent-office/v3/teams/${teamId}/room`, { method: 'PATCH', body: JSON.stringify(patch) }),
