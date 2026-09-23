@@ -89,6 +89,7 @@ export function AgentOfficeApp() {
 
   return (
     <div className={`app-shell experience-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <a className="ux2-skip-link" href="#main-content">Ir para o conteúdo</a>
       <aside className="app-sidebar experience-sidebar">
         <div className="brand-row">
           <div className="brand-mark">A</div>
