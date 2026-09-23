@@ -990,7 +990,7 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
 
       DELETE FROM agent_relations
       WHERE relation_type = 'supervises'
-        AND json_extract(metadata_json, '$.source') = 'owned_team';
+        AND metadata_json LIKE '%"source":"owned_team"%';
 
       -- Owned teams move forward with true Subagents.
       -- Legacy team_members rows remain untouched for historical compatibility.
