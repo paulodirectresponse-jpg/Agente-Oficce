@@ -40,6 +40,20 @@ describe('usage tracker', () => {
     expect(summary.runs).toBe(0);
   });
 
+  it('persists project, run, model and cost provenance for run usage', () => {
+    const tracker = new UsageTracker(database.connection);
+    const now = new Date().toISOString();
+    const dataRoot = path.join(dataDir, 'trace-project');
+    return fs.mkdir(dataRoot, { recursive: true }).then(() => {
+      database.connection.prepare("INSERT INTO projects(id,name,root_path,created_at,updated_at) VALUES('p-trace','Trace',?,?,?)").run(dataRoot, now, now);
+      database.connection.prepare("INSERT INTO conversations(id,project_id,title,created_at,updated_at) VALUES('c-trace','p-trace','Main',?,?)").run(now, now);
+      database.connection.prepare("INSERT INTO chat_runs(id,conversation_id,project_id,status,mode,started_at,metadata_json) VALUES('r-trace','c-trace','p-trace','completed','single',?,'{}')").run(now);
+      tracker.recordRunUsage('kimi','kimi',{ input_tokens: 10, output_tokens: 5, cost_usd: 0.01 }, { projectId: 'p-trace', runId: 'r-trace', costKind: 'estimated' });
+      const row = database.connection.prepare("SELECT project_id,run_id,cost_kind FROM usage_snapshots WHERE run_id='r-trace'").get();
+      expect(row).toEqual({ project_id: 'p-trace', run_id: 'r-trace', cost_kind: 'estimated' });
+    });
+  });
+
   it('keeps provider raw payloads alongside normalized values', () => {
     const tracker = new UsageTracker(database.connection);
     tracker.record({ agentId: 'claude', provider: 'claude-gateway', source: 'provider', raw: { quota_percent: 77 }, normalized: { input_tokens: 10 } });
