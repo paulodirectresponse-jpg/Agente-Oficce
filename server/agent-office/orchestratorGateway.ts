@@ -38,6 +38,44 @@ export class OrchestratorGateway {
     catch { return false; }
   }
 
+  private classifyFeedback(message:string):{event_type:'accepted'|'rework_requested'|'rejected';confidence:number;reason:string}|null{
+    const text=message.trim().toLowerCase();
+    if(!text||text.length>900)return null;
+    if(/\b(n[aã]o tem nada a ver|totalmente errado|completamente errado|refa[cç]a tudo|rejeitado|rejeito|isso est[aá] todo errado)\b/i.test(text))
+      return{event_type:'rejected',confidence:.96,reason:'Explicit rejection of the previous delivery.'};
+    if(/\b(est[aá]|ficou|continua|ainda).{0,35}\b(errad[oa]|incorret[oa]|bugad[oa])\b|\b(corrija|corrigir|conserte|arrume|faltou|n[aã]o ficou|precisa corrigir|tem um erro|deu erro)\b/i.test(text))
+      return{event_type:'rework_requested',confidence:.9,reason:'Explicit correction request for the previous delivery.'};
+    const acceptance=/^(perfeito|perfeita|funcionou|deu certo|aprovado|aprovada|ficou bom|ficou [oó]timo|[oó]timo|excelente|show|beleza|isso mesmo|era isso|agora sim|tudo certo)\b/i.test(text);
+    const contrast=/\b(mas|por[eé]m|s[oó] que|entretanto|ainda|por outro lado)\b/i.test(text);
+    if(acceptance&&!contrast)
+      return{event_type:'accepted',confidence:.94,reason:'Explicit positive acceptance of the previous delivery.'};
+    return null;
+  }
+
+  private capturePreviousFeedback(input:OrchestratorInput,event:(type:string,title:string,detail?:string,payload?:Record<string,unknown>,severity?:'debug'|'info'|'warning'|'error')=>void):void{
+    if(!input.conversation_id)return;
+    const feedback=this.classifyFeedback(input.message);if(!feedback)return;
+    const row=this.db.prepare(`
+      SELECT id,agent_id,metadata_json FROM messages
+      WHERE conversation_id=? AND role='assistant' AND agent_id IS NOT NULL
+      ORDER BY created_at DESC LIMIT 1
+    `).get(input.conversation_id) as any;
+    if(!row?.agent_id)return;
+    let metadata:any={};try{metadata=JSON.parse(row.metadata_json||'{}')}catch{}
+    const runId=typeof metadata.child_run_id==='string'?metadata.child_run_id:typeof metadata.root_run_id==='string'?metadata.root_run_id:null;
+    if(!runId)return;
+    new AgentOperationsService(this.db).recordPerformance({
+      agent_id:row.agent_id,
+      run_id:runId,
+      project_id:input.project_id,
+      event_type:feedback.event_type,
+      source:'orchestrator',
+      detail:feedback.reason,
+      metadata:{confidence:feedback.confidence,user_message:input.message.slice(0,500),assistant_message_id:row.id},
+    });
+    event('orchestrator.quality_feedback','Feedback de qualidade identificado',feedback.reason,{agent_id:row.agent_id,run_id:runId,event_type:feedback.event_type,confidence:feedback.confidence});
+  }
+
   async route(input:OrchestratorInput):Promise<{level:OrchestratorLevel;decision:RoutingDecision;orchestration_run_id:string}>{
     const started=Date.now(),requestId=id(),settings=getOrchestratorSettings(this.db);this.caps.seed();
     const defs=this.caps.list(),keys=new Set(defs.map(d=>d.key)),target=normalizeTarget(input.target);
@@ -47,6 +85,7 @@ export class OrchestratorGateway {
 
     const event=(type:string,title:string,detail='',payload?:Record<string,unknown>,severity:'debug'|'info'|'warning'|'error'='info')=>staged.push({type,severity,title,detail,payload});
     event('orchestrator.received','Solicitação recebida',input.message.slice(0,240),{target});
+    this.capturePreviousFeedback(input,event);
     const base=(mode:TargetMode,explanation:string):RoutingDecision=>({request_id:requestId,normalized_goal:input.message.trim().slice(0,1000),target_mode:mode,required_capabilities:infer(input.message,keys),required_tools:[],optional_capabilities:[],complexity:complexity(input.message),risk:risk(input.message),requires_plan:complexity(input.message)==='high',candidate_scope:[],quality_controls:[],explanation,confidence:.8});
 
     if(target!=='auto'&&target!=='team'){

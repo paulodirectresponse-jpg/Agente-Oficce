@@ -33,6 +33,7 @@ export function AgentOperationsPanel({
   const [definitions, setDefinitions] = useState<CapabilityDefinitionV3[]>([]);
   const [capDraft, setCapDraft] = useState<Map<string, AgentCapabilityV3>>(new Map());
   const [busy, setBusy] = useState<string | null>(null);
+  const [capSearch, setCapSearch] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,15 +57,19 @@ export function AgentOperationsPanel({
     return () => window.clearInterval(timer);
   }, [agent.id]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, CapabilityDefinitionV3[]>();
-    for (const item of definitions) {
-      const list = map.get(item.domain) ?? [];
-      list.push(item);
-      map.set(item.domain, list);
-    }
-    return [...map.entries()];
-  }, [definitions]);
+  const capabilityList = useMemo(() => {
+    const query = capSearch.trim().toLowerCase();
+    return definitions.filter((item) => !query
+      || item.label.toLowerCase().includes(query)
+      || item.key.toLowerCase().includes(query)
+      || item.domain.toLowerCase().includes(query)
+      || item.description.toLowerCase().includes(query));
+  }, [definitions, capSearch]);
+
+  const selectedCapabilities = useMemo(
+    () => [...capDraft.values()].filter((cap) => cap.enabled),
+    [capDraft],
+  );
 
   const toggleAdmin = async (patch: Partial<AgentProfile>, key: string) => {
     setBusy(key); setError(null); setNotice(null);
@@ -98,20 +103,15 @@ export function AgentOperationsPanel({
     }
   };
 
-  const feedback = async (event_type: 'accepted'|'rework_requested'|'rejected') => {
-    if (!overview) return;
-    setBusy(event_type); setError(null); setNotice(null);
+  const inferCapabilities = async () => {
+    setBusy('infer'); setError(null); setNotice(null);
     try {
-      const next = await api.recordAgentPerformanceV2(agent.id, {
-        event_type,
-        run_id: overview.latest_run_id ?? undefined,
-        source: 'user',
-        detail: event_type === 'accepted' ? 'Resultado aprovado pelo usuário.' : event_type === 'rework_requested' ? 'Usuário solicitou retrabalho.' : 'Resultado rejeitado pelo usuário.',
-      });
-      setOverview(next);
-      setNotice('Feedback registrado.');
+      const inferred = await api.inferAgentCapabilitiesV3(agent.id);
+      setCapDraft(new Map(inferred.map((cap) => [cap.capability_key, cap])));
+      await load();
+      setNotice('Capabilities reanalisadas a partir das instruções do agente.');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Falha ao registrar feedback.');
+      setError(reason instanceof Error ? reason.message : 'Falha ao reanalisar capabilities.');
     } finally {
       setBusy(null);
     }
@@ -158,79 +158,97 @@ export function AgentOperationsPanel({
         <div><span>Último modelo usado</span><strong>{overview.last_effective_model || 'sem execução'}</strong><small>{overview.current_state}{overview.current_activity ? ` · ${overview.current_activity}` : ''}</small></div>
       </div>
 
-      <div className="agent-quality-feedback">
-        <div><strong>Qualidade da última entrega</strong><span>Esse feedback alimenta assertividade real; 502 e outras falhas operacionais ficam separados.</span></div>
+      <div className="agent-quality-learning">
         <div>
-          <button type="button" onClick={() => void feedback('accepted')} disabled={!overview.latest_run_id || busy !== null}>Aprovar</button>
-          <button type="button" onClick={() => void feedback('rework_requested')} disabled={!overview.latest_run_id || busy !== null}>Pedir retrabalho</button>
-          <button type="button" onClick={() => void feedback('rejected')} disabled={!overview.latest_run_id || busy !== null}>Rejeitar</button>
+          <strong>Qualidade aprendida pelo Chat</strong>
+          <span>O Orquestrador interpreta aprovação, correções e rejeições naturalmente na conversa. Falhas de provider continuam separadas da qualidade.</span>
         </div>
+        <span className="agent-learning-badge">Automático</span>
       </div>
 
-      <details className="agent-ops-details">
-        <summary>Capabilities</summary>
-        <div className="agent-capability-groups">
-          {grouped.map(([domain, items]) => (
-            <div key={domain}>
-              <strong>{domain}</strong>
-              <div className="agent-capability-grid">
-                {items.map((definition) => {
-                  const current = capDraft.get(definition.key);
-                  const enabled = Boolean(current?.enabled);
-                  return (
-                    <label key={definition.key} className={enabled ? 'selected' : ''}>
-                      <input
-                        type="checkbox"
-                        checked={enabled}
-                        onChange={(event) => {
-                          const next = new Map(capDraft);
-                          if (event.target.checked) {
-                            next.set(definition.key, current ?? {
-                              agent_id: agent.id,
-                              capability_key: definition.key,
-                              declared_score: 0.7,
-                              verified_score: null,
-                              confidence: 0,
-                              evidence_count: 0,
-                              source: 'manual',
-                              enabled: true,
-                              updated_at: new Date().toISOString(),
-                            });
-                          } else if (current) {
-                            next.set(definition.key, { ...current, enabled: false });
-                          }
-                          setCapDraft(next);
-                        }}
-                      />
-                      <span>{definition.label}</span>
-                      {current && (
-                        <input
-                          type="range"
-                          min={0.1}
-                          max={1}
-                          step={0.05}
-                          value={current.declared_score}
-                          disabled={!enabled}
-                          onChange={(event) => {
-                            const next = new Map(capDraft);
-                            next.set(definition.key, { ...current, declared_score: Number(event.target.value), source: 'manual' });
-                            setCapDraft(next);
-                          }}
-                        />
-                      )}
-                      <small>
-                        {current?.verified_score != null ? `verificado ${Math.round(current.verified_score*100)}% · ` : ''}
-                        {current?.evidence_count ?? 0} evidências
-                      </small>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+      <div className="agent-capabilities-card">
+        <div className="agent-capabilities-head">
+          <div>
+            <strong>Capabilities</strong>
+            <span>Detectadas automaticamente pelas instruções e ajustáveis por você.</span>
+          </div>
+          <button type="button" onClick={() => void inferCapabilities()} disabled={busy !== null}>
+            {busy === 'infer' ? 'Analisando…' : 'Reanalisar automaticamente'}
+          </button>
         </div>
-        <button type="button" className="manager-primary" onClick={() => void saveCapabilities()} disabled={busy !== null}>Salvar capabilities</button>
-      </details>
+
+        <div className="agent-capability-selected">
+          {selectedCapabilities.map((cap) => {
+            const definition = definitions.find((item) => item.key === cap.capability_key);
+            return (
+              <button key={cap.capability_key} type="button" className="agent-capability-chip" onClick={() => {
+                const next = new Map(capDraft);
+                next.set(cap.capability_key, { ...cap, enabled: false });
+                setCapDraft(next);
+              }}>
+                {definition?.label ?? cap.capability_key} <span>×</span>
+              </button>
+            );
+          })}
+          {!selectedCapabilities.length && <span className="manager-empty-small">Nenhuma selecionada ainda. O sistema tentará inferir ao salvar o agente.</span>}
+        </div>
+
+        <div className="agent-capability-picker">
+          <input
+            value={capSearch}
+            onChange={(event) => setCapSearch(event.target.value)}
+            placeholder="Pesquisar capability…"
+          />
+          <div className="agent-capability-options">
+            {capabilityList.map((definition) => {
+              const current = capDraft.get(definition.key);
+              const enabled = Boolean(current?.enabled);
+              return (
+                <button
+                  key={definition.key}
+                  type="button"
+                  className={enabled ? 'selected' : ''}
+                  onClick={() => {
+                    const next = new Map(capDraft);
+                    if (enabled && current) {
+                      next.set(definition.key, { ...current, enabled: false });
+                    } else {
+                      next.set(definition.key, current
+                        ? { ...current, enabled: true, source: current.source }
+                        : {
+                            agent_id: agent.id,
+                            capability_key: definition.key,
+                            declared_score: 0.7,
+                            verified_score: null,
+                            confidence: 0,
+                            evidence_count: 0,
+                            source: 'manual',
+                            enabled: true,
+                            updated_at: new Date().toISOString(),
+                          });
+                    }
+                    setCapDraft(next);
+                  }}
+                >
+                  <span>
+                    <strong>{definition.label}</strong>
+                    <small>{definition.domain} · {definition.description}</small>
+                  </span>
+                  <span className="capability-option-state">{enabled ? 'Selecionada' : '+'}</span>
+                </button>
+              );
+            })}
+            {!capabilityList.length && <span className="manager-empty-small">Nenhuma capability encontrada.</span>}
+          </div>
+        </div>
+
+        <div className="agent-capability-footer">
+          <span>As evidências verificadas e o aprendizado histórico não são apagados por ajustes manuais.</span>
+          <button type="button" className="manager-primary" onClick={() => void saveCapabilities()} disabled={busy !== null}>
+            {busy === 'capabilities' ? 'Salvando…' : 'Salvar capabilities'}
+          </button>
+        </div>
+      </div>
 
       <details className="agent-ops-details">
         <summary>Atividade recente</summary>

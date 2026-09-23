@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { openAgentOfficeDatabase } from './database.js';
-import { ProviderRepositoryV2 } from './v2DataModel.js';
+import { AgentRepositoryV2, ProviderRepositoryV2 } from './v2DataModel.js';
 import { CapabilityRepository } from './capabilityCore.js';
 import { OrchestratorGateway, type OrchestratorLLM } from './orchestratorGateway.js';
 import { getOrchestratorSettings, getOrchestratorStatus, saveOrchestratorSettings } from './orchestratorRuntime.js';
@@ -121,4 +121,61 @@ describe('Block 3 Central Orchestrator', () => {
       expect(JSON.stringify(timeline)).not.toMatch(/chain.of.thought/i);
     } finally { f.cleanup(); }
   });
+  it('learns approval and rework from natural chat feedback without manual buttons', async () => {
+    const f = fixture();
+    try {
+      const agents = new AgentRepositoryV2(f.database.connection);
+      const worker = agents.create({
+        id: 'feedback-agent',
+        name: 'Feedback Agent',
+        slug: 'feedback-agent',
+        provider_id: f.provider.id,
+        model_id: f.model.id,
+        enabled: true,
+      });
+      const now = new Date().toISOString();
+      f.database.connection.prepare("INSERT INTO conversations(id,project_id,title,created_at,updated_at) VALUES('feedback-conv','p','Feedback',?,?)").run(now,now);
+      f.database.connection.prepare("INSERT INTO chat_runs(id,conversation_id,project_id,agent_id,provider_id,model_id,status,mode,started_at,ended_at,metadata_json) VALUES('feedback-run','feedback-conv','p',?,?,?,'completed','single',?,?, '{}')").run(worker.id,f.provider.id,f.model.id,now,now);
+      f.database.connection.prepare("INSERT INTO messages(id,conversation_id,role,agent_id,content,created_at,metadata_json) VALUES('feedback-msg','feedback-conv','assistant',?,'Entrega pronta',?,?)").run(worker.id,now,JSON.stringify({child_run_id:'feedback-run',final:true}));
+
+      const llm: OrchestratorLLM = {
+        decide: async () => ({
+          decision: {
+            target_mode: 'needs_gap_analysis',
+            normalized_goal: 'Continue',
+            required_capabilities: [],
+            required_tools: [],
+            complexity: 'low',
+            risk: 'low',
+            requires_plan: false,
+            candidate_scope: [],
+            quality_controls: [],
+            explanation: 'Continue normally.',
+            confidence: 0.95,
+          },
+        }),
+      };
+
+      await new OrchestratorGateway(f.database.connection,llm).route({
+        project_id:'p',
+        conversation_id:'feedback-conv',
+        message:'Perfeito, funcionou',
+        target:'auto',
+      });
+
+      let events=f.database.connection.prepare("SELECT event_type,source FROM agent_performance_events WHERE agent_id=? AND run_id='feedback-run'").all(worker.id) as any[];
+      expect(events).toEqual([expect.objectContaining({event_type:'accepted',source:'orchestrator'})]);
+
+      await new OrchestratorGateway(f.database.connection,llm).route({
+        project_id:'p',
+        conversation_id:'feedback-conv',
+        message:'Isso ficou errado, precisa corrigir',
+        target:'auto',
+      });
+
+      events=f.database.connection.prepare("SELECT event_type,source FROM agent_performance_events WHERE agent_id=? AND run_id='feedback-run'").all(worker.id) as any[];
+      expect(events).toEqual([expect.objectContaining({event_type:'rework_requested',source:'orchestrator'})]);
+    } finally { f.cleanup(); }
+  });
+
 });
