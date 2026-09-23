@@ -54,9 +54,13 @@ chatRouter.post('/runs', async (request, response) => {
     if (decision.target_agent_id) {
       selectedAgentIds = [decision.target_agent_id];
     } else if (decision.target_mode === 'existing_team' && decision.target_team_id) {
-      selectedAgentIds = (database.connection.prepare(
-        'SELECT agent_id FROM team_members WHERE team_id=? AND enabled=1 ORDER BY priority,created_at'
-      ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
+      const owned = database.connection.prepare('SELECT owner_agent_id FROM teams WHERE id=?').get(decision.target_team_id) as {owner_agent_id:string|null}|undefined;
+      selectedAgentIds = [
+        ...(owned?.owner_agent_id ? [owned.owner_agent_id] : []),
+        ...(database.connection.prepare(
+          'SELECT agent_id FROM team_members WHERE team_id=? AND enabled=1 ORDER BY priority,created_at'
+        ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id),
+      ];
     } else if (decision.target_mode === 'dynamic_team' && decision.target_team_id) {
       selectedAgentIds = (database.connection.prepare(
         'SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? AND enabled=1 ORDER BY priority,created_at'
