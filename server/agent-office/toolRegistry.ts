@@ -428,7 +428,10 @@ export class ToolRegistry {
     }
 
     const inputFingerprint = fingerprintInput(input);
-    const idempotencyKey = context.idempotency_key?.trim() || null;
+    const integrationMutation = integrationToolDefinitions.some((tool) => tool.name === definition.name)
+      && (definition.risk === 'external' || definition.risk === 'destructive' || definition.risk === 'write');
+    const idempotencyKey = context.idempotency_key?.trim()
+      || (integrationMutation ? 'integration:' + context.run_id + ':' + definition.name + ':' + inputFingerprint : null);
     if (idempotencyKey) {
       const existing = context.database.prepare(`
         SELECT id, status, result_json FROM tool_audit_events
@@ -475,7 +478,7 @@ export class ToolRegistry {
         context.execution_plan_id ?? null,
         context.execution_step_id ?? null,
         context.execution_plan_id ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null,
-        context.idempotency_key ?? null,
+        idempotencyKey,
       );
       context.database.prepare(`
         UPDATE tool_audit_events SET status = 'waiting_approval', result_json = ?, ended_at = ? WHERE id = ?
