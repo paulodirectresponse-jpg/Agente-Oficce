@@ -141,7 +141,8 @@ export class OrchestratorGateway {
     );
 
     if(decision.target_mode==='dynamic_team'&&decision.candidate_scope.length&&!decision.target_team_id){
-      const dyn=new TeamService(this.db).createDynamic({orchestration_run_id:oid,purpose:decision.normalized_goal,member_ids:decision.candidate_scope,policy:{allowed_tools:decision.required_tools}});
+      const dyn=new TeamService(this.db).createWorkforce({orchestration_run_id:oid,purpose:decision.normalized_goal,member_ids:decision.candidate_scope,policy:{allowed_tools:decision.required_tools}});
+      event('orchestrator.workforce','Workforce temporária criada','Agentes existentes foram requisitados para esta execução sem alterar suas equipes permanentes.',{workforce_id:dyn.id,members:decision.candidate_scope});
       decision={...decision,target_team_id:dyn.id};this.db.prepare('UPDATE orchestration_runs SET decision_json=? WHERE id=?').run(JSON.stringify(decision),oid);
     }
     event('orchestrator.routed','Roteamento concluído',decision.explanation,{level,target_mode:decision.target_mode,target_agent_id:decision.target_agent_id??null,target_team_id:decision.target_team_id??null,confidence:decision.confidence});
