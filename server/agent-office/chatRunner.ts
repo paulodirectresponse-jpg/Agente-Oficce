@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type { SecretStore } from './secretStore.js';
 import { ConversationRepository, MessageRepository, type AgentOfficeMessage } from './conversationRepository.js';
