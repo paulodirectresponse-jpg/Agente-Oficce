@@ -5,7 +5,7 @@ import { TeamService } from '../agent-office/teamService.js';
 
 export const v3TeamsRouter=Router();
 const code=(e:unknown)=>e instanceof Error&&/^[A-Z0-9_]+$/.test(e.message)?e.message:'TEAM_REQUEST_FAILED';
-const status=(c:string)=>c.endsWith('_NOT_FOUND')?404:c.includes('DUPLICATE')||c.includes('PARALLELISM')||c.includes('REQUIRES_EXPLICIT')?409:400;
+const status=(c:string)=>c.endsWith('_NOT_FOUND')?404:c.includes('DUPLICATE')||c.includes('PARALLELISM')||c.includes('REQUIRES_EXPLICIT')||c.includes('ALREADY_ASSIGNED')||c.includes('OWNER_IMMUTABLE')||c.includes('ALREADY_EXISTS')?409:400;
 function withDb(res:any,fn:(db:any)=>unknown){const d=openAgentOfficeDatabase();try{return fn(d.connection)}catch(e){const c=code(e);res.status(status(c)).json({ok:false,error:{code:c,message:c}});return undefined}finally{d.connection.close()}}
 
 v3TeamsRouter.get('/teams',(_req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).list()})));
