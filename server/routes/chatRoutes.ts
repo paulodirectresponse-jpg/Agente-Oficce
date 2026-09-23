@@ -6,6 +6,8 @@ import { ChatRunnerService } from '../agent-office/chatRunner.js';
 import { chatEventHub, type ChatStreamEnvelope } from '../agent-office/chatEventHub.js';
 import { chatRunControls } from '../agent-office/runtimeControls.js';
 import { ChatRunRepository } from '../agent-office/v2DataModel.js';
+import { OrchestratorGateway } from '../agent-office/orchestratorGateway.js';
+import { UniversalOrchestratorLLM } from '../agent-office/orchestratorRuntime.js';
 
 export const chatRouter = Router();
 
@@ -27,23 +29,57 @@ function statusFor(code: string): number {
   return 500;
 }
 
-chatRouter.post('/runs', (request, response) => {
+chatRouter.post('/runs', async (request, response) => {
   const database = openAgentOfficeDatabase();
   try {
+    const projectId = String(request.body?.project_id || '');
+    const message = String(request.body?.message || '');
+    const requestedTarget = typeof request.body?.target === 'string' ? request.body.target : 'auto';
+
+    const orchestration = await new OrchestratorGateway(
+      database.connection,
+      new UniversalOrchestratorLLM(database.connection),
+    ).route({
+      project_id: projectId,
+      conversation_id: typeof request.body?.conversation_id === 'string' ? request.body.conversation_id : null,
+      message,
+      target: requestedTarget,
+    });
+
+    const decision = orchestration.decision;
+    let selectedAgentIds: string[] = [];
+    if (decision.target_agent_id) {
+      selectedAgentIds = [decision.target_agent_id];
+    } else if (decision.target_mode === 'existing_team' && decision.target_team_id) {
+      selectedAgentIds = (database.connection.prepare(
+        'SELECT agent_id FROM team_members WHERE team_id=? AND enabled=1 ORDER BY priority,created_at'
+      ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
+    } else if (decision.target_mode === 'dynamic_team' && decision.target_team_id) {
+      selectedAgentIds = (database.connection.prepare(
+        'SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? ORDER BY created_at'
+      ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
+    } else if (decision.candidate_scope.length) {
+      selectedAgentIds = decision.candidate_scope;
+    }
+
     const service = new ChatRunnerService(
       database.connection,
       new DevelopmentSecretStore(getAgentOfficeConfig().dataDir),
     );
     const prepared = service.prepare({
-      project_id: String(request.body?.project_id || ''),
+      project_id: projectId,
       conversation_id: typeof request.body?.conversation_id === 'string'
         ? request.body.conversation_id
         : undefined,
-      message: String(request.body?.message || ''),
-      target: typeof request.body?.target === 'string' ? request.body.target : 'auto',
+      message,
+      target: requestedTarget,
       model_override: typeof request.body?.model_override === 'string' && request.body.model_override.trim()
         ? request.body.model_override.trim()
         : undefined,
+      selected_agent_ids: selectedAgentIds.length ? selectedAgentIds : undefined,
+      orchestration_run_id: orchestration.orchestration_run_id,
+      routing_level: orchestration.level,
+      routing_decision: decision as unknown as Record<string, unknown>,
     });
 
     const receipt = service.receipt(prepared);
@@ -55,7 +91,7 @@ chatRouter.post('/runs', (request, response) => {
         database.connection.close();
       });
 
-    response.status(202).json({ ok: true, data: receipt });
+    response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id } });
   } catch (error) {
     database.connection.close();
     const code = codeOf(error, 'CHAT_RUN_START_FAILED');
