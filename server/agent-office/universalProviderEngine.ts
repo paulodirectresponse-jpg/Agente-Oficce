@@ -1163,9 +1163,10 @@ export class UniversalProviderEngine {
     for (let index = 0; index < candidates.length; index += 1) {
       const candidate = candidates[index];
       const provider = this.provider(candidate.providerId);
-      const release = await this.resilience.acquire(provider, this.estimatedTokens(input), options.signal);
+      let release: (() => void) | null = null;
       let emitted = false;
       try {
+        release = await this.resilience.acquire(provider, this.estimatedTokens(input), options.signal);
         const driver = createProtocolDriver(provider.protocol_driver);
         const secret = await this.secret(provider);
         const response = await this.transport.request(provider, driver.prepareCompletion(provider, { ...input, model: candidate.model }, true), secret, options);
@@ -1175,14 +1176,17 @@ export class UniversalProviderEngine {
           if (event.type === 'text_delta') emitted = true;
           yield event;
         }
-        this.resilience.recordSuccess(provider, candidate.model, tokenTotal);
+        this.resilience.recordSuccess(provider, candidate.model, Math.max(0, tokenTotal - this.estimatedTokens(input)));
         return;
       } catch (error) {
         lastError = error;
-        this.resilience.recordFailure(provider, candidate.model, error);
+        const code = error && typeof error === 'object' && 'code' in error ? String((error as any).code ?? '') : '';
+        if (release || (code !== 'PROVIDER_CIRCUIT_OPEN' && code !== 'PROVIDER_COOLDOWN')) {
+          this.resilience.recordFailure(provider, candidate.model, error);
+        }
         if (emitted || !isRetryableProviderError(error) || index === candidates.length - 1) throw error;
       } finally {
-        release();
+        release?.();
       }
     }
     throw lastError instanceof Error ? lastError : new UniversalProviderError('PROVIDER_REQUEST_FAILED', 'Provider stream failed.');
