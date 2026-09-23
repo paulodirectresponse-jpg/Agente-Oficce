@@ -888,6 +888,84 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       INSERT OR IGNORE INTO team_rooms(team_id,instructions,shared_context_json,memory_json,created_at,updated_at)
       SELECT id,'','{}','{}',created_at,updated_at FROM teams;
     `,
+  },
+  {
+    version: 18,
+    sql: `
+      CREATE TABLE IF NOT EXISTS subagents (
+        id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        owner_agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        avatar_key TEXT NOT NULL DEFAULT 'default',
+        provider_id TEXT REFERENCES providers(id) ON DELETE SET NULL,
+        model_id TEXT REFERENCES provider_models(id) ON DELETE SET NULL,
+        system_prompt TEXT NOT NULL DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(team_id, slug)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_subagents_team
+        ON subagents(team_id, enabled, sort_order, name);
+      CREATE INDEX IF NOT EXISTS idx_subagents_owner
+        ON subagents(owner_agent_id, enabled);
+
+      CREATE TABLE IF NOT EXISTS subagent_capabilities (
+        subagent_id TEXT NOT NULL REFERENCES subagents(id) ON DELETE CASCADE,
+        capability_key TEXT NOT NULL REFERENCES capability_definitions(key) ON DELETE CASCADE,
+        declared_score REAL NOT NULL DEFAULT 0.5 CHECK(declared_score >= 0 AND declared_score <= 1),
+        verified_score REAL CHECK(verified_score IS NULL OR (verified_score >= 0 AND verified_score <= 1)),
+        confidence REAL NOT NULL DEFAULT 0 CHECK(confidence >= 0 AND confidence <= 1),
+        evidence_count INTEGER NOT NULL DEFAULT 0 CHECK(evidence_count >= 0),
+        source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','seed','learned')),
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(subagent_id, capability_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS subagent_performance_events (
+        id TEXT PRIMARY KEY,
+        subagent_id TEXT NOT NULL REFERENCES subagents(id) ON DELETE CASCADE,
+        run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+        event_type TEXT NOT NULL,
+        score REAL,
+        source TEXT NOT NULL DEFAULT 'system',
+        detail TEXT NOT NULL DEFAULT '',
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_subagent_performance_created
+        ON subagent_performance_events(subagent_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS workforce_subagent_members (
+        dynamic_team_id TEXT NOT NULL REFERENCES dynamic_team_instances(id) ON DELETE CASCADE,
+        subagent_id TEXT NOT NULL REFERENCES subagents(id) ON DELETE CASCADE,
+        role_name TEXT NOT NULL DEFAULT '',
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(dynamic_team_id, subagent_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_workforce_subagents_team
+        ON workforce_subagent_members(dynamic_team_id, enabled, priority);
+
+      ALTER TABLE team_room_entries ADD COLUMN subagent_id TEXT REFERENCES subagents(id) ON DELETE SET NULL;
+
+      -- Owned teams move forward with true Subagents.
+      -- Legacy team_members rows remain untouched for historical compatibility.
+    `,
   }
 ];
 
