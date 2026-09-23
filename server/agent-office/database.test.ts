@@ -10,7 +10,7 @@ describe('Agent Office local database', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-'));
     const database = openAgentOfficeDatabase({ dataDir, databasePath: path.join(dataDir, 'office.sqlite'), logLevel: 'silent' });
     expect(database.connection.prepare('PRAGMA journal_mode').get()).toMatchObject({ journal_mode: 'wal' });
-    expect(database.connection.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }, { version: 9 }, { version: 10 }, { version: 11 }, { version: 12 }, { version: 13 }, { version: 14 }]);
+    expect(database.connection.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }, { version: 6 }, { version: 7 }, { version: 8 }, { version: 9 }, { version: 10 }, { version: 11 }, { version: 12 }, { version: 13 }, { version: 14 }, { version: 15 }]);
     expect(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'projects'").get()).toEqual({ name: 'projects' });
     expect(database.connection.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'teams'").get()).toEqual({ name: 'teams' });
     expect(database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
@@ -19,7 +19,7 @@ describe('Agent Office local database', () => {
   });
 
 
-  it('upgrades a migration-12 database through migration 14 without losing existing rows', () => {
+  it('upgrades a migration-12 database through migration 15 without losing existing rows', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-office-upgrade-'));
     const databasePath = path.join(dataDir, 'office.sqlite');
     const legacy = new Database(databasePath);
@@ -35,9 +35,10 @@ describe('Agent Office local database', () => {
 
     const upgraded = openAgentOfficeDatabase({ dataDir, databasePath, logLevel: 'silent' });
     expect(upgraded.connection.prepare('SELECT name FROM projects WHERE id=?').get('keep')).toEqual({ name: 'Keep' });
-    expect(upgraded.connection.prepare('SELECT MAX(version) version FROM schema_migrations').get()).toEqual({ version: 14 });
+    expect(upgraded.connection.prepare('SELECT MAX(version) version FROM schema_migrations').get()).toEqual({ version: 15 });
     expect(upgraded.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='runtime_delegations'").get()).toEqual({ name: 'runtime_delegations' });
     expect(upgraded.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='provider_fallbacks'").get()).toEqual({ name: 'provider_fallbacks' });
+    expect(upgraded.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='orchestration_events'").get()).toEqual({ name: 'orchestration_events' });
     expect(upgraded.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
     upgraded.connection.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
