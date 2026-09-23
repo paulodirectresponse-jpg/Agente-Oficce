@@ -359,8 +359,10 @@ export class ChatRunnerService {
         if (index > 0) {
           const fromAgent = selected[index - 1].agent;
           this.emit(rootRun, 'handoff.created', `Handoff ${fromAgent.name} → ${binding.agent.name}`, {
-            from_agent: fromAgent.id,
-            to_agent: binding.agent.id,
+            from_agent: selected[index - 1].worker_kind === 'agent' ? fromAgent.id : null,
+            from_subagent: selected[index - 1].worker_kind === 'subagent' ? selected[index - 1].subagent_id : null,
+            to_agent: binding.worker_kind === 'agent' ? binding.agent.id : null,
+            to_subagent: binding.worker_kind === 'subagent' ? binding.subagent_id : null,
             from_message_id: stageResults.length ? stageResults[stageResults.length - 1].message_id : null,
             stage,
           });
@@ -370,13 +372,20 @@ export class ChatRunnerService {
           ? this.runs.create({
             conversation_id: prepared.conversation_id,
             project_id: rootRun.project_id,
-            agent_id: binding.agent.id,
+            agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
             provider_id: binding.provider.id,
             model_id: model.id,
             status: 'running',
             mode: stage === 'reviewer' ? 'review' : 'single',
             parent_run_id: rootRun.id,
-            metadata: { stage, tools_enabled: this.toolsAvailable({ ...binding, model }) },
+            metadata: {
+              stage,
+              tools_enabled: this.toolsAvailable({ ...binding, model }),
+              worker_kind: binding.worker_kind,
+              subagent_id: binding.subagent_id ?? null,
+              owner_agent_id: binding.owner_agent_id ?? null,
+              team_id: binding.team_id ?? null,
+            },
           })
           : rootRun;
 
@@ -391,26 +400,18 @@ export class ChatRunnerService {
             signal,
           });
           stageResults.push(result);
-          this.agentOps.recordPerformance({
-            agent_id: binding.agent.id,
-            run_id: childRun.id,
-            project_id: rootRun.project_id,
-            event_type: 'execution_success',
-            source: 'system',
-            detail: 'Agent execution completed successfully.',
-          });
+          this.recordWorkerPerformance(binding, childRun.id, rootRun.project_id, 'execution_success', 'Worker execution completed successfully.');
         } catch (error) {
           const cancelledStage = signal?.aborted
             || error instanceof ChatRunCancelledError
             || (error instanceof Error && error.message === 'CHAT_RUN_CANCELLED');
-          this.agentOps.recordPerformance({
-            agent_id: binding.agent.id,
-            run_id: childRun.id,
-            project_id: rootRun.project_id,
-            event_type: cancelledStage ? 'cancelled' : 'operational_failure',
-            source: 'system',
-            detail: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED',
-          });
+          this.recordWorkerPerformance(
+            binding,
+            childRun.id,
+            rootRun.project_id,
+            cancelledStage ? 'cancelled' : 'operational_failure',
+            error instanceof Error ? error.message : 'CHAT_WORKER_RUN_FAILED',
+          );
           if (childRun.id !== rootRun.id) {
             const cancelled = signal?.aborted
               || error instanceof ChatRunCancelledError
@@ -433,6 +434,7 @@ export class ChatRunnerService {
         ...rootRun.metadata,
         final_message_id: final.message_id,
         selected_agents: prepared.selected_agents,
+        selected_subagents: prepared.selected_subagents,
         child_run_ids: stageResults.map((result) => result.child_run_id),
         tools_enabled: prepared.tools_enabled,
       };
@@ -445,16 +447,11 @@ export class ChatRunnerService {
       });
 
       for (const binding of selected) {
-        this.states.upsert({
-          agent_id: binding.agent.id,
-          project_id: rootRun.project_id,
-          run_id: null,
-          state: 'idle',
-          activity: '',
-          progress: null,
-        });
-        this.emit(rootRun, 'agent.state', `${binding.agent.name} está disponível`, {
-          agent_id: binding.agent.id,
+        this.setWorkerState(binding, rootRun.project_id, null, 'idle', '', null);
+        this.emit(rootRun, 'worker.state', `${binding.agent.name} está disponível`, {
+          agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
+          subagent_id: binding.worker_kind === 'subagent' ? binding.subagent_id : null,
+          worker_kind: binding.worker_kind,
           state: 'idle',
           activity: '',
         });
@@ -462,7 +459,8 @@ export class ChatRunnerService {
 
       this.emit(rootRun, 'run.completed', 'Resposta concluída', {
         final_message_id: final.message_id,
-        final_agent_id: selected.length ? selected[selected.length - 1].agent.id : null,
+        final_agent_id: selected.length && selected[selected.length - 1].worker_kind === 'agent' ? selected[selected.length - 1].agent.id : null,
+        final_subagent_id: selected.length && selected[selected.length - 1].worker_kind === 'subagent' ? selected[selected.length - 1].subagent_id : null,
         usage: aggregate,
       });
     } catch (error) {
@@ -479,14 +477,7 @@ export class ChatRunnerService {
         error: cancelled ? null : { message },
       });
       for (const binding of selected) {
-        this.states.upsert({
-          agent_id: binding.agent.id,
-          project_id: rootRun.project_id,
-          run_id: null,
-          state: cancelled ? 'idle' : 'error',
-          activity: cancelled ? '' : message,
-          progress: null,
-        });
+        this.setWorkerState(binding, rootRun.project_id, null, cancelled ? 'idle' : 'error', cancelled ? '' : message, null);
       }
       this.emit(
         rootRun,
@@ -512,7 +503,7 @@ export class ChatRunnerService {
       const provider = this.providers.get(agent.provider_id);
       const model = this.providers.getModel(agent.model_id);
       if (!provider?.enabled || !model?.enabled || model.provider_id !== provider.id) continue;
-      result.push({ agent, provider, model });
+      result.push({ worker_kind: 'agent', agent, provider, model });
     }
     return result;
   }
@@ -527,7 +518,45 @@ export class ChatRunnerService {
     const model = this.providers.getModel(agent.model_id);
     if (!provider?.enabled) throw new Error('CHAT_PROVIDER_UNAVAILABLE');
     if (!model?.enabled || model.provider_id !== provider.id) throw new Error('CHAT_MODEL_UNAVAILABLE');
-    return { agent, provider, model };
+    return { worker_kind: 'agent', agent, provider, model };
+  }
+
+  private requireSubagentBinding(subagentId: string): AgentBinding {
+    const subagent = this.subagents.get(subagentId);
+    if (!subagent) throw new Error('CHAT_SUBAGENT_NOT_FOUND');
+    if (!this.subagents.isEligible(subagent.id)) throw new Error('CHAT_SUBAGENT_NOT_AVAILABLE');
+    if (!subagent.provider_id || !subagent.model_id) throw new Error('CHAT_SUBAGENT_NOT_CONFIGURED');
+    const provider = this.providers.get(subagent.provider_id);
+    const model = this.providers.getModel(subagent.model_id);
+    if (!provider?.enabled) throw new Error('CHAT_PROVIDER_UNAVAILABLE');
+    if (!model?.enabled || model.provider_id !== provider.id) throw new Error('CHAT_MODEL_UNAVAILABLE');
+    const syntheticAgent: Agent = {
+      id: subagent.id,
+      name: subagent.name,
+      slug: subagent.slug,
+      role: subagent.role,
+      description: subagent.description,
+      avatar_key: subagent.avatar_key,
+      provider_id: subagent.provider_id,
+      model_id: subagent.model_id,
+      system_prompt: subagent.system_prompt,
+      enabled: subagent.enabled,
+      paused: subagent.paused,
+      sort_order: subagent.sort_order,
+      idle_after_seconds: 300,
+      metadata: { ...subagent.metadata, worker_kind: 'subagent', team_id: subagent.team_id, owner_agent_id: subagent.owner_agent_id },
+      created_at: subagent.created_at,
+      updated_at: subagent.updated_at,
+    };
+    return {
+      worker_kind: 'subagent',
+      agent: syntheticAgent,
+      provider,
+      model,
+      owner_agent_id: subagent.owner_agent_id,
+      team_id: subagent.team_id,
+      subagent_id: subagent.id,
+    };
   }
 
   private resolveModel(binding: AgentBinding, override?: string): ProviderModel {
