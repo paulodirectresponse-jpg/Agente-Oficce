@@ -157,11 +157,8 @@ jobs:
         shell: pwsh
         run: |
           $currentMsi = Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
-          $product = Get-CimInstance Win32_Product -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "Agent Office" } | Select-Object -First 1
-          if ($product) {
-            $uninstall = Start-Process msiexec.exe -ArgumentList @("/x", $product.IdentifyingNumber, "/qn", "/norestart") -Wait -PassThru
-            if ($uninstall.ExitCode -ne 0) { throw "Uninstall before fresh-install gate failed: $($uninstall.ExitCode)" }
-          }
+          $uninstall = Start-Process msiexec.exe -ArgumentList @("/x", "`"$($currentMsi.FullName)`"", "/qn", "/norestart") -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstall before fresh-install gate failed: $($uninstall.ExitCode)" }
           $install = Start-Process msiexec.exe -ArgumentList @("/i", "`"$($currentMsi.FullName)`"", "/qn", "/norestart") -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Fresh install failed: $($install.ExitCode)" }
           Write-Host "Fresh install gate passed."
