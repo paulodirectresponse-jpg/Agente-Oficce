@@ -53,7 +53,7 @@ export function ProjectsView({activeProject,onSelectProject,onOpenWork,intent}:{
     <div className="projects-v3-layout">
       <aside className="projects-v3-list">{summaries.map(item=><button type="button" key={item.project.id} className={activeProject?.id===item.project.id?'active':''} onClick={()=>onSelectProject(item.project)}>
         <div><strong>{item.project.name}</strong><V2Status tone={tone(item.operational_state)}>{state(item.operational_state)}</V2Status></div><p>{item.project.objective||'Sem objetivo definido.'}</p><small>{item.counts.runs.root} execuções · {item.counts.blockers.open} bloqueios · {when(item.last_activity_at)}</small>
-      </button>)}{!summaries.length&&<V2EmptyState title="Nenhum Project" description="Crie o primeiro Project para começar."/ >}</aside>
+      </button>)}{!summaries.length&&<V2EmptyState title="Nenhum Project" description="Crie o primeiro Project para começar."/>}</aside>
 
       <section className="projects-v3-detail">
         {!detail&&<V2EmptyState title="Selecione um Project" description="O objetivo, trabalho, arquivos e histórico aparecerão aqui."/>}
@@ -76,7 +76,7 @@ export function ProjectsView({activeProject,onSelectProject,onOpenWork,intent}:{
 
             {tab==='work'&&<>
               <div className="projects-v3-work-head"><div><h3>Trabalho deste Project</h3><p>Execuções e planos pertencentes ao mesmo contexto.</p></div><button className="v2-primary-button" onClick={onOpenWork}>Continuar trabalhando</button></div>
-              <div className="projects-v3-runs">{detail.runs.map(run=><div key={run.id}><span className={'projects-v3-run-dot '+run.status}/><div><strong>{state(run.status)}</strong><small>{when(run.started_at)} · {run.mode}</small></div><code>{run.id.slice(0,8)}</code></div>)}{!detail.runs.length&&<V2EmptyState title="Nenhuma execução" description="Peça algo em Trabalho para começar."/ >}</div>
+              <div className="projects-v3-runs">{detail.runs.map(run=><div key={run.id}><span className={'projects-v3-run-dot '+run.status}/><div><strong>{state(run.status)}</strong><small>{when(run.started_at)} · {run.mode}</small></div><code>{run.id.slice(0,8)}</code></div>)}{!detail.runs.length&&<V2EmptyState title="Nenhuma execução" description="Peça algo em Trabalho para começar."/>}</div>
             </>}
 
             {tab==='files'&&<>
