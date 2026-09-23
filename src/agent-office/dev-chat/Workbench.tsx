@@ -63,7 +63,7 @@ export function Workbench({project,snapshot,runId,liveEvents,contextual=false}:{
   }):allTabs,[contextual,snapshot?.active_run,snapshot?.git.files.length,liveEvents.length,inspection,entries.length,file,diff?.diff,tests.length,terminal.length,preview,logs.length]);
   useEffect(()=>{if(contextual&&tabs.length&&!tabs.some(([key])=>key===tab))setTab(tabs[0][0])},[contextual,tabs.map(([key])=>key).join(','),tab]);
   return <aside className={'dev-workbench '+(contextual?'contextual':'')}>
-    <div className="dev-workbench-tabs">{tabs.length?tabs.map(([key,label])=><button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}</button>)}):<span className="wb-tabs-empty">Detalhes aparecerão quando houver algo para inspecionar.</span>}</div>
+    <div className="dev-workbench-tabs">{tabs.length?tabs.map(([key,label])=><button key={key} className={tab===key?'active':''} onClick={()=>setTab(key)}>{label}</button>):<span className="wb-tabs-empty">Detalhes aparecerão quando houver algo para inspecionar.</span>}</div>
     <div className="dev-workbench-body">
       {tab==='live'&&<div className="wb-live">
         <div className="wb-section-title"><strong>Execução atual</strong><span>{snapshot?.active_run?.status??'idle'}</span></div>
