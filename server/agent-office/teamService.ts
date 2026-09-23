@@ -66,7 +66,7 @@ export class TeamService {
    JSON.stringify(input.shared_context??cur.shared_context),
    JSON.stringify(input.memory??cur.memory),
    now(),teamId
-  );return this.getRoom(teamId);
+  );this.appendRoomEntry(teamId,{entry_type:'memory',content:'Contexto do Team Room atualizado.'});return this.getRoom(teamId);
  }
  appendRoomEntry(teamId:string,input:{agent_id?:string|null;entry_type?:string;content?:string;payload?:Record<string,unknown>}){
   if(!this.get(teamId))throw new Error('TEAM_NOT_FOUND');this.ensureRoom(teamId);
@@ -84,7 +84,7 @@ export class TeamService {
   const name=String(input.name||'').trim(),slug=String(input.slug||'').trim().toLowerCase();
   if(!name)throw new Error('TEAM_NAME_REQUIRED');if(!SLUG.test(slug))throw new Error('TEAM_SLUG_INVALID');
   if(input.owner_agent_id)this.validateOwner(input.owner_agent_id);
-  this.validateLead(input.owner_agent_id??input.lead_agent_id??null);
+  else this.validateLead(input.lead_agent_id??null);
   if(input.owner_agent_id&&this.getOwnedByAgent(input.owner_agent_id))throw new Error('AGENT_TEAM_ALREADY_EXISTS');
   const teamId=id(),t=now(),policy=normalizePolicy(input.policy);
   const tx=this.db.transaction(()=>{
@@ -117,7 +117,7 @@ export class TeamService {
   const seen=new Set<string>();for(const m of members){if(seen.has(m.agent_id))throw new Error('TEAM_MEMBER_DUPLICATE');seen.add(m.agent_id);if(!this.db.prepare('SELECT 1 FROM agents WHERE id=?').get(m.agent_id))throw new Error('AGENT_NOT_FOUND');if(team.owner_agent_id&&m.agent_id===team.owner_agent_id)throw new Error('TEAM_OWNER_CANNOT_BE_MEMBER')}
   if(!team.owner_agent_id&&team.lead_agent_id&&!seen.has(team.lead_agent_id))throw new Error('TEAM_LEAD_MUST_BE_MEMBER');
   if(team.owner_agent_id)this.validateSubagents(team.owner_agent_id,members.map(m=>m.agent_id));
-  const tx=this.db.transaction(()=>{this.db.prepare('DELETE FROM team_members WHERE team_id=?').run(teamId);const ins=this.db.prepare(`INSERT INTO team_members(team_id,agent_id,role_name,priority,enabled,metadata_json,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?)`);const t=now();for(const m of members)ins.run(teamId,m.agent_id,m.role_name??'',Math.floor(m.priority??0),m.enabled===false?0:1,JSON.stringify(m.metadata??{}),t,t);if(team.owner_agent_id)this.syncRelations(team.owner_agent_id,members);this.bumpVersion(teamId)});tx.immediate();return this.get(teamId)!;
+  const tx=this.db.transaction(()=>{this.db.prepare('DELETE FROM team_members WHERE team_id=?').run(teamId);const ins=this.db.prepare(`INSERT INTO team_members(team_id,agent_id,role_name,priority,enabled,metadata_json,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?)`);const t=now();for(const m of members)ins.run(teamId,m.agent_id,m.role_name??'',Math.floor(m.priority??0),m.enabled===false?0:1,JSON.stringify(m.metadata??{}),t,t);if(team.owner_agent_id)this.syncRelations(team.owner_agent_id,members);this.bumpVersion(teamId)});tx.immediate();this.appendRoomEntry(teamId,{agent_id:team.owner_agent_id??null,entry_type:'activity',content:'Composição da equipe atualizada.',payload:{subagents:members.map(m=>m.agent_id)}});return this.get(teamId)!;
  }
  listMembers(teamId:string){return (this.db.prepare(`SELECT tm.*,a.name,a.slug,a.enabled agent_enabled,p.enabled provider_enabled,m.enabled model_enabled FROM team_members tm JOIN agents a ON a.id=tm.agent_id LEFT JOIN providers p ON p.id=a.provider_id LEFT JOIN provider_models m ON m.id=a.model_id WHERE tm.team_id=? ORDER BY tm.priority DESC,a.name`).all(teamId) as any[]).map(r=>({...r,enabled:Boolean(r.enabled),agent_enabled:Boolean(r.agent_enabled),provider_enabled:Boolean(r.provider_enabled),model_enabled:Boolean(r.model_enabled),metadata:parse(r.metadata_json,{})}))}
  listAgentTeams(agentId:string){return (this.db.prepare(`SELECT DISTINCT t.* FROM teams t LEFT JOIN team_members tm ON tm.team_id=t.id WHERE t.owner_agent_id=? OR tm.agent_id=? ORDER BY t.name`).all(agentId,agentId) as any[]).map(r=>this.hydrate(r))}
@@ -128,7 +128,7 @@ export class TeamService {
   const defs=new Map(this.caps.list().map(d=>[d.key,d]));const rows=new Map<string,{capability:string;coverage:boolean;specialists:string[];redundancy:number;tool_coverage:string[];confidence:number;evidence_count:number}>();
   for(const member of active)for(const cap of this.caps.listAgent(member.agent_id).filter(c=>c.enabled)){const score=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence);const cur=rows.get(cap.capability_key)??{capability:cap.capability_key,coverage:false,specialists:[],redundancy:0,tool_coverage:[],confidence:0,evidence_count:0};if(score>0){cur.coverage=true;cur.specialists.push(member.agent_id);cur.redundancy=cur.specialists.length;cur.confidence=Math.max(cur.confidence,cap.confidence);cur.evidence_count+=cap.evidence_count}rows.set(cap.capability_key,cur)}
   const policies=this.db.prepare('SELECT agent_id,enabled,allowed_tools_json FROM agent_tool_policies').all() as any[];const pmap=new Map(policies.map(p=>[p.agent_id,p])),teamTools=new Set<string>(team.policy?.allowed_tools??[]);
-  for(const cur of rows.values()){const tools=new Set<string>();for(const aid of cur.specialists){const p=pmap.get(aid);if(p?.enabled)for(const x of parse<string[]>(p.allowed_tools_json,[]))if(teamTools.has(x))tools.add(x)}cur.tool_coverage=[...tools].sort()}
+  for(const cur of rows.values()){const tools=new Set<string>();for(const aid of cur.specialists){const p=pmap.get(aid);if(p?.enabled)for(const x of parse<string[]>(p.allowed_tools_json,[]))if(!teamTools.size||teamTools.has(x))tools.add(x)}cur.tool_coverage=[...tools].sort()}
   const missing=requirements.filter(r=>!active.some(m=>this.agentCovers(m.agent_id,r,defs))).map(r=>r.key);
   return{team_id:teamId,active_members:active.map(m=>m.agent_id),capabilities:[...rows.values()].sort((a,b)=>a.capability.localeCompare(b.capability)),missing_capabilities:missing};
  }
