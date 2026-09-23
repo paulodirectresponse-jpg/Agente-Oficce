@@ -11,6 +11,7 @@ export interface ProviderRuntimeConfig {
   cooldownSeconds: number;
   circuitFailureThreshold: number;
   circuitResetSeconds: number;
+  rateWindowMs: number;
 }
 
 export interface ProviderRuntimeSnapshot {
@@ -73,6 +74,7 @@ export function resilienceConfig(provider: Provider): ProviderRuntimeConfig {
     cooldownSeconds: Math.max(1, num(config, 'cooldown_seconds', 30)),
     circuitFailureThreshold: Math.max(1, num(config, 'circuit_failure_threshold', 5)),
     circuitResetSeconds: Math.max(1, num(config, 'circuit_reset_seconds', 60)),
+    rateWindowMs: Math.max(100, num(config, 'rate_window_ms', 60_000)),
   };
 }
 
@@ -167,8 +169,8 @@ export class ProviderResilienceManager {
     return state;
   }
 
-  private rotateMinute(state: WindowState): void {
-    if (Date.now() - state.minuteStartedAt >= 60_000) {
+  private rotateMinute(state: WindowState, windowMs = 60_000): void {
+    if (Date.now() - state.minuteStartedAt >= windowMs) {
       state.minuteStartedAt = Date.now();
       state.requests = 0;
       state.tokens = 0;
@@ -227,7 +229,7 @@ export class ProviderResilienceManager {
   async acquire(provider: Provider, estimatedTokens: number, signal?: AbortSignal): Promise<() => void> {
     const config = resilienceConfig(provider);
     const state = this.state(provider.id);
-    this.rotateMinute(state);
+    this.rotateMinute(state, config.rateWindowMs);
 
     if (state.circuitState === 'open') {
       const resetAt = state.circuitOpenedAt + config.circuitResetSeconds * 1000;
@@ -253,13 +255,13 @@ export class ProviderResilienceManager {
     ) {
       state.queued += 1;
       this.persist(provider, state, 'queued');
-      const wait = Math.max(50, 60_000 - (Date.now() - state.minuteStartedAt));
+      const wait = Math.max(25, config.rateWindowMs - (Date.now() - state.minuteStartedAt));
       try {
         await this.delay(wait, signal);
       } finally {
         state.queued = Math.max(0, state.queued - 1);
       }
-      this.rotateMinute(state);
+      this.rotateMinute(state, config.rateWindowMs);
     }
 
     state.queued += 1;
@@ -346,9 +348,9 @@ export class ProviderResilienceManager {
 
   snapshot(provider: Provider): ProviderRuntimeSnapshot {
     const state = this.state(provider.id);
-    this.rotateMinute(state);
-    this.persist(provider, state);
     const config = resilienceConfig(provider);
+    this.rotateMinute(state, config.rateWindowMs);
+    this.persist(provider, state);
     const row = this.database.prepare('SELECT * FROM provider_runtime_state WHERE provider_id = ?').get(provider.id) as any;
     return {
       provider_id: provider.id,
