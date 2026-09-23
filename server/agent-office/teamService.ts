@@ -19,7 +19,7 @@ export interface TeamInput {
 export interface TeamMemberInput {agent_id:string;role_name?:string;priority?:number;enabled?:boolean;metadata?:Record<string,unknown>}
 export interface DynamicTeamInput {
   orchestration_run_id?:string|null; execution_plan_id?:string|null; purpose?:string; lead_agent_id?:string|null;
-  member_ids:string[]; max_parallelism?:number; max_delegation_depth?:number; allow_external_borrowing?:boolean; policy?:TeamPolicyInput;
+  member_ids:string[]; subagent_ids?:string[]; max_parallelism?:number; max_delegation_depth?:number; allow_external_borrowing?:boolean; policy?:TeamPolicyInput;
 }
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const parse=<T>(v:string|undefined|null,f:T):T=>{try{return v?JSON.parse(v):f}catch{return f}};
@@ -151,13 +151,14 @@ export class TeamService {
   }
 
   createDynamic(input:DynamicTeamInput){
-    if(!Array.isArray(input.member_ids)||!input.member_ids.length)throw new Error('DYNAMIC_TEAM_MEMBERS_REQUIRED');
-    const members=[...new Set(input.member_ids)],ops=new AgentOperationsService(this.db);for(const a of members){if(!ops.isEligible(a))throw new Error('DYNAMIC_TEAM_MEMBER_UNAVAILABLE')}
+    const members=[...new Set(Array.isArray(input.member_ids)?input.member_ids:[])],subagentIds=[...new Set(Array.isArray(input.subagent_ids)?input.subagent_ids:[])];
+    if(!members.length&&!subagentIds.length)throw new Error('DYNAMIC_TEAM_MEMBERS_REQUIRED');
+    const ops=new AgentOperationsService(this.db),subs=new SubagentService(this.db);for(const a of members){if(!ops.isEligible(a))throw new Error('DYNAMIC_TEAM_MEMBER_UNAVAILABLE')}for(const s of subagentIds){if(!subs.isEligible(s))throw new Error('DYNAMIC_TEAM_SUBAGENT_UNAVAILABLE')}
     if(input.lead_agent_id&&!members.includes(input.lead_agent_id))throw new Error('DYNAMIC_TEAM_LEAD_MUST_BE_MEMBER');
     if(input.execution_plan_id&&!this.db.prepare('SELECT 1 FROM execution_plans WHERE id=?').get(input.execution_plan_id))throw new Error('EXECUTION_PLAN_NOT_FOUND');
     if(input.orchestration_run_id&&!this.db.prepare('SELECT 1 FROM orchestration_runs WHERE id=?').get(input.orchestration_run_id))throw new Error('ORCHESTRATION_RUN_NOT_FOUND');
     const teamId='dyn-'+id(),t=now(),policy=normalizePolicy(input.policy);
-    const tx=this.db.transaction(()=>{this.db.prepare(`INSERT INTO dynamic_team_instances(id,orchestration_run_id,execution_plan_id,purpose,lead_agent_id,max_parallelism,max_delegation_depth,allow_external_borrowing,policy_json,status,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?,?,'active',?,?)`).run(teamId,input.orchestration_run_id??null,input.execution_plan_id??null,input.purpose??'',input.lead_agent_id??null,Math.max(1,Math.floor(input.max_parallelism??3)),Math.max(0,Math.floor(input.max_delegation_depth??2)),input.allow_external_borrowing?1:0,JSON.stringify(policy),t,t);const ins=this.db.prepare("INSERT INTO dynamic_team_members(dynamic_team_id,agent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");for(const a of members)ins.run(teamId,a,t)});tx.immediate();return this.getDynamic(teamId)!;
+    const tx=this.db.transaction(()=>{this.db.prepare(`INSERT INTO dynamic_team_instances(id,orchestration_run_id,execution_plan_id,purpose,lead_agent_id,max_parallelism,max_delegation_depth,allow_external_borrowing,policy_json,status,created_at,updated_at)VALUES(?,?,?,?,?,?,?,?,?,'active',?,?)`).run(teamId,input.orchestration_run_id??null,input.execution_plan_id??null,input.purpose??'',input.lead_agent_id??null,Math.max(1,Math.floor(input.max_parallelism??3)),Math.max(0,Math.floor(input.max_delegation_depth??2)),input.allow_external_borrowing?1:0,JSON.stringify(policy),t,t);const ins=this.db.prepare("INSERT INTO dynamic_team_members(dynamic_team_id,agent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");for(const a of members)ins.run(teamId,a,t);const sin=this.db.prepare("INSERT INTO workforce_subagent_members(dynamic_team_id,subagent_id,role_name,priority,enabled,metadata_json,created_at)VALUES(?,?,'',0,1,'{}',?)");for(const s of subagentIds)sin.run(teamId,s,t)});tx.immediate();return this.getDynamic(teamId)!;
   }
   getDynamic(teamId:string){const row=this.db.prepare('SELECT * FROM dynamic_team_instances WHERE id=?').get(teamId) as any;if(!row)return null;const members=(this.db.prepare('SELECT * FROM dynamic_team_members WHERE dynamic_team_id=? ORDER BY priority DESC,agent_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),metadata:parse(x.metadata_json,{})}));const subagents=(this.db.prepare('SELECT * FROM workforce_subagent_members WHERE dynamic_team_id=? ORDER BY priority DESC,subagent_id').all(teamId) as any[]).map(x=>({...x,enabled:Boolean(x.enabled),metadata:parse(x.metadata_json,{})}));return{...row,allow_external_borrowing:Boolean(row.allow_external_borrowing),policy:parse(row.policy_json,{}),members,subagents}}
   snapshotForExecution(planId:string,stepId:string,kind:TeamKind,teamId:string){
