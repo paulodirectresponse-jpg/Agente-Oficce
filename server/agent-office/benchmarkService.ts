@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import type { Database } from 'better-sqlite3';
 import { openAgentOfficeDatabase, type AgentOfficeDatabase } from './database.js';
 import { CapabilityMatcher, CapabilityRepository } from './capabilityCore.js';
 import { OrchestratorGateway } from './orchestratorGateway.js';
