@@ -57,23 +57,32 @@ export class OrchestratorGateway {
     const feedback=this.classifyFeedback(input.message);if(!feedback)return;
     const row=this.db.prepare(`
       SELECT id,agent_id,metadata_json FROM messages
-      WHERE conversation_id=? AND role='assistant' AND agent_id IS NOT NULL
+      WHERE conversation_id=? AND role='assistant'
       ORDER BY created_at DESC LIMIT 1
     `).get(input.conversation_id) as any;
-    if(!row?.agent_id)return;
+    if(!row)return;
     let metadata:any={};try{metadata=JSON.parse(row.metadata_json||'{}')}catch{}
     const runId=typeof metadata.child_run_id==='string'?metadata.child_run_id:typeof metadata.root_run_id==='string'?metadata.root_run_id:null;
     if(!runId)return;
-    new AgentOperationsService(this.db).recordPerformance({
-      agent_id:row.agent_id,
-      run_id:runId,
-      project_id:input.project_id,
-      event_type:feedback.event_type,
-      source:'orchestrator',
-      detail:feedback.reason,
-      metadata:{confidence:feedback.confidence,user_message:input.message.slice(0,500),assistant_message_id:row.id},
-    });
-    event('orchestrator.quality_feedback','Feedback de qualidade identificado',feedback.reason,{agent_id:row.agent_id,run_id:runId,event_type:feedback.event_type,confidence:feedback.confidence});
+    const subagentId=typeof metadata.subagent_id==='string'?metadata.subagent_id:null;
+    if(row.agent_id){
+      new AgentOperationsService(this.db).recordPerformance({
+        agent_id:row.agent_id,
+        run_id:runId,
+        project_id:input.project_id,
+        event_type:feedback.event_type,
+        source:'orchestrator',
+        detail:feedback.reason,
+        metadata:{confidence:feedback.confidence,user_message:input.message.slice(0,500),assistant_message_id:row.id},
+      });
+    }else if(subagentId){
+      this.db.prepare(`DELETE FROM subagent_performance_events WHERE subagent_id=? AND run_id=? AND source IN ('user','orchestrator') AND event_type IN ('accepted','rework_requested','rejected')`).run(subagentId,runId);
+      this.db.prepare(`INSERT INTO subagent_performance_events(id,subagent_id,run_id,project_id,event_type,score,source,detail,metadata_json,created_at)VALUES(?,?,?,?,?,NULL,'orchestrator',?,?,?)`).run(
+        id(),subagentId,runId,input.project_id,feedback.event_type,feedback.reason,
+        JSON.stringify({confidence:feedback.confidence,user_message:input.message.slice(0,500),assistant_message_id:row.id}),now()
+      );
+    }else return;
+    event('orchestrator.quality_feedback','Feedback de qualidade identificado',feedback.reason,{agent_id:row.agent_id??null,subagent_id:subagentId,run_id:runId,event_type:feedback.event_type,confidence:feedback.confidence});
   }
 
   async route(input:OrchestratorInput):Promise<{level:OrchestratorLevel;decision:RoutingDecision;orchestration_run_id:string}>{
