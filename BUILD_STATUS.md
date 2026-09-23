@@ -129,11 +129,22 @@ Os documentos em `docs/v3/` continuam úteis como blueprint de arquitetura, mas 
 - arquitetura de informação: APPROVED
 - direção visual Calm Control Room: APPROVED
 - contrato: `DESIGN.md`
-- plano de implementação: `docs/plans/UX_V2_IMPLEMENTATION_PLAN.md`
-- handoff/status: `docs/plans/UX_V2_IMPLEMENTATION_STATUS.md`
-- implementação: 3 macro fases
-- branch de implementação: `ux-v2-redesign`
-- continuidade: checkpoints obrigatórios commitados e enviados ao GitHub
+- implementação: COMPLETE
+- Phase 1: COMPLETE
+- Phase 2: COMPLETE
+- Phase 3: COMPLETE
+- branch: `ux-v2-redesign`
+- final code gate SHA: `df9f046dc08cafafa35a546ed515ad3e8de79677`
+- final workflow: `35917154763` — PASS
+- status: READY FOR USER REVIEW
+- merge to `main`: pending explicit user approval
+
+## Próximo passo exato
+1. usuário revisar/testar a versão UX V2 completa;
+2. classificar achados em bug funcional / usabilidade / visual / paridade / nova feature;
+3. corrigir achados na própria `ux-v2-redesign`;
+4. rerodar gate completo;
+5. mergear para `main` somente após aprovação do usuário.
 
 ## Próximo passo exato
 1. iniciar Phase 1 — Foundation + Trabalho em `ux-v2-redesign`;
