@@ -1,4 +1,4 @@
-import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan } from './types.js';
+import type { ActivityEventV2, AgentProfile, AgentRelation, AgentState, AgentToolPolicy, ChatRun, ChatRunReceipt, ChatStartInput, Conversation, DiscoveredModel, Project, ProjectRootSetting, ProjectSummary, ProjectDetail, ProjectDecision, ProjectBlocker, ProjectResult, ProviderConfig, ProviderEngineCapabilities, ProviderHealthResult, ProviderModel, Task, TaskEvent, ToolApproval, ToolAuditEvent, ToolDefinitionV2, UniversalProvider, UsageEntry, Team, TeamMember, TeamVersion, TeamRoom, TeamRoomEntry, Workforce, Subagent, RuntimeToolHealth, ProviderRuntimeStatus, ProviderFallback, OrchestratorSettings, OrchestratorStatus, OrchestrationRun, OrchestrationEvent, AgentOverview, AgentCapabilityV3, CapabilityDefinitionV3, WorkspaceSnapshot, WorkspaceFileEntry, WorkspaceFileContent, WorkspaceGitStatus, WorkspaceGitDiff, WorkspaceRunInspection, WorkspaceCommand, PreviewSession, WorkspacePlan, AnalyticsSnapshot, AnalyticsRange } from './types.js';
 
 let apiBasePromise: Promise<string> | null = null;
 
@@ -90,6 +90,12 @@ export const api = {
   listTaskEvents: (projectId: string, taskId: string) =>
     request<TaskEvent[]>(`/api/agent-office/projects/${projectId}/tasks/${taskId}/events`),
   getUsage: () => request<UsageEntry[]>('/api/agent-office/usage'),
+  getAnalyticsV3: (filters: { range?: AnalyticsRange; from?: string; to?: string; project_id?: string; agent_id?: string; subagent_id?: string; provider_id?: string; model_id?: string } = {}) => {
+    const params = new URLSearchParams();
+    for (const [key,value] of Object.entries(filters)) if (value) params.set(key, String(value));
+    const query = params.toString();
+    return request<AnalyticsSnapshot>(`/api/agent-office/v3/analytics${query ? `?${query}` : ''}`);
+  },
   getProviderConfig: (providerId: string) =>
     request<ProviderConfig>(`/api/agent-office/providers/${providerId}/config`),
   saveProviderConfig: (providerId: string, config: ProviderConfig) =>
