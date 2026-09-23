@@ -15,6 +15,9 @@ export function AnalyticsView(){
   const [projects,setProjects]=useState<Project[]>([]);
   const [range,setRange]=useState<AnalyticsRange>('7d');
   const [projectId,setProjectId]=useState('');
+  const [workerFilter,setWorkerFilter]=useState('');
+  const [providerId,setProviderId]=useState('');
+  const [modelId,setModelId]=useState('');
   const [from,setFrom]=useState('');
   const [to,setTo]=useState('');
   const [tab,setTab]=useState<Tab>('overview');
@@ -22,19 +25,27 @@ export function AnalyticsView(){
   const [error,setError]=useState<string|null>(null);
 
   const load=useCallback(async()=>{
+    if(range==='custom'&&!from){setLoading(false);return;}
     setLoading(true);
     try{
       const filters:any={range};
       if(projectId)filters.project_id=projectId;
+      if(workerFilter){
+        const [kind,id]=workerFilter.split(':',2);
+        if(kind==='agent')filters.agent_id=id;
+        if(kind==='subagent')filters.subagent_id=id;
+      }
+      if(providerId)filters.provider_id=providerId;
+      if(modelId)filters.model_id=modelId;
       if(range==='custom'){
-        if(from)filters.from=new Date(from).toISOString();
+        filters.from=new Date(from).toISOString();
         if(to)filters.to=new Date(to).toISOString();
       }
       const [snapshot,list]=await Promise.all([api.getAnalyticsV3(filters),api.listProjects()]);
       setData(snapshot);setProjects(list);setError(null);
     }catch(e){setError(e instanceof Error?e.message:'Falha ao carregar Analytics.')}
     finally{setLoading(false)}
-  },[range,projectId,from,to]);
+  },[range,projectId,workerFilter,providerId,modelId,from,to]);
 
   useEffect(()=>{void load();const timer=window.setInterval(()=>void load(),20000);return()=>window.clearInterval(timer)},[load]);
 
@@ -54,6 +65,15 @@ export function AnalyticsView(){
         </select>
         <select value={projectId} onChange={e=>setProjectId(e.target.value)}>
           <option value="">Todos os Projects</option>{projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={workerFilter} onChange={e=>setWorkerFilter(e.target.value)}>
+          <option value="">Todos os workers</option>{data?.workers.map(w=><option key={w.worker_kind+':'+w.id} value={w.worker_kind+':'+w.id}>{w.worker_kind==='subagent'?'Subagent':'Agent'} · {w.name}</option>)}
+        </select>
+        <select value={providerId} onChange={e=>{setProviderId(e.target.value);setModelId('')}}>
+          <option value="">Todos os Providers</option>{data?.providers.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={modelId} onChange={e=>setModelId(e.target.value)}>
+          <option value="">Todos os Models</option>{data?.providers.flatMap(p=>p.models).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
         <button className="btn" onClick={()=>void load()} disabled={loading}>{loading?'Atualizando…':'Atualizar'}</button>
       </div>
