@@ -11,6 +11,7 @@ import { TeamsView } from './TeamsView.js';
 import { OrchestratorView } from './OrchestratorView.js';
 import { WorkforcesView } from './WorkforcesView.js';
 import { DevChatView } from './DevChatView.js';
+import { TrabalhoView } from './TrabalhoView.js';
 import { LegacyNav } from './shell/LegacyNav.js';
 import { ProjectSwitcher } from './shell/ProjectSwitcher.js';
 import { SystemCenterView } from './shell/SystemCenterView.js';
@@ -144,7 +145,7 @@ export function AgentOfficeApp() {
           </div>
         )}
 
-        {view === 'trabalho' && <DevChatView project={activeProject} />}
+        {view === 'trabalho' && <TrabalhoView project={activeProject} />}
         {view === 'equipe' && <AgentManagerView agents={agents} providers={providers} onChanged={loadShellData} />}
         {view === 'conexoes' && <ProviderManagerView providers={providers} onChanged={loadShellData} />}
         {view === 'configuracoes' && <div className="legacy-view-wrap"><SettingsView /></div>}
