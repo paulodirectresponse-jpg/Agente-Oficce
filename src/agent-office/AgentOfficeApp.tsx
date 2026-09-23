@@ -9,6 +9,7 @@ import { ProviderManagerView } from './ProviderManagerView.js';
 import { TeamsView } from './TeamsView.js';
 import { OrchestratorView } from './OrchestratorView.js';
 import { WorkforcesView } from './WorkforcesView.js';
+import { DevChatView } from './DevChatView.js';
 import { api } from './api.js';
 import './App.css';
 
@@ -188,9 +189,8 @@ export function AgentOfficeApp() {
           </div>
         )}
 
-        {(view === 'office' || view === 'chat') && (
-          <OfficeView project={activeProject} focus={view === 'chat' ? 'chat' : 'office'} />
-        )}
+        {view === 'office' && <OfficeView project={activeProject} focus="office" />}
+        {view === 'chat' && <DevChatView project={activeProject} />}
 
         {view === 'orchestrator' && <OrchestratorView providers={providers} />}
         {view === 'agents' && <AgentManagerView agents={agents} providers={providers} onChanged={loadShellData} />}
