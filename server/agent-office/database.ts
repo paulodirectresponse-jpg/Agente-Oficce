@@ -1072,7 +1072,58 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         ON runtime_worker_delegations(plan_id,status,depth);
       CREATE INDEX IF NOT EXISTS idx_worker_delegations_child
         ON runtime_worker_delegations(child_kind,child_id,status);
+    `,,
+  {
+    version: 20,
+    sql: `
+      CREATE TABLE IF NOT EXISTS workspace_run_commands (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        chat_run_id TEXT REFERENCES chat_runs(id) ON DELETE CASCADE,
+        execution_plan_id TEXT REFERENCES execution_plans(id) ON DELETE SET NULL,
+        command_type TEXT NOT NULL CHECK(command_type IN ('orient','enqueue','interrupt')),
+        message TEXT NOT NULL,
+        target TEXT NOT NULL DEFAULT 'auto',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','applied','dispatched','cancelled')),
+        created_at TEXT NOT NULL,
+        applied_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_workspace_commands_project
+        ON workspace_run_commands(project_id,status,created_at);
+      CREATE INDEX IF NOT EXISTS idx_workspace_commands_run
+        ON workspace_run_commands(chat_run_id,status,created_at);
+
+      CREATE TABLE IF NOT EXISTS workspace_run_baselines (
+        chat_run_id TEXT PRIMARY KEY REFERENCES chat_runs(id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        git_head TEXT,
+        git_branch TEXT,
+        git_status TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_workspace_baseline_project
+        ON workspace_run_baselines(project_id,created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS preview_sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        chat_run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL,
+        process_id TEXT,
+        pid INTEGER,
+        command TEXT NOT NULL,
+        port INTEGER,
+        url TEXT,
+        status TEXT NOT NULL CHECK(status IN ('starting','healthy','failed','stopped')),
+        stdout TEXT NOT NULL DEFAULT '',
+        stderr TEXT NOT NULL DEFAULT '',
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        stopped_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_preview_project_status
+        ON preview_sessions(project_id,status,updated_at DESC);
     `,
+  }
   }
 ];
 
