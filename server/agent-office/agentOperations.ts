@@ -38,6 +38,7 @@ export interface AgentOverview {
   provider_name: string | null;
   model_name: string | null;
   last_effective_model: string | null;
+  latest_run_id: string | null;
   capabilities: ReturnType<CapabilityRepository['listAgent']>;
   performance: AgentPerformanceSummary;
   recent_activity: Array<Record<string, unknown>>;
@@ -98,6 +99,7 @@ export class AgentOperationsService {
     const modelRuntime=provider&&model?this.db.prepare('SELECT * FROM provider_model_runtime_state WHERE provider_id=? AND model_id=?').get(provider.id,model.model_id) as any:null;
     const state=this.db.prepare('SELECT * FROM agent_states WHERE agent_id=? ORDER BY updated_at DESC LIMIT 1').get(agentId) as any;
     const latestMessage=this.db.prepare(`SELECT metadata_json FROM messages WHERE agent_id=? AND role='assistant' ORDER BY created_at DESC LIMIT 1`).get(agentId) as any;
+    const latestRun=this.db.prepare(`SELECT id FROM chat_runs WHERE agent_id=? ORDER BY started_at DESC LIMIT 1`).get(agentId) as any;
     let lastEffective:string|null=null;try{const m=JSON.parse(latestMessage?.metadata_json||'{}');lastEffective=typeof m.effective_model==='string'?m.effective_model:typeof m.model==='string'?m.model:null}catch{}
 
     const derived=this.readiness(agent,provider,model,providerRuntime,modelRuntime,state);
@@ -115,6 +117,7 @@ export class AgentOperationsService {
       provider_name:provider?.name??null,
       model_name:model?.display_name??null,
       last_effective_model:lastEffective,
+      latest_run_id:latestRun?.id??null,
       capabilities:caps.listAgent(agentId),
       performance:this.performance(agentId),
       recent_activity:activity.map(row=>({...row,payload:this.parse(row.payload_json)})),
