@@ -575,6 +575,14 @@ export interface Workforce {
   policy: TeamPolicy;
   status: 'active'|'completed'|'cancelled';
   members: WorkforceMember[];
+  subagents?: Array<{
+    dynamic_team_id: string;
+    subagent_id: string;
+    role_name: string;
+    priority: number;
+    enabled: boolean;
+    metadata: Record<string, unknown>;
+  }>;
   created_at: string;
   updated_at: string;
 }
