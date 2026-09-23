@@ -26,6 +26,7 @@ import { v3ReleaseRouter } from './v3ReleaseRoutes.js';
 import { v3IntegrationRouter } from './v3IntegrationRoutes.js';
 import { resourceRouter } from './resourceRoutes.js';
 import { ResourceService } from '../agent-office/resourceService.js';
+import { voiceRouter } from './voiceRoutes.js';
 
 export const agentOfficeRouter = Router();
 
