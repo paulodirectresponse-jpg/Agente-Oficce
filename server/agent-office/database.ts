@@ -1125,7 +1125,6 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         ON preview_sessions(project_id,status,updated_at DESC);
     `,
   }
-  }
 ];
 
 function assertMigrationPlan(): void {
