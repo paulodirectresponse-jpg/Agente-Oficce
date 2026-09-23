@@ -60,7 +60,7 @@ export class UsageTracker {
     const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString();
     const rows = this.database.prepare(`
       SELECT normalized_json FROM usage_snapshots
-      WHERE agent_id = ? AND created_at >= ?
+      WHERE agent_id = ? AND source = 'run' AND created_at >= ?
     `).all(agentId, since) as Array<{ normalized_json: string }>;
     let inputTokens = 0;
     let outputTokens = 0;
@@ -102,7 +102,7 @@ export class UsageTracker {
   }
 
   summarizeAll(windowDays = 30): UsageSummary[] {
-    const agents = this.database.prepare('SELECT DISTINCT agent_id FROM usage_snapshots').all() as Array<{ agent_id: string }>;
+    const agents = this.database.prepare('SELECT DISTINCT agent_id FROM usage_snapshots WHERE source = 'run'').all() as Array<{ agent_id: string }>;
     return agents.map(row => this.summarize(row.agent_id, windowDays));
   }
 }
