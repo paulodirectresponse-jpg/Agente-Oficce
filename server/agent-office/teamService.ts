@@ -144,8 +144,22 @@ export class TeamService {
     if(team.owner_agent_id&&ops.isEligible(team.owner_agent_id))specialists.push({id:team.owner_agent_id,kind:'agent',caps:this.caps.listAgent(team.owner_agent_id).filter(c=>c.enabled)});
     if(team.owner_agent_id)for(const sub of subs.list(teamId))if(subs.isEligible(sub.id))specialists.push({id:sub.id,kind:'subagent',caps:subs.listCapabilities(sub.id).filter((c:any)=>c.enabled)});
     if(!team.owner_agent_id)for(const member of this.listMembers(teamId).filter(m=>m.enabled))if(ops.isEligible(member.agent_id))specialists.push({id:member.agent_id,kind:'agent',caps:this.caps.listAgent(member.agent_id).filter(c=>c.enabled)});
-    const rows=new Map<string,{capability:string;coverage:boolean;specialists:string[];redundancy:number;tool_coverage:string[];confidence:number;evidence_count:number}>();
-    for(const member of specialists)for(const cap of member.caps){const score=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence);let cur=rows.get(cap.capability_key);if(!cur)cur={capability:cap.capability_key,coverage:false,specialists:[] as string[],redundancy:0,tool_coverage:[] as string[],confidence:0,evidence_count:0};if(score>0){cur.coverage=true;cur.specialists.push(member.kind==='agent'?member.id:`subagent:${member.id}`);cur.redundancy=cur.specialists.length;cur.confidence=Math.max(cur.confidence,cap.confidence);cur.evidence_count+=cap.evidence_count}rows.set(cap.capability_key,cur)}
+    type CapabilityCoverage={capability:string;coverage:boolean;specialists:string[];redundancy:number;tool_coverage:string[];confidence:number;evidence_count:number};
+    const rows=new Map<string,CapabilityCoverage>();
+    for(const member of specialists)for(const cap of member.caps){
+      const score=(cap.verified_score??cap.declared_score)*Math.max(.25,cap.confidence);
+      let cur:CapabilityCoverage|undefined=rows.get(cap.capability_key);
+      if(!cur)cur={capability:cap.capability_key,coverage:false,specialists:[],redundancy:0,tool_coverage:[],confidence:0,evidence_count:0};
+      if(score>0){
+        cur.coverage=true;
+        const specialistId:string=member.kind==='agent'?member.id:`subagent:${member.id}`;
+        cur.specialists.push(specialistId);
+        cur.redundancy=cur.specialists.length;
+        cur.confidence=Math.max(cur.confidence,cap.confidence);
+        cur.evidence_count+=cap.evidence_count;
+      }
+      rows.set(cap.capability_key,cur);
+    }
     const missing=requirements.filter(r=>!specialists.some(m=>m.caps.some((c:any)=>this.capCovers(c,r,defs)))).map(r=>r.key);
     return{team_id:teamId,active_members:specialists.map(m=>m.kind==='agent'?m.id:`subagent:${m.id}`),capabilities:[...rows.values()].sort((a,b)=>a.capability.localeCompare(b.capability)),missing_capabilities:missing};
   }
