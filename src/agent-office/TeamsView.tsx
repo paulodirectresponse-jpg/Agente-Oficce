@@ -97,7 +97,7 @@ export function TeamsView({agents}:Props){
    <section className="manager-detail">
     <div className="manager-card team-org-card">
      <div className="manager-card-header">
-      <div><span className="office-kicker">{selected?'Agent Team':'Nova Agent Team'}</span><h2>{selected?.name??draft.name||'Equipe de um agente'}</h2></div>
+      <div><span className="office-kicker">{selected?'Agent Team':'Nova Agent Team'}</span><h2>{(selected?.name ?? draft.name) || 'Equipe de um agente'}</h2></div>
       {selected&&<span className="team-version-badge">v{selected.current_version}</span>}
      </div>
 
