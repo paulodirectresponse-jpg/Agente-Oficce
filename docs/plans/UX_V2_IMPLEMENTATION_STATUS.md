@@ -6,18 +6,20 @@ Update it **before every work session ends**.
 
 ## Current state
 
-- Overall: PHASE 2 DONE
+- Overall: UX V2 COMPLETE — READY FOR USER REVIEW
 - Completed macro phases:
   - Phase 1 — Foundation + Trabalho — COMPLETE
   - Phase 2 — Recompose the rest of the product — COMPLETE
-- Next macro phase: Phase 3 — Product polish + release gate
+  - Phase 3 — Product polish + release gate — COMPLETE
 - Implementation branch: `ux-v2-redesign`
 - Baseline from main: `c153ea4e61b3456ef18c435afaa83a360bb14fca`
 - Phase 1 code gate SHA: `b384dc462560ee3cb1117d141e595abf560ed84a`
 - Phase 2 code gate SHA: `92fcb65fa55a77ebea0fbe2acca217810881e6be`
-- Phase 2 CI workflow: `35913910720` — PASS
+- Phase 3 final code gate SHA: `df9f046dc08cafafa35a546ed515ad3e8de79677`
+- Phase 3 final CI workflow: `35917154763` — PASS
 - Blocked: no
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
+- Merge to main: intentionally pending user review
 
 ## Completed
 
@@ -39,64 +41,60 @@ Update it **before every work session ends**.
 - Legacy views preserved internally during parity migration.
 
 ### Phase 2 — Recompose the rest of the product
+- Equipe V2 merges Agents + owned Teams/Subagents.
+- Projects V2 moves Project management into the Project Switcher flow.
+- Conexões V2 merges Providers + Integrations.
+- Configurações V2 separates Geral / Runtime / Orquestração / Avançado.
+- System Center V2 separates monitoring/diagnostics from configuration.
+- Legacy navigation removed from the normal product experience.
+- Blocks 1–11 backend invariants preserved.
 
-#### Equipe V2
-- Agents and permanent Teams/Subagents merged into one user-facing surface.
-- Simplified Agent creation/editing.
-- Agent detail organized into Geral / Inteligência / Equipe / Acesso / Atividade / Avançado.
-- Permanent hierarchy remains Agent → owned Team → Subagents.
-- No Agent → Agent hierarchy introduced.
-- Subagents can be created/removed directly from the owning Agent.
-- Full Access is summarized first; individual Tools are grouped behind disclosure.
-- Existing Agent activity/performance remains reachable contextually.
+### Phase 3 — Product polish + release gate
 
-#### Projects V2
-- Projects are accessed from the Project Switcher rather than permanent primary navigation.
-- Switcher actions support All Projects / New Project / Project settings.
-- Project detail reduced to Visão geral / Trabalho / Arquivos / Histórico / Configurações.
-- Files + Git + Artifacts recomposed under Arquivos.
-- Runs + Activity + Decisions + Blockers + temporary Workforces recomposed under Histórico/Trabalho.
-- Objective and latest result promoted to the overview.
-- Project lifecycle, name, workspace and final result moved to Configurações.
-- Existing persistent Project backend remains source of truth.
+#### UX writing and progressive disclosure
+- Monitoring/Analytics labels normalized to Portuguese.
+- Data-quality internals moved behind a "Qualidade dos dados" disclosure on the overview.
+- Integration health labels translated to outcome-oriented Portuguese.
+- Default Integrations copy no longer exposes backend jargon such as policies/audit/idempotency.
+- Technical wording remains where diagnostic precision is useful.
+- No analytics schema/property identifiers were changed by copy work; unsafe broad replacements were detected, reverted and reapplied surgically.
 
-#### Conexões V2
-- Providers and external Integrations merged into Conexões.
-- Top-level IA / Integrações split.
-- Provider experience organized into Geral / Modelos / Resiliência / Diagnóstico.
-- Provider model catalog is compact/searchable rather than a wall of cards.
-- Test connection and model discovery stay easy to reach.
-- Low-level provider configuration remains available behind an advanced disclosure for full parity.
-- Existing Integration Registry remains available under Integrações.
-- Local runtime capabilities are no longer presented as primary third-party connections.
+#### Accessibility and keyboard
+- V2 tabs support Arrow Left/Right, Home and End navigation with roving tab focus.
+- V2 drawers support Escape, initial close-button focus and focus restoration.
+- Project Switcher supports keyboard menu traversal and returns focus after Escape.
+- Global visible `:focus-visible` treatment added.
+- Skip link to main content added.
+- Integration modal supports Escape and dialog semantics.
+- Existing status surfaces retain text labels so color is not the sole signal.
 
-#### Configurações V2
-- Reorganized into Geral / Runtime / Orquestração / Avançado.
-- Project root moved to Geral.
-- Local tool health moved to Runtime.
-- Principal/Fast/Deep model selection and confidence controls moved to Orquestração.
-- Orchestrator model identifiers use canonical provider model IDs correctly.
-- Release Preflight and deep operational controls moved to Avançado.
+#### Loading, errors and recovery
+- Initial shell has an explicit loading/status surface while Projects, Agents and Providers load.
+- Offline runtime banner remains available with automatic resynchronization behavior.
+- Existing V2 errors, approvals, destructive confirmations, empty states and degraded states remain visible in context.
+- Empty Inspector tabs remain hidden until relevant.
 
-#### System Center V2
-- System Center is observational/diagnostic rather than a duplicate configuration screen.
-- Sections: Atividade / Uso & Custo / Saúde / Orquestração / Diagnóstico.
-- Health includes runtime, Providers, external Integrations and local Tools.
-- Orchestration shows recent routing outcomes/history without exposing tuning controls.
-- Configuration points users back to Configurações → Orquestração.
-- Analytics remains available under Uso & Custo.
-- Release diagnostics/preflight remain available under Diagnóstico.
+#### Responsive / reflow
+- Additional 1366px guardrails added.
+- At constrained widths the sidebar reduces to icon mode rather than crushing content.
+- Tab rows scroll horizontally when needed.
+- V2 detail surfaces use shrink-safe `min-width: 0`.
+- Normal prose uses natural wrapping; technical values may wrap anywhere.
+- Narrow layouts stack lists/forms/cards rather than compressing them beyond readability.
+- Reduced-motion handling is global for UX V2.
 
-#### Navigation retirement
-- “Áreas antigas” was removed from the normal sidebar after parity.
-- Standalone Office / Chat / Orchestrator / Teams / Workforces / Integrations / Analytics routes remain only as internal compatibility code for now.
-- No old technical destination competes with the primary UX V2 navigation.
+#### Safe legacy retirement
+- Legacy route keys removed from the V2 shell model.
+- Old technical views are no longer mounted by `AgentOfficeApp`.
+- Obsolete `LegacyNav.tsx` removed.
+- Reusable legacy internals intentionally retained where UX V2 still composes them (for example Sala/Office, Analytics calculations, Integration Registry and advanced Provider configuration).
+- No backend service/API was removed merely because its old page disappeared.
 
 ## Verification
 
-### Phase 2 final code gate — 2026-09-23
-Validated SHA: `92fcb65fa55a77ebea0fbe2acca217810881e6be`
-Workflow: `35913910720`
+### Phase 3 final release gate — 2026-09-23
+Validated SHA: `df9f046dc08cafafa35a546ed515ad3e8de79677`
+Workflow: `35917154763`
 
 - Release version consistency: PASS
 - Unit and integration tests: PASS (249 tests)
@@ -105,37 +103,38 @@ Workflow: `35913910720`
 - Typecheck: PASS
 - Build client and server: PASS
 - Tauri desktop build: PASS
-- Bundled backend smoke: PASS
+- Bundled backend runtime smoke: PASS
 - Installed desktop runtime lifecycle: PASS
 - MSI verification: PASS
 - Release manifest: PASS
 - MSI artifact upload: PASS
 - Release diagnostics upload: PASS
 
-No Blocks 1–11 backend invariant was intentionally rewritten for UX V2.
+Notes:
+- Earlier Phase 3 CI attempts included an unrelated Windows checkout certificate failure and intermediate TypeScript failures caused by intentionally retired LegacyNav plus two overly broad copy replacements. These were diagnosed and corrected before the final gate.
+- The final code gate is fully green.
 
 ## In progress
 
-None. Phase 2 is closed.
+None. UX V2 implementation is complete.
 
 ## Next exact action
 
-Start Phase 3 — Product polish + release gate.
+User review / manual product testing of the completed UX V2.
 
-Phase 3 must not introduce another major information architecture unless a concrete usability blocker is found.
+Do not redesign the architecture again during review. Classify findings as:
 
-Required focus:
+1. functional bug;
+2. usability issue;
+3. visual polish;
+4. missing parity;
+5. new feature request.
 
-1. full UX writing/Portuguese consistency pass;
-2. visual consistency against `DESIGN.md`;
-3. empty/loading/error/degraded/approval/destructive states;
-4. keyboard/focus/accessibility pass;
-5. 1366 / 1440 / 1920 / ultrawide verification;
-6. 200% zoom/text reflow;
-7. remove dead legacy UI/components/styles only after proving they are no longer needed;
-8. final release gate + MSI.
-
-Do not redo Phase 1 or Phase 2 architecture without a concrete defect.
+After review:
+- fix verified findings on `ux-v2-redesign`;
+- rerun the release gate;
+- merge to `main` only after explicit user approval;
+- optionally bump the release version for formal distribution.
 
 ## Known UX defects to eliminate
 
