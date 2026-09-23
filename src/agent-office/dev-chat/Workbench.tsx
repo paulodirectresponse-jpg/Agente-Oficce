@@ -48,7 +48,7 @@ export function Workbench({project,snapshot,runId,liveEvents,contextual=false}:{
   const stopPreview=async()=>{setBusy(true);try{setPreview(await api.stopPreviewV3(project.id))}finally{setBusy(false)}};
   const restartPreview=async()=>{setBusy(true);try{setPreview(await api.restartPreviewV3(project.id))}catch(e){setError(e instanceof Error?e.message:'Falha ao reiniciar preview.')}finally{setBusy(false)}};
 
-  const allTabs: Array<[Tab,string]>=[['live','Live'],['files','Files'],['code','Code'],['changes','Changes'],['tests','Tests'],['terminal','Terminal'],['preview','Preview'],['artifacts','Artifacts'],['logs','Logs']];
+  const allTabs: Array<[Tab,string]>=contextual?[['live','Execução'],['files','Arquivos'],['code','Código'],['changes','Alterações'],['tests','Testes'],['terminal','Terminal'],['preview','Preview'],['artifacts','Resultados'],['logs','Logs']]:[['live','Live'],['files','Files'],['code','Code'],['changes','Changes'],['tests','Tests'],['terminal','Terminal'],['preview','Preview'],['artifacts','Artifacts'],['logs','Logs']];
   const tabs=useMemo(()=>contextual?allTabs.filter(([key])=>{
     if(key==='live')return Boolean(snapshot?.active_run||liveEvents.length||inspection);
     if(key==='files')return Boolean(entries.length||snapshot?.git.files.length);
