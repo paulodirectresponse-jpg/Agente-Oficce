@@ -1072,7 +1072,8 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
         ON runtime_worker_delegations(plan_id,status,depth);
       CREATE INDEX IF NOT EXISTS idx_worker_delegations_child
         ON runtime_worker_delegations(child_kind,child_id,status);
-    `,,
+    `,
+  },
   {
     version: 20,
     sql: `
