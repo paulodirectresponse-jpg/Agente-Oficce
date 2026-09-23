@@ -13,6 +13,7 @@ interface ProjectSwitcherProps {
 export function ProjectSwitcher({ projects, activeProject, onSwitch, onMenuAction }: ProjectSwitcherProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -24,8 +25,22 @@ export function ProjectSwitcher({ projects, activeProject, onSwitch, onMenuActio
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setOpen(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus());
+      }
+      if (['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
+        const items = Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+        if (!items.length) return;
+        const current = document.activeElement instanceof HTMLElement ? items.indexOf(document.activeElement as HTMLButtonElement) : -1;
+        let next = current;
+        if (event.key === 'ArrowDown') next = current < 0 ? 0 : (current + 1) % items.length;
+        if (event.key === 'ArrowUp') next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+        if (event.key === 'Home') next = 0;
+        if (event.key === 'End') next = items.length - 1;
+        event.preventDefault();
+        items[next]?.focus();
       }
     };
+    window.requestAnimationFrame(() => rootRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus());
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -47,6 +62,7 @@ export function ProjectSwitcher({ projects, activeProject, onSwitch, onMenuActio
   return (
     <div className="ux2-switcher" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="ux2-switcher-button"
         aria-haspopup="menu"
