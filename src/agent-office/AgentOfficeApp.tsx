@@ -3,6 +3,7 @@ import type { AgentProfile, Project, UniversalProvider } from './types.js';
 import { ProjectsView } from './ProjectsView.js';
 import { AnalyticsView } from './AnalyticsView.js';
 import { SettingsView } from './SettingsView.js';
+import { ConfiguracoesView } from './ConfiguracoesView.js';
 import { OfficeView } from './OfficeView.js';
 import { AgentManagerView } from './AgentManagerView.js';
 import { EquipeView } from './EquipeView.js';
@@ -152,7 +153,7 @@ export function AgentOfficeApp() {
         {view === 'trabalho' && <TrabalhoView project={activeProject} />}
         {view === 'equipe' && <EquipeView agents={agents} providers={providers} onChanged={loadShellData} />}
         {view === 'conexoes' && <ConexoesView providers={providers} project={activeProject} onChanged={loadShellData} />}
-        {view === 'configuracoes' && <div className="legacy-view-wrap"><SettingsView /></div>}
+        {view === 'configuracoes' && <ConfiguracoesView providers={providers} />}
         {view === 'system' && <SystemCenterView runtimeState={runtimeState} providers={providers} activeProject={activeProject} />}
 
         {view === 'office' && <OfficeView project={activeProject} focus="office" />}
