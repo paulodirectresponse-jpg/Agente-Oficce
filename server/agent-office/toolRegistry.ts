@@ -595,7 +595,7 @@ export class ToolRegistry {
       timeoutMs: 30_000,
       signal: context.signal,
     };
-    const result = await executeBackendTool(definition.name, input, localContext);
+    const result = await executeBackendTool(definition.name, input, localContext, context);
     context.database.prepare(`
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?
