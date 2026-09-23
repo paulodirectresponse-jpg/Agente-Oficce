@@ -995,6 +995,60 @@ export const agentOfficeMigrations: Array<{ version: number; sql: string }> = [
       -- Owned teams move forward with true Subagents.
       -- Legacy team_members rows remain untouched for historical compatibility.
     `,
+  },
+  {
+    version: 19,
+    sql: `
+      ALTER TABLE dynamic_team_instances ADD COLUMN chat_run_id TEXT REFERENCES chat_runs(id) ON DELETE SET NULL;
+      ALTER TABLE dynamic_team_instances ADD COLUMN lifecycle_status TEXT NOT NULL DEFAULT 'active'
+        CHECK(lifecycle_status IN ('forming','active','completed','failed','cancelled'));
+      ALTER TABLE dynamic_team_instances ADD COLUMN started_at TEXT;
+      ALTER TABLE dynamic_team_instances ADD COLUMN completed_at TEXT;
+      ALTER TABLE dynamic_team_instances ADD COLUMN metadata_json TEXT NOT NULL DEFAULT '{}';
+
+      UPDATE dynamic_team_instances
+      SET lifecycle_status = CASE
+        WHEN status='completed' THEN 'completed'
+        WHEN status='cancelled' THEN 'cancelled'
+        ELSE 'active'
+      END
+      WHERE lifecycle_status='active';
+
+      CREATE TABLE IF NOT EXISTS workforce_team_members (
+        dynamic_team_id TEXT NOT NULL REFERENCES dynamic_team_instances(id) ON DELETE CASCADE,
+        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        team_version_id TEXT REFERENCES team_versions(id) ON DELETE SET NULL,
+        snapshot_json TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        priority INTEGER NOT NULL DEFAULT 0,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(dynamic_team_id, team_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS workforce_resource_metadata (
+        dynamic_team_id TEXT NOT NULL REFERENCES dynamic_team_instances(id) ON DELETE CASCADE,
+        worker_kind TEXT NOT NULL CHECK(worker_kind IN ('agent','subagent','team')),
+        worker_id TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        capability_keys_json TEXT NOT NULL DEFAULT '[]',
+        source_team_id TEXT,
+        source_owner_id TEXT,
+        score REAL,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(dynamic_team_id, worker_kind, worker_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_workforce_team_members
+        ON workforce_team_members(dynamic_team_id, enabled, priority);
+      CREATE INDEX IF NOT EXISTS idx_workforce_chat_run
+        ON dynamic_team_instances(chat_run_id, lifecycle_status);
+      CREATE INDEX IF NOT EXISTS idx_workforce_lifecycle
+        ON dynamic_team_instances(lifecycle_status, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_workforce_resource_reason
+        ON workforce_resource_metadata(dynamic_team_id, worker_kind, worker_id);
+    `,
   }
 ];
 
