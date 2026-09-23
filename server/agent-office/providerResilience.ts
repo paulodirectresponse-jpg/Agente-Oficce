@@ -57,6 +57,7 @@ interface WindowState {
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
   lastError: string | null;
+  baseStatus: string;
 }
 
 function num(config: Record<string, unknown>, key: string, fallback: number): number {
@@ -164,6 +165,7 @@ export class ProviderResilienceManager {
         lastSuccessAt: row?.last_success_at ?? null,
         lastFailureAt: row?.last_failure_at ?? null,
         lastError: row?.last_error ?? null,
+        baseStatus: row?.operational_status ?? 'unknown',
       };
       this.states.set(providerId, state);
     }
@@ -198,7 +200,7 @@ export class ProviderResilienceManager {
         : state.cooldownUntil > Date.now() ? 'rate_limited'
           : state.queued > 0 ? 'queued'
             : state.active > 0 ? 'busy'
-              : 'healthy');
+              : state.baseStatus !== 'unknown' ? state.baseStatus : 'healthy');
     this.database.prepare(`
       INSERT INTO provider_runtime_state (
         provider_id, operational_status, active_requests, queued_requests,
@@ -300,6 +302,7 @@ export class ProviderResilienceManager {
     state.cooldownUntil = 0;
     state.lastSuccessAt = nowIso();
     state.lastError = null;
+    state.baseStatus = 'healthy';
     if (actualTokens > 0) state.tokens += actualTokens;
     this.persist(provider, state, state.active > 0 ? 'busy' : 'healthy');
     this.database.prepare(`
@@ -334,6 +337,7 @@ export class ProviderResilienceManager {
         : state.circuitState === 'open'
           ? 'unavailable'
           : state.cooldownUntil > Date.now() ? 'rate_limited' : 'degraded';
+    state.baseStatus = status;
     this.persist(provider, state, status);
     this.database.prepare(`
       INSERT INTO provider_model_runtime_state (
