@@ -2,16 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type { OrchestrationEvent, OrchestrationRun, OrchestratorModelRef, OrchestratorSettings, OrchestratorStatus, ProviderModel, UniversalProvider } from './types.js';
 import { api } from './api.js';
 
-function refKey(ref: OrchestratorModelRef | null): string {
-  return ref?.provider_id && ref.model_id ? ref.provider_id + '::' + ref.model_id : '';
-}
-
-function parseRef(value: string): OrchestratorModelRef | null {
-  if (!value) return null;
-  const [provider_id, ...rest] = value.split('::');
-  return { provider_id, model_id: rest.join('::') || null };
-}
-
 function healthClass(value?: string): string {
   if (value === 'healthy' || value === 'busy' || value === 'queued') return 'online';
   if (value === 'unavailable' || value === 'auth_error' || value === 'misconfigured') return 'offline';
@@ -19,7 +9,6 @@ function healthClass(value?: string): string {
 }
 
 export function OrchestratorView({ providers }: { providers: UniversalProvider[] }) {
-  const [settings, setSettings] = useState<OrchestratorSettings | null>(null);
   const [draft, setDraft] = useState<OrchestratorSettings | null>(null);
   const [status, setStatus] = useState<OrchestratorStatus | null>(null);
   const [runs, setRuns] = useState<OrchestrationRun[]>([]);
@@ -40,7 +29,6 @@ export function OrchestratorView({ providers }: { providers: UniversalProvider[]
         api.listOrchestrationRunsV3(80),
         api.listOrchestrationEventsV3(160),
       ]);
-      setSettings(nextSettings);
       setDraft((current) => current ?? nextSettings);
       setStatus(nextStatus);
       setRuns(nextRuns);
@@ -93,7 +81,6 @@ export function OrchestratorView({ providers }: { providers: UniversalProvider[]
     setBusy(true); setError(null); setNotice(null);
     try {
       const saved = await api.saveOrchestratorSettingsV3(draft);
-      setSettings(saved);
       setDraft(saved);
       setStatus(await api.getOrchestratorStatusV3());
       setNotice('Configuração do Orquestrador salva.');
@@ -261,7 +248,7 @@ export function OrchestratorView({ providers }: { providers: UniversalProvider[]
               <div><span>Destino</span><strong>{String(selectedRun.decision?.target_agent_id || selectedRun.decision?.target_team_id || selectedRun.decision?.target_mode || '—')}</strong></div>
               <div><span>Complexidade</span><strong>{String(selectedRun.decision?.complexity || '—')}</strong></div>
               <div><span>Risco</span><strong>{String(selectedRun.decision?.risk || '—')}</strong></div>
-              <div><span>Modelo</span><strong>{selectedRun.model_id || 'determinístico'}</strong></div>
+              <div><span>Modelo</span><strong>{(selectedRun as any).model_name || (selectedRun as any).effective_model_id || 'determinístico'}</strong></div>
               <div><span>Tokens</span><strong>{(selectedRun.input_tokens || 0) + (selectedRun.output_tokens || 0)}</strong></div>
               <div><span>Confiança</span><strong>{Math.round(Number(selectedRun.decision?.confidence || 0) * 100)}%</strong></div>
             </div>
