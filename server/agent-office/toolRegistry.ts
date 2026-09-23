@@ -8,6 +8,7 @@ import {
 } from './localTools.js';
 import { redactSecrets, stableJson } from './securitySanitizer.js';
 import { executeFullAccessTool, fullAccessToolDefinitions, type FullAccessToolResult } from './fullAccessTools.js';
+import { IntegrationRegistryService, integrationToolDefinitions } from './integrationRegistry.js';
 
 export type ToolRisk = 'read' | 'write' | 'execute' | 'external' | 'destructive';
 export type ToolApprovalMode = 'safe' | 'manual' | 'auto';
@@ -199,6 +200,7 @@ const LEGACY_TOOL_DEFINITIONS: ToolDefinition[] = [
 const TOOL_DEFINITIONS: ToolDefinition[] = [
   ...LEGACY_TOOL_DEFINITIONS,
   ...fullAccessToolDefinitions,
+  ...integrationToolDefinitions,
 ];
 
 function isLegacyTool(name: string): name is LocalToolName {
@@ -209,12 +211,22 @@ async function executeBackendTool(
   name: string,
   input: Record<string, unknown>,
   context: LocalToolContext,
+  execution?: ToolExecutionContext,
 ): Promise<LocalToolResult | FullAccessToolResult> {
   if (name === 'run_command') {
     const command = Array.isArray(input.command) ? input.command.map(String).join(' ') : String(input.command ?? '');
     return executeFullAccessTool('shell_command', { command }, context);
   }
   if (isLegacyTool(name)) return executeLocalTool(name, input, context);
+  if (integrationToolDefinitions.some((tool) => tool.name === name)) {
+    if (!execution) return { ok: false, error: 'INTEGRATION_EXECUTION_CONTEXT_REQUIRED' };
+    return new IntegrationRegistryService(execution.database).executeTool(name, input, {
+      project_id: execution.project_id,
+      project_root: execution.project_root,
+      run_id: execution.run_id,
+      signal: execution.signal,
+    });
+  }
   return executeFullAccessTool(name, input, context);
 }
 
@@ -483,7 +495,7 @@ export class ToolRegistry {
       timeoutMs: 30_000,
       signal: context.signal,
     };
-    const result = await executeBackendTool(definition.name, input, localContext);
+    const result = await executeBackendTool(definition.name, input, localContext, context);
     context.database.prepare(`
       UPDATE tool_audit_events
       SET status = ?, result_json = ?, ended_at = ?
