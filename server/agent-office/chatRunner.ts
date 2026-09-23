@@ -25,6 +25,7 @@ import { chatEventHub, type ChatEventHub } from './chatEventHub.js';
 import { ChatRunCancelledError } from './runtimeControls.js';
 import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
 import { AgentOperationsService } from './agentOperations.js';
+import { SubagentService } from './subagentService.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -35,6 +36,7 @@ export interface PrepareChatRunInput {
   target?: ChatTarget;
   model_override?: string;
   selected_agent_ids?: string[];
+  selected_subagent_ids?: string[];
   orchestration_run_id?: string;
   routing_level?: string;
   routing_decision?: Record<string, unknown>;
@@ -44,6 +46,8 @@ export interface PreparedChatRun {
   run: ChatRun;
   conversation_id: string;
   selected_agents: string[];
+  selected_subagents: string[];
+  selected_workers: Array<{ kind: 'agent' | 'subagent'; id: string }>;
   mode: 'single' | 'team';
   model_override?: string;
   tools_enabled: boolean;
@@ -53,15 +57,20 @@ export interface ChatRunReceipt {
   run_id: string;
   conversation_id: string;
   selected_agents: string[];
+  selected_subagents?: string[];
   mode: 'single' | 'team';
   status: 'running';
   tools_enabled: boolean;
 }
 
 interface AgentBinding {
+  worker_kind: 'agent' | 'subagent';
   agent: Agent;
   provider: Provider;
   model: ProviderModel;
+  owner_agent_id?: string;
+  team_id?: string;
+  subagent_id?: string;
 }
 
 interface AgentResult {
@@ -208,6 +217,7 @@ export class ChatRunnerService {
   private readonly engine: UniversalProviderEngine;
   private readonly toolPolicies: AgentToolPolicyRepository;
   private readonly agentOps: AgentOperationsService;
+  private readonly subagents: SubagentService;
 
   constructor(
     private readonly database: Database,
@@ -227,6 +237,7 @@ export class ChatRunnerService {
     this.engine = new UniversalProviderEngine(database, secrets, fetchImpl);
     this.toolPolicies = new AgentToolPolicyRepository(database);
     this.agentOps = new AgentOperationsService(database);
+    this.subagents = new SubagentService(database);
   }
 
   prepare(input: PrepareChatRunInput): PreparedChatRun {
