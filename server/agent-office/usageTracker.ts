@@ -102,7 +102,7 @@ export class UsageTracker {
   }
 
   summarizeAll(windowDays = 30): UsageSummary[] {
-    const agents = this.database.prepare('SELECT DISTINCT agent_id FROM usage_snapshots WHERE source = 'run'').all() as Array<{ agent_id: string }>;
+    const agents = this.database.prepare("SELECT DISTINCT agent_id FROM usage_snapshots WHERE source = 'run'").all() as Array<{ agent_id: string }>;
     return agents.map(row => this.summarize(row.agent_id, windowDays));
   }
 }
