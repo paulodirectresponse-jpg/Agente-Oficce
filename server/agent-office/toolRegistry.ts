@@ -390,7 +390,7 @@ function auditResult(toolName: string, result: LocalToolResult | FullAccessToolR
       args: redactSecrets(data.args),
     };
   }
-  return { ok: true, ...data };
+  return { ok: true, ...(redactSecrets(data) as Record<string, unknown>) };
 }
 
 export class ToolRegistry {
