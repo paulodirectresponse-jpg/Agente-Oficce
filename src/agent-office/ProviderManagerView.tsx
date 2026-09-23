@@ -559,7 +559,13 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
                 <h2>{selected?.name ?? 'Adicionar provider'}</h2>
               </div>
               {selected && (
-                <span className={`provider-health ${healthClass(selected)}`}>{selected.health_status}</span>
+                <span className={`provider-health ${
+                  runtime?.runtime.operational_status === 'healthy' ? 'online'
+                    : runtime?.runtime.operational_status === 'unavailable' || runtime?.runtime.operational_status === 'auth_error' || runtime?.runtime.operational_status === 'misconfigured' ? 'offline'
+                      : runtime ? 'unknown' : healthClass(selected)
+                }`}>
+                  {runtime?.runtime.operational_status ?? selected.health_status}
+                </span>
               )}
             </div>
 
@@ -751,12 +757,14 @@ export function ProviderManagerView({ providers, onChanged }: ProviderManagerVie
               <div className="model-add-row">
                 <select value={fallbackProviderId} onChange={(event) => setFallbackProviderId(event.target.value)}>
                   <option value="">Escolha o provider fallback</option>
-                  {providers.filter((provider) => provider.id !== selected.id && provider.enabled).map((provider) => (
-                    <option key={provider.id} value={provider.id}>{provider.name}</option>
+                  {providers.filter((provider) => provider.enabled).map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name}{provider.id === selected.id ? ' · outro modelo' : ''}
+                    </option>
                   ))}
                 </select>
-                <input value={fallbackModel} onChange={(event) => setFallbackModel(event.target.value)} placeholder="Modelo opcional · vazio usa padrão" />
-                <button type="button" onClick={addFallback} disabled={!fallbackProviderId || busy === 'fallback'}>Adicionar</button>
+                <input value={fallbackModel} onChange={(event) => setFallbackModel(event.target.value)} placeholder={fallbackProviderId === selected.id ? 'Modelo fallback obrigatório' : 'Modelo opcional · vazio usa padrão'} />
+                <button type="button" onClick={addFallback} disabled={!fallbackProviderId || (fallbackProviderId === selected.id && !fallbackModel.trim()) || busy === 'fallback'}>Adicionar</button>
               </div>
               <div className="model-list">
                 {fallbacks.map((fallback, index) => {

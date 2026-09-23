@@ -125,6 +125,17 @@ function eventIcon(type: string): string {
   return '•';
 }
 
+function humanizeChatFailure(message: string): string {
+  const raw = message.trim();
+  if (/HTTP 502|service_unavailable|PROVIDER_HTTP_ERROR/i.test(raw)) {
+    return 'O Orquestrador concluiu o roteamento, mas o provider do agente ficou temporariamente indisponível (HTTP 502). Tente novamente ou configure um fallback em Providers. Detalhe: ' + raw;
+  }
+  if (/PROVIDER_CIRCUIT_OPEN|PROVIDER_COOLDOWN|rate.?limit|HTTP 429/i.test(raw)) {
+    return 'O provider do agente está temporariamente limitado ou em cooldown. O Office aguardará/usará fallback quando configurado. Detalhe: ' + raw;
+  }
+  return raw || 'A execução falhou antes de produzir uma resposta.';
+}
+
 function providerState(agent: AgentProfile, providers: UniversalProvider[]): 'online' | 'offline' | 'unknown' {
   if (!agent.provider_id) return 'offline';
   const provider = providers.find((item) => item.id === agent.provider_id);
@@ -240,6 +251,10 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
           setSending(false);
           setRunStatus(run.status);
+          if (run.status === 'failed') {
+            const message = run.error && typeof run.error.message === 'string' ? run.error.message : 'CHAT_RUN_FAILED';
+            setError(humanizeChatFailure(message));
+          }
           eventSourceRef.current?.close();
           eventSourceRef.current = null;
           setStreamingByAgent({});
@@ -380,6 +395,10 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       }
 
       if (envelope.event === 'run.completed' || envelope.event === 'run.failed' || envelope.event === 'run.cancelled') {
+        if (envelope.event === 'run.failed') {
+          const failureMessage = typeof envelope.data.message === 'string' ? envelope.data.message : 'CHAT_RUN_FAILED';
+          setError(humanizeChatFailure(failureMessage));
+        }
         setRunStatus(
           envelope.event === 'run.completed'
             ? 'completed'
@@ -408,6 +427,10 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
           if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
             setRunStatus(run.status);
             setSending(false);
+            if (run.status === 'failed') {
+              const message = run.error && typeof run.error.message === 'string' ? run.error.message : 'CHAT_RUN_FAILED';
+              setError(humanizeChatFailure(message));
+            }
             source.close();
             if (eventSourceRef.current === source) eventSourceRef.current = null;
             if (project) {
