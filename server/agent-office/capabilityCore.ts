@@ -44,10 +44,13 @@ export class CapabilityRepository{
     const addParents=(key:string,score:number)=>{let cur=defs.get(key);while(cur?.parent_key){if(!inferred.has(cur.parent_key))inferred.set(cur.parent_key,Math.max(.55,score-.15));cur=defs.get(cur.parent_key)}};
     for(const [key,score] of [...inferred])addParents(key,score);
     const existing=new Map(this.listAgent(agentId).map(x=>[x.capability_key,x]));
-    const merged=[...existing.values()].map(x=>({capability_key:x.capability_key,declared_score:x.declared_score,enabled:x.enabled,source:x.source}));
+    const merged=[...existing.values()]
+      .filter(x=>x.source!=='seed')
+      .map(x=>({capability_key:x.capability_key,declared_score:x.declared_score,enabled:x.enabled,source:x.source}));
     for(const [key,score] of inferred){
-      if(existing.has(key))continue;
-      merged.push({capability_key:key,declared_score:score,enabled:true,source:'seed' as CapabilitySource});
+      const prev=existing.get(key);
+      if(prev&&prev.source!=='seed')continue;
+      merged.push({capability_key:key,declared_score:prev?.declared_score??score,enabled:true,source:'seed' as CapabilitySource});
     }
     return this.replaceAgent(agentId,merged);
   }
