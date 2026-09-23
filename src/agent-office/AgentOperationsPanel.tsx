@@ -105,9 +105,9 @@ export function AgentOperationsPanel({
       const next = await api.recordAgentPerformanceV2(agent.id, {
         event_type,
         run_id: overview.latest_run_id ?? undefined,
-        source: 'user' as never,
+        source: 'user',
         detail: event_type === 'accepted' ? 'Resultado aprovado pelo usuário.' : event_type === 'rework_requested' ? 'Usuário solicitou retrabalho.' : 'Resultado rejeitado pelo usuário.',
-      } as any);
+      });
       setOverview(next);
       setNotice('Feedback registrado.');
     } catch (reason) {
