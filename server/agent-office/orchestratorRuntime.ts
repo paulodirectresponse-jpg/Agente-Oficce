@@ -43,7 +43,7 @@ export class UniversalOrchestratorLLM implements OrchestratorLLM{
   async decide(level:'fast'|'deep',input:{message:string;domains:string[];constraints:Record<string,unknown>}):Promise<OrchestratorLLMEnvelope>{
     const r=this.pick(level),started=Date.now(),engine=new UniversalProviderEngine(this.db,new DevelopmentSecretStore(getAgentOfficeConfig().dataDir));
     const out=await engine.complete(r.provider_id!,{model:r.model_id!,messages:[{role:'system',content:'Return strict JSON routing decisions only.'},{role:'user',content:prompt(level,input)}],temperature:0,max_output_tokens:level==='fast'?1200:2200});
-    const meta=out.raw&&typeof out.raw==='object'?out.raw as any:null,actualProvider=typeof meta?.provider_id==='string'?meta.provider_id:r.provider_id!,actualModel=typeof meta?.model==='string'?meta.model:r.model_id!;
+    const actualProvider=out.provider_id??r.provider_id!,actualModel=out.model_id??r.model_id!;
     return{decision:extractJson(out.text),telemetry:{provider_id:actualProvider,model_id:actualModel,requested_provider_id:r.provider_id!,requested_model_id:r.model_id!,input_tokens:Number(out.usage?.input_tokens||0),output_tokens:Number(out.usage?.output_tokens||0),duration_ms:Date.now()-started,fallback_used:actualProvider!==r.provider_id||actualModel!==r.model_id}}
   }
 }
