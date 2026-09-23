@@ -402,4 +402,25 @@ describe('ChatRunnerService', () => {
     f.cleanup();
   });
 
+  it('honors central orchestrator selected agents and persists orchestration metadata', () => {
+    const f = fixture();
+    addProviderModelAgent(f, { providerId: 'route-provider', agentId: 'first', role: 'Backend', sort: 1 });
+    addProviderModelAgent(f, { providerId: 'route-provider', agentId: 'second', role: 'QA Reviewer', sort: 2 });
+    const service = new ChatRunnerService(f.database.connection, f.secrets, f.hub, async () => { throw new Error('not called'); });
+    const prepared = service.prepare({
+      project_id: 'project-1',
+      message: 'Execute according to the central routing decision.',
+      target: 'auto',
+      selected_agent_ids: ['second'],
+      orchestration_run_id: 'orch-123',
+      routing_level: 'deep',
+      routing_decision: { target_mode: 'direct_agent', target_agent_id: 'second' },
+    });
+    expect(prepared.selected_agents).toEqual(['second']);
+    const run = new ChatRunRepository(f.database.connection).get(prepared.run.id)!;
+    expect(run.metadata).toMatchObject({ orchestration_run_id: 'orch-123', routing_level: 'deep' });
+    f.cleanup();
+  });
+
+
 });
