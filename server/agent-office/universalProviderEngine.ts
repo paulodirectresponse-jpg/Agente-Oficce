@@ -1186,7 +1186,7 @@ export class UniversalProviderEngine {
     const sameProviderModels = this.providers.listModels(providerId, false)
       .filter(item => item.enabled && item.model_id !== model)
       .filter(item => !needsTools || item.capabilities.tools !== false)
-      .filter(item => {const p=this.providers.get(providerId);return Boolean(p&&providerAccepts(p,item.model_id))}
+      .filter(item => {const p=this.providers.get(providerId);return Boolean(p&&providerAccepts(p,item.model_id))})
       .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.display_name.localeCompare(b.display_name));
 
     for (const item of sameProviderModels) {
