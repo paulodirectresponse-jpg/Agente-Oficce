@@ -90,7 +90,7 @@ export function IntegrationsView({project}:{project:Project|null}){
   return <div className="integrations-page">
     <header className="integrations-header">
       <div>
-        <span className="office-kicker">External systems</span>
+        <span className="office-kicker">Sistemas externos</span>
         <h1>Integrações</h1>
         <p>Conecte serviços externos que seus Agents podem usar quando o trabalho precisar.</p>
       </div>
@@ -104,7 +104,7 @@ export function IntegrationsView({project}:{project:Project|null}){
 
     <section className="integration-section">
       <div className="analytics-card-head">
-        <div><span className="office-kicker">Connections</span><h2>Conectadas</h2></div>
+        <div><span className="office-kicker">Conexões</span><h2>Conectadas</h2></div>
         <small>{connections.length} conexões</small>
       </div>
       <div className="integration-grid">
@@ -143,7 +143,7 @@ export function IntegrationsView({project}:{project:Project|null}){
     </section>
 
     <section className="integration-section">
-      <div className="analytics-card-head"><div><span className="office-kicker">Catalog</span><h2>Adicionar integração</h2></div></div>
+      <div className="analytics-card-head"><div><span className="office-kicker">Disponíveis</span><h2>Adicionar integração</h2></div></div>
       <div className="integration-catalog-grid">
         {catalog.filter(item=>!item.local).map(item=><article className="integration-catalog-card" key={item.driver}>
           <div><strong>{item.name}</strong><span>{item.description}</span></div>
