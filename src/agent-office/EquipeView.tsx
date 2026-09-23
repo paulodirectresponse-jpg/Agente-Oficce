@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AgentOverview, AgentProfile, AgentToolPolicy, ProviderModel, Subagent, Team, ToolDefinitionV2, UniversalProvider } from './types.js';
+import type { AgentOverview, AgentProfile, AgentToolPolicy, KnowledgeItem, ProviderModel, SkillDefinition, Subagent, Team, ToolDefinitionV2, UniversalProvider } from './types.js';
 import { api } from './api.js';
 import { AgentOperationsPanel } from './AgentOperationsPanel.js';
 import { V2EmptyState, V2PageHeader, V2Status, V2Tabs } from './shell/V2Primitives.js';
 
-type Tab='geral'|'inteligencia'|'equipe'|'acesso'|'atividade'|'avancado';
+type Tab='geral'|'inteligencia'|'conhecimento'|'skills'|'equipe'|'acesso'|'atividade'|'avancado';
 type Draft={name:string;role:string;description:string;provider_id:string;model_id:string;system_prompt:string;enabled:boolean;slug:string;avatar_key:string;sort_order:number;idle_after_seconds:number};
 const blank:Draft={name:'',role:'',description:'',provider_id:'',model_id:'',system_prompt:'',enabled:true,slug:'',avatar_key:'default',sort_order:10,idle_after_seconds:300};
 const slugify=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
 const tabs:Array<{key:Tab;label:string}>=[
-  {key:'geral',label:'Geral'},{key:'inteligencia',label:'Inteligência'},{key:'equipe',label:'Equipe'},
+  {key:'geral',label:'Geral'},{key:'inteligencia',label:'Inteligência'},{key:'conhecimento',label:'Conhecimento'},{key:'skills',label:'Skills'},{key:'equipe',label:'Equipe'},
   {key:'acesso',label:'Acesso'},{key:'atividade',label:'Atividade'},{key:'avancado',label:'Avançado'},
 ];
 function readinessLabel(value?:string){
@@ -49,17 +49,22 @@ export function EquipeView({agents,providers,onChanged}:{agents:AgentProfile[];p
   const [error,setError]=useState<string|null>(null);
   const [subName,setSubName]=useState('');
   const [subRole,setSubRole]=useState('');
+  const [knowledge,setKnowledge]=useState<KnowledgeItem[]>([]);
+  const [skills,setSkills]=useState<SkillDefinition[]>([]);
+  const [assignedSkills,setAssignedSkills]=useState<SkillDefinition[]>([]);
+  const [skillName,setSkillName]=useState('');
+  const [skillInstructions,setSkillInstructions]=useState('');
   const selected=creating?null:agents.find(x=>x.id===selectedId)??null;
 
   useEffect(()=>{if(!selectedId&&agents[0])setSelectedId(agents[0].id);if(selectedId&&!agents.some(x=>x.id===selectedId))setSelectedId(agents[0]?.id??null)},[agents,selectedId]);
   useEffect(()=>{void api.listToolDefinitionsV2().then(setTools).catch(()=>setTools([]))},[]);
   useEffect(()=>{
     setNotice(null);setError(null);setTab('geral');
-    if(!selected){if(!creating)return;setDraft(cur=>cur);setOverview(null);setTeam(null);setSubagents([]);return}
+    if(!selected){if(!creating)return;setDraft(cur=>cur);setOverview(null);setTeam(null);setSubagents([]);setKnowledge([]);setSkills([]);setAssignedSkills([]);return}
     setDraft({name:selected.name,role:selected.role,description:selected.description,provider_id:selected.provider_id??'',model_id:selected.model_id??'',system_prompt:selected.system_prompt,enabled:selected.enabled,slug:selected.slug,avatar_key:selected.avatar_key||'default',sort_order:selected.sort_order,idle_after_seconds:selected.idle_after_seconds});
-    void Promise.all([api.getAgentOverviewV2(selected.id),api.getOwnedTeamV3(selected.id),api.getAgentToolPolicyV2(selected.id)])
-      .then(([o,t,p])=>{setOverview(o);setTeam(t);setSubagents(t?.subagents??[]);setPolicy({enabled:p.enabled,allowed_tools:p.allowed_tools,approval_mode:p.approval_mode,max_tool_steps:p.max_tool_steps})})
-      .catch(()=>{setOverview(null);setTeam(null);setSubagents([])});
+    void Promise.all([api.getAgentOverviewV2(selected.id),api.getOwnedTeamV3(selected.id),api.getAgentToolPolicyV2(selected.id),api.listKnowledge('agent',selected.id),api.listSkills(),api.listAssignedSkills('agent',selected.id)])
+      .then(([o,t,p,k,s,a])=>{setOverview(o);setTeam(t);setSubagents(t?.subagents??[]);setKnowledge(k);setSkills(s);setAssignedSkills(a);setPolicy({enabled:p.enabled,allowed_tools:p.allowed_tools,approval_mode:p.approval_mode,max_tool_steps:p.max_tool_steps})})
+      .catch(()=>{setOverview(null);setTeam(null);setSubagents([]);setKnowledge([]);setSkills([]);setAssignedSkills([])});
   },[selected?.id,creating]);
   useEffect(()=>{
     if(!draft.provider_id){setModels([]);return}
@@ -120,6 +125,22 @@ export function EquipeView({agents,providers,onChanged}:{agents:AgentProfile[];p
               <div className="v2-form-grid"><label>Provider<select value={draft.provider_id} onChange={e=>setDraft({...draft,provider_id:e.target.value,model_id:''})}><option value="">Automático / não definido</option>{providers.map(p=><option key={p.id} value={p.id} disabled={!p.enabled}>{p.name}</option>)}</select></label><label>Modelo<select value={draft.model_id} onChange={e=>setDraft({...draft,model_id:e.target.value})} disabled={!draft.provider_id}><option value="">Padrão do provider</option>{models.filter(m=>m.enabled).map(m=><option key={m.id} value={m.id}>{m.display_name}{m.is_default?' · padrão':''}</option>)}</select></label></div>
               <label className="v2-field">Instruções do Agent<textarea rows={10} value={draft.system_prompt} onChange={e=>setDraft({...draft,system_prompt:e.target.value})} placeholder="Como este Agent deve pensar e trabalhar?"/></label>
               {provider&&<small className="v2-help">Conexão: {provider.name} · {provider.health_status}</small>}
+            </>}
+
+            {tab==='conhecimento'&&<>
+              {creating?<V2EmptyState title="Salve o Agent primeiro" description="Depois você poderá adicionar documentos e referências persistentes."/>:<>
+                <div className="team-v2-callout"><strong>Conhecimento persistente</strong><p>Arquivos adicionados aqui continuam disponíveis para este Agent em novas conversas. É memória consultável, não fine-tuning.</p></div>
+                <label className="knowledge-upload">+ Adicionar arquivo<input type="file" multiple onChange={async e=>{const files=Array.from(e.target.files??[]);e.currentTarget.value='';if(!selected||!files.length)return;setBusy(true);setError(null);try{for(const file of files){const resource=await api.uploadResource('',file,'agent',selected.id);await api.addKnowledge({scope_type:'agent',scope_id:selected.id,resource_id:resource.id,title:file.name})}setKnowledge(await api.listKnowledge('agent',selected.id));setNotice('Conhecimento adicionado.')}catch(err){setError(err instanceof Error?err.message:'Falha ao adicionar conhecimento.')}finally{setBusy(false)}}}/></label>
+                <div className="knowledge-list">{knowledge.map(item=><div key={item.id}><div><strong>{item.title}</strong><small>{item.resource?.mime_type||'arquivo'} · {item.resource?.metadata?.text_extracted?'texto extraído':'arquivo preservado'}</small></div><button type="button" onClick={()=>void api.deleteKnowledge(item.id).then(()=>setKnowledge(cur=>cur.filter(x=>x.id!==item.id)))}>Remover</button></div>)}{!knowledge.length&&<V2EmptyState title="Sem conhecimento extra" description="Adicione manuais, exemplos, documentos, código ou referências."/ >}</div>
+              </>}
+            </>}
+
+            {tab==='skills'&&<>
+              {creating?<V2EmptyState title="Salve o Agent primeiro" description="Depois você poderá ligar Skills reutilizáveis a ele."/>:<>
+                <div className="team-v2-callout"><strong>Skills reutilizáveis</strong><p>Uma Skill é um procedimento reutilizável. Ela não vira um Agent e não muda a hierarquia da equipe.</p></div>
+                <div className="skill-create"><input value={skillName} onChange={e=>setSkillName(e.target.value)} placeholder="Nome da Skill"/><textarea rows={4} value={skillInstructions} onChange={e=>setSkillInstructions(e.target.value)} placeholder="Quando usar e como executar esta Skill"/><button type="button" className="v2-primary-button" disabled={busy||!skillName.trim()||!skillInstructions.trim()} onClick={async()=>{if(!selected)return;setBusy(true);setError(null);try{const skill=await api.createSkill({name:skillName.trim(),instructions:skillInstructions.trim()});await api.assignSkill(skill.id,'agent',selected.id);setSkills(await api.listSkills());setAssignedSkills(await api.listAssignedSkills('agent',selected.id));setSkillName('');setSkillInstructions('');setNotice('Skill criada e adicionada ao Agent.')}catch(err){setError(err instanceof Error?err.message:'Falha ao criar Skill.')}finally{setBusy(false)}}}>Criar Skill</button></div>
+                <div className="skill-list">{skills.map(skill=>{const on=assignedSkills.some(x=>x.id===skill.id);return <label key={skill.id}><input type="checkbox" checked={on} onChange={async e=>{if(!selected)return;try{if(e.target.checked)await api.assignSkill(skill.id,'agent',selected.id);else await api.unassignSkill(skill.id,'agent',selected.id);setAssignedSkills(await api.listAssignedSkills('agent',selected.id))}catch(err){setError(err instanceof Error?err.message:'Falha ao atualizar Skill.')}}}/><span><strong>{skill.name}</strong><small>{skill.description||skill.instructions.slice(0,110)}</small></span></label>})}{!skills.length&&<V2EmptyState title="Nenhuma Skill criada" description="Crie a primeira Skill para padronizar uma forma de trabalhar."/ >}</div>
+              </>}
             </>}
 
             {tab==='equipe'&&<>
