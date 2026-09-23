@@ -259,6 +259,7 @@ export const api = {
   addTeamRoomEntryV3: (teamId: string, input: { agent_id?: string | null; entry_type?: TeamRoomEntry['entry_type']; content?: string; payload?: Record<string, unknown> }) =>
     request<TeamRoomEntry>(`/api/agent-office/v3/teams/${teamId}/room/entries`, { method: 'POST', body: JSON.stringify(input) }),
   listWorkforcesV3: (limit = 100) => request<Workforce[]>(`/api/agent-office/v3/workforces?limit=${limit}`),
+  getWorkforceV3: (workforceId: string) => request<Workforce>(`/api/agent-office/v3/workforces/${workforceId}`),
   listTeamsV3: () => request<Team[]>('/api/agent-office/v3/teams'),
   createTeamV3: (input: Partial<Team> & { name: string; slug: string }) =>
     request<Team>('/api/agent-office/v3/teams', { method: 'POST', body: JSON.stringify(input) }),
