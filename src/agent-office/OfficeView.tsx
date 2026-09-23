@@ -34,21 +34,6 @@ interface OfficeViewProps {
   focus?: OfficeFocus;
 }
 
-const STATE_LABELS: Record<VisualState, string> = {
-  offline: 'Offline',
-  idle: 'Disponível',
-  resting: 'Descansando',
-  thinking: 'Pensando',
-  planning: 'Planejando',
-  responding: 'Respondendo',
-  coding: 'Programando',
-  testing: 'Testando',
-  reviewing: 'Revisando',
-  waiting: 'Aguardando',
-  blocked: 'Bloqueado',
-  error: 'Erro',
-};
-
 const STREAM_EVENTS = [
   'run.created',
   'agent.state',

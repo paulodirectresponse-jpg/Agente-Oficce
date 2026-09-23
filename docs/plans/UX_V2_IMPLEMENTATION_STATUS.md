@@ -156,6 +156,14 @@ After review:
 
 ## Verification log
 
+### 2026-09-23 — ChatGPT (hardening gate correction)
+
+- First review gate workflow 35923138775: unit/integration tests PASS (249), benchmark PASS, release preflight PASS; TypeScript stopped on one unused legacy constant in OfficeView after the scene replacement.
+- Removed the dead constant instead of suppressing TypeScript.
+- Updated Vitest include so the new frontend regression tests are executed by the standard test command rather than only typechecked.
+- A fresh PR gate is required after this correction.
+
+
 ### 2026-09-23 — ChatGPT (review checkpoint D: hardening)
 
 **Completed**
