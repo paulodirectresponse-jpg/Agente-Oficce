@@ -45,6 +45,7 @@ agentOfficeRouter.use('/agent-office/v3', v3ReleaseRouter);
 agentOfficeRouter.use('/agent-office/v3', v3IntegrationRouter);
 agentOfficeRouter.use('/agent-office/chat', chatRouter);
 agentOfficeRouter.use('/agent-office', resourceRouter);
+agentOfficeRouter.use('/agent-office', voiceRouter);
 
 // Health check - validates local SQLite foundation
 agentOfficeRouter.get('/agent-office/health', (_request, response) => {
