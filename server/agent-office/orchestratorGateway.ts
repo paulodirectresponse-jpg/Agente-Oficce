@@ -4,6 +4,7 @@ import { CapabilityMatcher, CapabilityRepository, type CapabilityRequirement } f
 import { GapAnalysisService } from './gapAnalysis.js';
 import { TeamService } from './teamService.js';
 import { addOrchestratorEvent, getOrchestratorSettings, type OrchestratorLLMEnvelope, type OrchestratorTelemetry } from './orchestratorRuntime.js';
+import { AgentOperationsService } from './agentOperations.js';
 
 export type OrchestratorLevel='deterministic'|'fast'|'deep'|'fallback';
 export type TargetMode='direct_agent'|'dynamic_team'|'existing_team'|'needs_gap_analysis';
@@ -33,15 +34,8 @@ export class OrchestratorGateway {
   constructor(private db:Database,private llm?:OrchestratorLLM){this.caps=new CapabilityRepository(db);this.matcher=new CapabilityMatcher(db)}
 
   private agentEligible(agentId:string):boolean{
-    const row=this.db.prepare(`
-      SELECT a.enabled agent_enabled,p.enabled provider_enabled,m.enabled model_enabled,
-             COALESCE(prs.operational_status,'unknown') runtime_status,
-             (SELECT COUNT(*) FROM provider_fallbacks f WHERE f.source_provider_id=p.id AND f.enabled=1) fallback_count
-      FROM agents a LEFT JOIN providers p ON p.id=a.provider_id LEFT JOIN provider_models m ON m.id=a.model_id
-      LEFT JOIN provider_runtime_state prs ON prs.provider_id=p.id WHERE a.id=? LIMIT 1
-    `).get(agentId) as any;
-    if(!row?.agent_enabled||!row?.provider_enabled||!row?.model_enabled)return false;
-    return !['auth_error','misconfigured','unavailable'].includes(row.runtime_status)||Number(row.fallback_count||0)>0;
+    try { return new AgentOperationsService(this.db).isEligible(agentId); }
+    catch { return false; }
   }
 
   async route(input:OrchestratorInput):Promise<{level:OrchestratorLevel;decision:RoutingDecision;orchestration_run_id:string}>{
