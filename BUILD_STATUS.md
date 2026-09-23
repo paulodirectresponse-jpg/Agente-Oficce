@@ -54,6 +54,10 @@
 - release preflight — PASS
 - typecheck/build/Tauri/MSI/lifecycle — PASS
 - versão: `0.4.0`
+- MSI artifact id: `10767736801`
+- artifact ZIP digest: `sha256:b6fd7835ed740cf54fb80b6fdd40dc6bfb3c0939a1c6594a825a7c99409adba6`
+- MSI SHA-256: `e45270b65d5b001026bdacfa7ffb8916b9f1c377518662b6e40d338e00838ddc`
+- release diagnostics artifact id: `10767413968`
 
 Entregas principais:
 - Integration Registry persistente;
