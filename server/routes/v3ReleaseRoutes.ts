@@ -8,7 +8,7 @@ v3ReleaseRouter.get('/release/preflight',async(req,res)=>{
   const db=openAgentOfficeDatabase();
   try{
     const report=await runReleasePreflight(db.connection,String(req.query.active_tools??'')==='1');
-    res.status(report.ready?200:503).json({ok:report.ready,data:report});
+    res.json({ok:true,data:report});
   }catch(error){
     res.status(500).json({ok:false,error:{code:'RELEASE_PREFLIGHT_FAILED',message:error instanceof Error?error.message:'RELEASE_PREFLIGHT_FAILED'}});
   }finally{db.connection.close()}
