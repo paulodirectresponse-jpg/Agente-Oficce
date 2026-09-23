@@ -14,7 +14,7 @@ export interface RoutingDecision {
   quality_controls:string[]; explanation:string; confidence:number;
 }
 export interface OrchestratorInput { project_id:string; conversation_id?:string|null; user_message_id?:string|null; message:string; target?:string; continuation_agent_id?:string|null }
-export interface OrchestratorLLM { decide(level:'fast'|'deep',input:{message:string;domains:string[];constraints:Record<string,unknown>}):Promise<unknown|OrchestratorLLMEnvelope> }
+export interface OrchestratorLLM { requires_configured_model?: boolean; decide(level:'fast'|'deep',input:{message:string;domains:string[];constraints:Record<string,unknown>}):Promise<unknown|OrchestratorLLMEnvelope> }
 
 const id=()=>crypto.randomUUID(),now=()=>new Date().toISOString();
 const normalizeTarget=(v?:string)=>{const x=(v??'auto').trim();return x.startsWith('@')?x.slice(1):x||'auto'};
@@ -69,7 +69,7 @@ export class OrchestratorGateway {
       if(target!=='team'&&d.required_capabilities.length===1&&matches.length){
         decision={...d,target_mode:'direct_agent',target_agent_id:matches[0].agent_id,candidate_scope:matches.map(x=>x.agent_id),explanation:'Single-capability deterministic fast path.',confidence:.9};
         event('orchestrator.fast_path','Fast path determinístico','Uma capability inequívoca resolveu o roteamento.',{candidate_count:matches.length});
-      } else if(this.llm&&settings.enabled&&settings.principal.provider_id&&settings.principal.model_id){
+      } else if(this.llm&&settings.enabled&&((settings.principal.provider_id&&settings.principal.model_id)||!this.llm.requires_configured_model)){
         try{
           level='fast';event('orchestrator.analyzing','Análise Fast iniciada','O modelo de orquestração está classificando a solicitação.');
           const fastRaw=unwrap(await this.llm.decide('fast',{message:input.message,domains:[...new Set(defs.map(x=>x.domain))],constraints:{no_secrets:true,no_filesystem:true,no_tools:true}}));
