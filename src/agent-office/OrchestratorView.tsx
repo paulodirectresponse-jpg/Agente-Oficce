@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { OrchestrationEvent, OrchestrationRun, OrchestratorModelRef, OrchestratorSettings, OrchestratorStatus, ProviderModel, UniversalProvider } from './types.js';
+import type { OrchestrationEvent, OrchestrationRun, OrchestratorSettings, OrchestratorStatus, ProviderModel, UniversalProvider } from './types.js';
 import { api } from './api.js';
 
 function healthClass(value?: string): string {
