@@ -236,7 +236,7 @@ export function TrabalhoView({project}:{project:Project|null}){
 
           {inspectorOpen&&<section className="work-v2-inspector" aria-label="Inspector">
             <div className="work-v2-inspector-head"><div><strong>Inspector</strong><span>{previewUseful?'Resultado e detalhes':'Detalhes da execução'}</span></div><button type="button" onClick={()=>setInspectorOpen(false)} aria-label="Fechar Inspector">×</button></div>
-            <Workbench project={project} snapshot={snapshot} runId={inspectRunId} liveEvents={liveEvents}/>
+            <Workbench project={project} snapshot={snapshot} runId={inspectRunId} liveEvents={liveEvents} contextual/>
           </section>}
         </div>}
 
