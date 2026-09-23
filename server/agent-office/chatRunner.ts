@@ -27,6 +27,7 @@ import { ChatRunCancelledError } from './runtimeControls.js';
 import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
 import { AgentOperationsService } from './agentOperations.js';
 import { SubagentService } from './subagentService.js';
+import { ResourceService } from './resourceService.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -41,6 +42,7 @@ export interface PrepareChatRunInput {
   orchestration_run_id?: string;
   routing_level?: string;
   routing_decision?: Record<string, unknown>;
+  attachment_ids?: string[];
 }
 
 export interface PreparedChatRun {
@@ -274,6 +276,8 @@ export class ChatRunnerService {
 
     const toolsEnabled = selected.some((binding) => this.toolsAvailable(binding));
 
+    const attachmentIds=(input.attachment_ids??[]).filter(Boolean);
+    const resources=new ResourceService(this.database);
     const userMessage = this.messages.create({
       conversation_id: conversationId,
       role: 'user',
@@ -282,8 +286,10 @@ export class ChatRunnerService {
         source: 'chat_v2',
         target,
         tools_enabled: toolsEnabled,
+        attachment_ids: attachmentIds,
       },
     });
+    resources.linkMessage(userMessage.id,attachmentIds);
 
     const mode = target === 'team' || selected.length > 1 ? 'team' : 'single';
     if (mode === 'team' && input.model_override) throw new Error('CHAT_MODEL_OVERRIDE_TEAM_UNSUPPORTED');
@@ -690,6 +696,10 @@ export class ChatRunnerService {
     const teamRoomContext = this.teamRoomContextForWorker(binding);
     const recent = this.messages.list(conversationId, RECENT_MESSAGE_LIMIT);
     const currentUser = [...recent].reverse().find((message) => message.role === 'user')?.content ?? '';
+    const currentUserMessage=[...recent].reverse().find((message)=>message.role==='user');
+    const currentMeta=currentUserMessage?asMetadata(currentUserMessage):{};
+    const attachmentIds=Array.isArray(currentMeta.attachment_ids)?currentMeta.attachment_ids.filter((value):value is string=>typeof value==='string'):[];
+    const resourceContext=new ResourceService(this.database).context({projectId,agentId:binding.agent.id,subagentId:binding.subagent_id,query:currentUser,attachmentIds});
     const retrieved = currentUser
       ? this.memory.search(projectId, currentUser, undefined, RETRIEVED_MEMORY_LIMIT)
       : [];
@@ -708,6 +718,7 @@ export class ChatRunnerService {
       projectMemory?.architecture ? `Project architecture: ${projectMemory.architecture}` : '',
       projectMemory?.rules ? `Project rules: ${projectMemory.rules}` : '',
       projectMemory?.known_issues ? `Known issues: ${projectMemory.known_issues}` : '',
+      resourceContext ? `Knowledge, Skills and attached files:\n${resourceContext}` : '',
       retrieved.length
         ? `Relevant project memory:\n${retrieved.map((chunk) => `- [${chunk.kind}] ${chunk.text}`).join('\n')}`
         : '',
