@@ -58,7 +58,7 @@ export function AnalyticsView(){
 
   return <div className="analytics-page">
     <header className="analytics-header">
-      <div><span className="office-kicker">Inteligência operacional</span><h1>Monitoramento</h1><p>Métricas observáveis do Agent Office, sem scores artificiais e sem dupla contagem de Team Runs.</p></div>
+      <div><span className="office-kicker">Inteligência operacional</span><h1>Monitoramento</h1><p>Métricas observáveis do Agent Office, sem scores artificiais e sem dupla contagem de execuções em equipe.</p></div>
       <div className="analytics-filters">
         <select value={range} onChange={e=>setRange(e.target.value as AnalyticsRange)}>
           <option value="24h">24 horas</option><option value="7d">7 dias</option><option value="30d">30 dias</option><option value="all">Tudo</option><option value="custom">Personalizado</option>
@@ -89,11 +89,11 @@ export function AnalyticsView(){
       {tab==='overview'&&<div className="analytics-stack">
         <div className="analytics-kpis">
           <div><span>Execuções</span><strong>{fmt(data.overview.runs)}</strong><small>{data.overview.completed_runs} concluídos · {data.overview.failed_runs} falharam</small></div>
-          <div><span>Taxa de sucesso</span><strong>{pct(data.overview.success_rate)}</strong><small>somente Runs terminais</small></div>
-          <div><span>Tokens</span><strong>{fmt(data.overview.total_tokens)}</strong><small>{fmt(data.overview.input_tokens)} in · {fmt(data.overview.output_tokens)} out</small></div>
+          <div><span>Taxa de sucesso</span><strong>{pct(data.overview.success_rate)}</strong><small>somente execuções concluídas</small></div>
+          <div><span>Tokens</span><strong>{fmt(data.overview.total_tokens)}</strong><small>{fmt(data.overview.input_tokens)} entrada · {fmt(data.overview.output_tokens)} saída</small></div>
           <div><span>Custo conhecido</span><strong>{money(data.overview.cost_usd)}</strong><small>{data.overview.cost_coverage_pct.toFixed(1)}% de cobertura</small></div>
           <div><span>Retrabalho</span><strong>{data.overview.rework_events}</strong><small>separado de falhas operacionais</small></div>
-          <div><span>Falhas operacionais</span><strong>{data.overview.operational_failures}</strong><small>{data.overview.cancelled_runs} Runs cancelados</small></div>
+          <div><span>Falhas operacionais</span><strong>{data.overview.operational_failures}</strong><small>{data.overview.cancelled_runs} execuções canceladas</small></div>
         </div>
         <section className="analytics-card">
           <div className="analytics-card-head"><div><span className="office-kicker">Tendência</span><h2>Consumo e execuções</h2></div><small>gerado {date(data.generated_at)}</small></div>
@@ -135,12 +135,12 @@ export function AnalyticsView(){
           <div><span>Sucesso dos planos</span><strong>{pct(data.execution.plan_success_rate)}</strong><small>{data.execution.completed_plans}/{data.execution.plans} concluídos</small></div>
           <div><span>Sucesso das etapas</span><strong>{pct(data.execution.step_success_rate)}</strong><small>{data.execution.completed_steps}/{data.execution.steps} concluídos</small></div>
           <div><span>Taxa de repetição</span><strong>{pct(data.execution.retry_rate)}</strong><small>{data.execution.retry_attempts} tentativas extras</small></div>
-          <div><span>Replanejamentos</span><strong>{data.execution.replans}</strong><small>{data.execution.blocked_steps} steps bloqueados</small></div>
+          <div><span>Replanejamentos</span><strong>{data.execution.replans}</strong><small>{data.execution.blocked_steps} etapas bloqueadas</small></div>
           <div><span>Tempo / limite</span><strong>{data.execution.timed_out} / {data.execution.budget_exceeded}</strong><small>tentativas terminais</small></div>
-          <div><span>Duração média</span><strong>{ms(data.execution.average_attempt_duration_ms)}</strong><small>{data.execution.attempts} attempts</small></div>
+          <div><span>Duração média</span><strong>{ms(data.execution.average_attempt_duration_ms)}</strong><small>{data.execution.attempts} tentativas</small></div>
         </div>
         <section className="analytics-quality">
-          <div><strong>Workforces</strong><span>{data.execution.workforces.total}</span></div>
+          <div><strong>Recursos temporários</strong><span>{data.execution.workforces.total}</span></div>
           <div><strong>Concluídas</strong><span>{data.execution.workforces.completed}</span></div>
           <div><strong>Falhas / canceladas</strong><span>{data.execution.workforces.failed} / {data.execution.workforces.cancelled}</span></div>
           <div><strong>Recursos médios</strong><span>{data.execution.workforces.average_resources}</span></div>
@@ -164,17 +164,17 @@ export function AnalyticsView(){
       {tab==='orchestrator'&&<div className="analytics-stack">
         <div className="analytics-kpis">
           <div><span>Roteamentos</span><strong>{data.orchestrator.total}</strong><small>{data.orchestrator.failed} falhos</small></div>
-          <div><span>Sucesso</span><strong>{pct(data.orchestrator.success_rate)}</strong><small>routing outcome</small></div>
+          <div><span>Sucesso</span><strong>{pct(data.orchestrator.success_rate)}</strong><small>routing saídacome</small></div>
           <div><span>Alternativa automática</span><strong>{pct(data.orchestrator.fallback_rate)}</strong><small>{data.orchestrator.fallback_events} eventos</small></div>
           <div><span>Latência</span><strong>{ms(data.orchestrator.average_duration_ms)}</strong><small>média do roteamento</small></div>
-          <div><span>Tokens</span><strong>{fmt(data.orchestrator.input_tokens+data.orchestrator.output_tokens)}</strong><small>somente Orchestrator</small></div>
-          <div><span>Níveis</span><strong>{data.orchestrator.levels.fast}/{data.orchestrator.levels.deep}</strong><small>fast / deep</small></div>
+          <div><span>Tokens</span><strong>{fmt(data.orchestrator.input_tokens+data.orchestrator.output_tokens)}</strong><small>somente Orquestrador</small></div>
+          <div><span>Níveis</span><strong>{data.orchestrator.levels.fast}/{data.orchestrator.levels.deep}</strong><small>rápido / profundo</small></div>
         </div>
         <section className="analytics-quality">
           <div><strong>Execuções ligadas</strong><span>{data.orchestrator.execution_outcome.linked}</span></div>
           <div><strong>Execuções concluídas</strong><span>{data.orchestrator.execution_outcome.completed}</span></div>
           <div><strong>Falhas / canceladas</strong><span>{data.orchestrator.execution_outcome.failed} / {data.orchestrator.execution_outcome.cancelled}</span></div>
-          <div><strong>Sucesso pós-routing</strong><span>{pct(data.orchestrator.execution_outcome.success_rate)}</span></div>
+          <div><strong>Sucesso após roteamento</strong><span>{pct(data.orchestrator.execution_outcome.success_rate)}</span></div>
         </section>
         <section className="analytics-card"><div className="analytics-levels">
           {Object.entries(data.orchestrator.levels).map(([key,value])=><div key={key}><span>{key}</span><strong>{value}</strong><div><i style={{width:`${data.orchestrator.total?Math.max(3,(value/data.orchestrator.total)*100):0}%`}}/></div></div>)}
@@ -186,9 +186,9 @@ export function AnalyticsView(){
           <div><span>Tokens de entrada</span><strong>{fmt(data.overview.input_tokens)}</strong></div>
           <div><span>Tokens de saída</span><strong>{fmt(data.overview.output_tokens)}</strong></div>
           <div><span>Requisições</span><strong>{fmt(data.overview.requests)}</strong></div>
-          <div><span>Custo acumulado conhecido</span><strong>{money(data.overview.cost_usd)}</strong><small>nunca substitui unknown por zero</small></div>
-          <div><span>Cobertura</span><strong>{data.overview.cost_coverage_pct.toFixed(1)}%</strong><small>{data.overview.cost_known_events} conhecidos · {data.overview.cost_unknown_events} unknown</small></div>
-          <div><span>Duração média worker</span><strong>{ms(data.overview.average_duration_ms)}</strong><small>{data.overview.usage_events} usage events</small></div>
+          <div><span>Custo acumulado conhecido</span><strong>{money(data.overview.cost_usd)}</strong><small>nunca substitui custo desconhecido por zero</small></div>
+          <div><span>Cobertura</span><strong>{data.overview.cost_coverage_pct.toFixed(1)}%</strong><small>{data.overview.cost_known_events} conhecidos · {data.overview.cost_unknown_events} desconhecidos</small></div>
+          <div><span>Duração média por membro</span><strong>{ms(data.overview.average_duration_ms)}</strong><small>{data.overview.usage_events} eventos de uso</small></div>
         </div>
         <section className="analytics-card"><div className="analytics-card-head"><div><span className="office-kicker">Qualidade dos dados</span><h2>Como estes números são calculados</h2></div></div>
           <div className="analytics-notes">{data.data_quality.notes.map(note=><div key={note}>✓ {note}</div>)}</div>
