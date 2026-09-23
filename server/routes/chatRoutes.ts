@@ -51,16 +51,21 @@ chatRouter.post('/runs', async (request, response) => {
 
     const decision = orchestration.decision;
     let selectedAgentIds: string[] = [];
+    let selectedSubagentIds: string[] = [];
     if (decision.target_agent_id) {
       selectedAgentIds = [decision.target_agent_id];
     } else if (decision.target_mode === 'existing_team' && decision.target_team_id) {
       const owned = database.connection.prepare('SELECT owner_agent_id FROM teams WHERE id=?').get(decision.target_team_id) as {owner_agent_id:string|null}|undefined;
-      selectedAgentIds = [
-        ...(owned?.owner_agent_id ? [owned.owner_agent_id] : []),
-        ...(database.connection.prepare(
+      if (owned?.owner_agent_id) {
+        selectedAgentIds = [owned.owner_agent_id];
+        selectedSubagentIds = (database.connection.prepare(
+          'SELECT id FROM subagents WHERE team_id=? AND enabled=1 AND paused=0 ORDER BY sort_order,name'
+        ).all(decision.target_team_id) as Array<{id:string}>).map((row) => row.id);
+      } else {
+        selectedAgentIds = (database.connection.prepare(
           'SELECT agent_id FROM team_members WHERE team_id=? AND enabled=1 ORDER BY priority,created_at'
-        ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id),
-      ];
+        ).all(decision.target_team_id) as Array<{agent_id:string}>).map((row) => row.agent_id);
+      }
     } else if (decision.target_mode === 'dynamic_team' && decision.target_team_id) {
       selectedAgentIds = (database.connection.prepare(
         'SELECT agent_id FROM dynamic_team_members WHERE dynamic_team_id=? AND enabled=1 ORDER BY priority,created_at'
@@ -84,6 +89,7 @@ chatRouter.post('/runs', async (request, response) => {
         ? request.body.model_override.trim()
         : undefined,
       selected_agent_ids: selectedAgentIds.length ? selectedAgentIds : undefined,
+      selected_subagent_ids: selectedSubagentIds.length ? selectedSubagentIds : undefined,
       orchestration_run_id: orchestration.orchestration_run_id,
       routing_level: orchestration.level,
       routing_decision: decision as unknown as Record<string, unknown>,

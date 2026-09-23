@@ -9,6 +9,7 @@ import { ChatRunnerService } from './chatRunner.js';
 import { ChatEventHub } from './chatEventHub.js';
 import { MessageRepository } from './conversationRepository.js';
 import { AgentToolPolicyRepository } from './toolRegistry.js';
+import { TeamService } from './teamService.js';
 
 class MemorySecretStore implements SecretStore {
   private values = new Map<string, string>();
@@ -422,5 +423,56 @@ describe('ChatRunnerService', () => {
     f.cleanup();
   });
 
+
+  it('executes a true Subagent without creating or writing a fake Agent identity', async () => {
+    const f = fixture();
+    const owner = addProviderModelAgent(f, { providerId: 'sub-provider', agentId: 'owner-agent', role: 'Builder Owner', sort: 1 });
+    const model = f.providers.listModels('sub-provider').find((item) => item.model_id === 'model')!;
+    const teams = new TeamService(f.database.connection);
+    const team = teams.createOwnedTeam(owner.id, { name: 'Builder Team', slug: 'builder-team' } as any, 'user:test');
+    const sub = teams.createSubagent(team.id, {
+      name: 'Backend Subagent',
+      role: 'Backend Specialist',
+      provider_id: 'sub-provider',
+      model_id: model.id,
+      system_prompt: 'Implement backend tasks and review the owner output.',
+    });
+
+    let call = 0;
+    const fetchImpl: typeof fetch = async () => {
+      const text = call++ === 0 ? 'Owner draft' : 'Subagent final';
+      return sse([
+        { choices: [{ delta: { content: text }, finish_reason: 'stop' }] },
+        { choices: [], usage: { prompt_tokens: 4, completion_tokens: 2 } },
+      ]);
+    };
+
+    const service = new ChatRunnerService(f.database.connection, f.secrets, f.hub, fetchImpl);
+    const prepared = service.prepare({
+      project_id: 'project-1',
+      message: 'Use the Builder Team',
+      target: 'team',
+      selected_agent_ids: [owner.id],
+      selected_subagent_ids: [sub.id],
+    });
+    expect(prepared.selected_agents).toEqual([owner.id]);
+    expect(prepared.selected_subagents).toEqual([sub.id]);
+
+    await service.execute(prepared);
+
+    expect(f.database.connection.prepare('SELECT id FROM agents WHERE id=?').get(sub.id)).toBeUndefined();
+    const messages = new MessageRepository(f.database.connection).list(prepared.conversation_id);
+    const final = messages[messages.length - 1];
+    expect(final.content).toBe('Subagent final');
+    expect(final.agent_id).toBeNull();
+    expect(JSON.parse(final.metadata_json)).toMatchObject({ worker_kind: 'subagent', subagent_id: sub.id, team_id: team.id, final: true });
+
+    const subState = f.database.connection.prepare('SELECT state,run_id FROM subagent_states WHERE subagent_id=? AND project_id=?').get(sub.id,'project-1') as any;
+    expect(subState).toMatchObject({ state: 'idle', run_id: null });
+    expect((f.database.connection.prepare('SELECT COUNT(*) n FROM subagent_usage_snapshots WHERE subagent_id=?').get(sub.id) as any).n).toBe(1);
+    expect((f.database.connection.prepare('SELECT COUNT(*) n FROM subagent_performance_events WHERE subagent_id=? AND event_type=?').get(sub.id,'execution_success') as any).n).toBe(1);
+    expect(f.database.connection.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    f.cleanup();
+  });
 
 });

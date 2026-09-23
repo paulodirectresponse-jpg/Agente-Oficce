@@ -19,13 +19,22 @@ v3TeamsRouter.patch('/teams/:id',(req,res)=>withDb(res,db=>res.json({ok:true,dat
 v3TeamsRouter.delete('/teams/:id',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).disable(req.params.id)})));
 v3TeamsRouter.get('/teams/:id/members',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).listMembers(req.params.id)})));
 v3TeamsRouter.put('/teams/:id/members',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).replaceMembers(req.params.id,Array.isArray(req.body?.members)?req.body.members:[])})));
+v3TeamsRouter.get('/teams/:id/subagents',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).listSubagents(req.params.id)})));
+v3TeamsRouter.post('/teams/:id/subagents',(req,res)=>withDb(res,db=>res.status(201).json({ok:true,data:new TeamService(db).createSubagent(req.params.id,req.body??{})})));
+v3TeamsRouter.patch('/teams/:id/subagents/:subagentId',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).updateSubagent(req.params.id,req.params.subagentId,req.body??{})})));
+v3TeamsRouter.delete('/teams/:id/subagents/:subagentId',(req,res)=>withDb(res,db=>res.json({ok:true,data:{deleted:new TeamService(db).removeSubagent(req.params.id,req.params.subagentId)}})));
+
 v3TeamsRouter.get('/teams/:id/capabilities',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).capabilities(req.params.id)})));
 v3TeamsRouter.get('/teams/:id/versions',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).versions(req.params.id)})));
 v3TeamsRouter.get('/agents/:agentId/team',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).getOwnedByAgent(req.params.agentId)})));
 v3TeamsRouter.post('/agents/:agentId/team',(req,res)=>withDb(res,db=>res.status(201).json({ok:true,data:new TeamService(db).createOwnedTeam(req.params.agentId,req.body??{},'user:api')})));
-v3TeamsRouter.put('/agents/:agentId/team/subagents',(req,res)=>withDb(res,db=>{
+v3TeamsRouter.get('/agents/:agentId/team/subagents',(req,res)=>withDb(res,db=>{
  const svc=new TeamService(db),team=svc.getOwnedByAgent(req.params.agentId);if(!team){res.status(404).json({ok:false,error:{code:'TEAM_NOT_FOUND',message:'TEAM_NOT_FOUND'}});return}
- res.json({ok:true,data:svc.replaceMembers(team.id,Array.isArray(req.body?.members)?req.body.members:[])})
+ res.json({ok:true,data:svc.listSubagents(team.id)})
+}));
+v3TeamsRouter.post('/agents/:agentId/team/subagents',(req,res)=>withDb(res,db=>{
+ const svc=new TeamService(db),team=svc.getOwnedByAgent(req.params.agentId);if(!team){res.status(404).json({ok:false,error:{code:'TEAM_NOT_FOUND',message:'TEAM_NOT_FOUND'}});return}
+ res.status(201).json({ok:true,data:svc.createSubagent(team.id,req.body??{})})
 }));
 v3TeamsRouter.get('/agents/:agentId/teams',(req,res)=>withDb(res,db=>res.json({ok:true,data:new TeamService(db).listAgentTeams(req.params.agentId)})));
 

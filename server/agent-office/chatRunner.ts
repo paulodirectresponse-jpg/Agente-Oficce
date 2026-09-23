@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type { SecretStore } from './secretStore.js';
 import { ConversationRepository, MessageRepository, type AgentOfficeMessage } from './conversationRepository.js';
@@ -25,6 +26,7 @@ import { chatEventHub, type ChatEventHub } from './chatEventHub.js';
 import { ChatRunCancelledError } from './runtimeControls.js';
 import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
 import { AgentOperationsService } from './agentOperations.js';
+import { SubagentService } from './subagentService.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -35,6 +37,7 @@ export interface PrepareChatRunInput {
   target?: ChatTarget;
   model_override?: string;
   selected_agent_ids?: string[];
+  selected_subagent_ids?: string[];
   orchestration_run_id?: string;
   routing_level?: string;
   routing_decision?: Record<string, unknown>;
@@ -44,6 +47,8 @@ export interface PreparedChatRun {
   run: ChatRun;
   conversation_id: string;
   selected_agents: string[];
+  selected_subagents: string[];
+  selected_workers: Array<{ kind: 'agent' | 'subagent'; id: string }>;
   mode: 'single' | 'team';
   model_override?: string;
   tools_enabled: boolean;
@@ -53,15 +58,20 @@ export interface ChatRunReceipt {
   run_id: string;
   conversation_id: string;
   selected_agents: string[];
+  selected_subagents?: string[];
   mode: 'single' | 'team';
   status: 'running';
   tools_enabled: boolean;
 }
 
 interface AgentBinding {
+  worker_kind: 'agent' | 'subagent';
   agent: Agent;
   provider: Provider;
   model: ProviderModel;
+  owner_agent_id?: string;
+  team_id?: string;
+  subagent_id?: string;
 }
 
 interface AgentResult {
@@ -208,6 +218,7 @@ export class ChatRunnerService {
   private readonly engine: UniversalProviderEngine;
   private readonly toolPolicies: AgentToolPolicyRepository;
   private readonly agentOps: AgentOperationsService;
+  private readonly subagents: SubagentService;
 
   constructor(
     private readonly database: Database,
@@ -227,6 +238,7 @@ export class ChatRunnerService {
     this.engine = new UniversalProviderEngine(database, secrets, fetchImpl);
     this.toolPolicies = new AgentToolPolicyRepository(database);
     this.agentOps = new AgentOperationsService(database);
+    this.subagents = new SubagentService(database);
   }
 
   prepare(input: PrepareChatRunInput): PreparedChatRun {
@@ -246,12 +258,14 @@ export class ChatRunnerService {
     const available = this.availableBindings();
     if (!available.length) throw new Error('CHAT_NO_AVAILABLE_AGENTS');
 
-    const selected = input.selected_agent_ids?.length
-      ? input.selected_agent_ids.map((agentId) => {
-          const binding = available.find((item) => item.agent.id === agentId || item.agent.slug === agentId);
-          if (!binding) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
-          return binding;
-        })
+    const explicitAgents = (input.selected_agent_ids ?? []).map((agentId) => {
+      const binding = available.find((item) => item.agent.id === agentId || item.agent.slug === agentId);
+      if (!binding) throw new Error('CHAT_AGENT_NOT_AVAILABLE');
+      return binding;
+    });
+    const explicitSubagents = (input.selected_subagent_ids ?? []).map((subagentId) => this.requireSubagentBinding(subagentId));
+    const selected = explicitAgents.length || explicitSubagents.length
+      ? [...explicitAgents, ...explicitSubagents]
       : target === 'team'
         ? this.selectTeam(available, message)
         : target === 'auto'
@@ -277,7 +291,7 @@ export class ChatRunnerService {
     const run = this.runs.create({
       conversation_id: conversationId,
       project_id: projectId,
-      agent_id: mode === 'single' ? first.agent.id : null,
+      agent_id: mode === 'single' && first.worker_kind === 'agent' ? first.agent.id : null,
       provider_id: mode === 'single' ? first.provider.id : null,
       model_id: mode === 'single' ? this.resolveModel(first, input.model_override).id : null,
       status: 'running',
@@ -285,7 +299,9 @@ export class ChatRunnerService {
       metadata: {
         source: 'chat_v2',
         target,
-        selected_agents: selected.map((binding) => binding.agent.id),
+        selected_agents: selected.filter((binding) => binding.worker_kind === 'agent').map((binding) => binding.agent.id),
+        selected_subagents: selected.filter((binding) => binding.worker_kind === 'subagent').map((binding) => binding.subagent_id!),
+        selected_workers: selected.map((binding) => ({ kind: binding.worker_kind, id: binding.worker_kind === 'agent' ? binding.agent.id : binding.subagent_id! })),
         user_message_id: userMessage.id,
         tools_enabled: toolsEnabled,
         routing: target === 'auto' ? 'adaptive' : target,
@@ -299,14 +315,17 @@ export class ChatRunnerService {
     this.emit(run, 'run.created', 'Chat iniciado', {
       mode,
       target,
-      selected_agents: selected.map((binding) => binding.agent.id),
+      selected_agents: selected.filter((binding) => binding.worker_kind === 'agent').map((binding) => binding.agent.id),
+      selected_subagents: selected.filter((binding) => binding.worker_kind === 'subagent').map((binding) => binding.subagent_id!),
       tools_enabled: toolsEnabled,
     });
 
     return {
       run,
       conversation_id: conversationId,
-      selected_agents: selected.map((binding) => binding.agent.id),
+      selected_agents: selected.filter((binding) => binding.worker_kind === 'agent').map((binding) => binding.agent.id),
+      selected_subagents: selected.filter((binding) => binding.worker_kind === 'subagent').map((binding) => binding.subagent_id!),
+      selected_workers: selected.map((binding) => ({ kind: binding.worker_kind, id: binding.worker_kind === 'agent' ? binding.agent.id : binding.subagent_id! })),
       mode,
       model_override: input.model_override,
       tools_enabled: toolsEnabled,
@@ -318,6 +337,7 @@ export class ChatRunnerService {
       run_id: prepared.run.id,
       conversation_id: prepared.conversation_id,
       selected_agents: prepared.selected_agents,
+      selected_subagents: prepared.selected_subagents,
       mode: prepared.mode,
       status: 'running',
       tools_enabled: prepared.tools_enabled,
@@ -326,7 +346,7 @@ export class ChatRunnerService {
 
   async execute(prepared: PreparedChatRun, signal?: AbortSignal): Promise<void> {
     const rootRun = prepared.run;
-    const selected = prepared.selected_agents.map((agentId) => this.requireBinding(agentId));
+    const selected = prepared.selected_workers.map((worker) => worker.kind === 'agent' ? this.requireBinding(worker.id) : this.requireSubagentBinding(worker.id));
     const stageResults: AgentResult[] = [];
 
     try {
@@ -340,8 +360,10 @@ export class ChatRunnerService {
         if (index > 0) {
           const fromAgent = selected[index - 1].agent;
           this.emit(rootRun, 'handoff.created', `Handoff ${fromAgent.name} → ${binding.agent.name}`, {
-            from_agent: fromAgent.id,
-            to_agent: binding.agent.id,
+            from_agent: selected[index - 1].worker_kind === 'agent' ? fromAgent.id : null,
+            from_subagent: selected[index - 1].worker_kind === 'subagent' ? selected[index - 1].subagent_id : null,
+            to_agent: binding.worker_kind === 'agent' ? binding.agent.id : null,
+            to_subagent: binding.worker_kind === 'subagent' ? binding.subagent_id : null,
             from_message_id: stageResults.length ? stageResults[stageResults.length - 1].message_id : null,
             stage,
           });
@@ -351,13 +373,20 @@ export class ChatRunnerService {
           ? this.runs.create({
             conversation_id: prepared.conversation_id,
             project_id: rootRun.project_id,
-            agent_id: binding.agent.id,
+            agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
             provider_id: binding.provider.id,
             model_id: model.id,
             status: 'running',
             mode: stage === 'reviewer' ? 'review' : 'single',
             parent_run_id: rootRun.id,
-            metadata: { stage, tools_enabled: this.toolsAvailable({ ...binding, model }) },
+            metadata: {
+              stage,
+              tools_enabled: this.toolsAvailable({ ...binding, model }),
+              worker_kind: binding.worker_kind,
+              subagent_id: binding.subagent_id ?? null,
+              owner_agent_id: binding.owner_agent_id ?? null,
+              team_id: binding.team_id ?? null,
+            },
           })
           : rootRun;
 
@@ -372,26 +401,18 @@ export class ChatRunnerService {
             signal,
           });
           stageResults.push(result);
-          this.agentOps.recordPerformance({
-            agent_id: binding.agent.id,
-            run_id: childRun.id,
-            project_id: rootRun.project_id,
-            event_type: 'execution_success',
-            source: 'system',
-            detail: 'Agent execution completed successfully.',
-          });
+          this.recordWorkerPerformance(binding, childRun.id, rootRun.project_id, 'execution_success', 'Worker execution completed successfully.');
         } catch (error) {
           const cancelledStage = signal?.aborted
             || error instanceof ChatRunCancelledError
             || (error instanceof Error && error.message === 'CHAT_RUN_CANCELLED');
-          this.agentOps.recordPerformance({
-            agent_id: binding.agent.id,
-            run_id: childRun.id,
-            project_id: rootRun.project_id,
-            event_type: cancelledStage ? 'cancelled' : 'operational_failure',
-            source: 'system',
-            detail: error instanceof Error ? error.message : 'CHAT_AGENT_RUN_FAILED',
-          });
+          this.recordWorkerPerformance(
+            binding,
+            childRun.id,
+            rootRun.project_id,
+            cancelledStage ? 'cancelled' : 'operational_failure',
+            error instanceof Error ? error.message : 'CHAT_WORKER_RUN_FAILED',
+          );
           if (childRun.id !== rootRun.id) {
             const cancelled = signal?.aborted
               || error instanceof ChatRunCancelledError
@@ -414,6 +435,7 @@ export class ChatRunnerService {
         ...rootRun.metadata,
         final_message_id: final.message_id,
         selected_agents: prepared.selected_agents,
+        selected_subagents: prepared.selected_subagents,
         child_run_ids: stageResults.map((result) => result.child_run_id),
         tools_enabled: prepared.tools_enabled,
       };
@@ -426,16 +448,11 @@ export class ChatRunnerService {
       });
 
       for (const binding of selected) {
-        this.states.upsert({
-          agent_id: binding.agent.id,
-          project_id: rootRun.project_id,
-          run_id: null,
-          state: 'idle',
-          activity: '',
-          progress: null,
-        });
-        this.emit(rootRun, 'agent.state', `${binding.agent.name} está disponível`, {
-          agent_id: binding.agent.id,
+        this.setWorkerState(binding, rootRun.project_id, null, 'idle', '', null);
+        this.emit(rootRun, 'worker.state', `${binding.agent.name} está disponível`, {
+          agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
+          subagent_id: binding.worker_kind === 'subagent' ? binding.subagent_id : null,
+          worker_kind: binding.worker_kind,
           state: 'idle',
           activity: '',
         });
@@ -443,7 +460,8 @@ export class ChatRunnerService {
 
       this.emit(rootRun, 'run.completed', 'Resposta concluída', {
         final_message_id: final.message_id,
-        final_agent_id: selected.length ? selected[selected.length - 1].agent.id : null,
+        final_agent_id: selected.length && selected[selected.length - 1].worker_kind === 'agent' ? selected[selected.length - 1].agent.id : null,
+        final_subagent_id: selected.length && selected[selected.length - 1].worker_kind === 'subagent' ? selected[selected.length - 1].subagent_id : null,
         usage: aggregate,
       });
     } catch (error) {
@@ -460,14 +478,7 @@ export class ChatRunnerService {
         error: cancelled ? null : { message },
       });
       for (const binding of selected) {
-        this.states.upsert({
-          agent_id: binding.agent.id,
-          project_id: rootRun.project_id,
-          run_id: null,
-          state: cancelled ? 'idle' : 'error',
-          activity: cancelled ? '' : message,
-          progress: null,
-        });
+        this.setWorkerState(binding, rootRun.project_id, null, cancelled ? 'idle' : 'error', cancelled ? '' : message, null);
       }
       this.emit(
         rootRun,
@@ -493,7 +504,7 @@ export class ChatRunnerService {
       const provider = this.providers.get(agent.provider_id);
       const model = this.providers.getModel(agent.model_id);
       if (!provider?.enabled || !model?.enabled || model.provider_id !== provider.id) continue;
-      result.push({ agent, provider, model });
+      result.push({ worker_kind: 'agent', agent, provider, model });
     }
     return result;
   }
@@ -508,7 +519,45 @@ export class ChatRunnerService {
     const model = this.providers.getModel(agent.model_id);
     if (!provider?.enabled) throw new Error('CHAT_PROVIDER_UNAVAILABLE');
     if (!model?.enabled || model.provider_id !== provider.id) throw new Error('CHAT_MODEL_UNAVAILABLE');
-    return { agent, provider, model };
+    return { worker_kind: 'agent', agent, provider, model };
+  }
+
+  private requireSubagentBinding(subagentId: string): AgentBinding {
+    const subagent = this.subagents.get(subagentId);
+    if (!subagent) throw new Error('CHAT_SUBAGENT_NOT_FOUND');
+    if (!this.subagents.isEligible(subagent.id)) throw new Error('CHAT_SUBAGENT_NOT_AVAILABLE');
+    if (!subagent.provider_id || !subagent.model_id) throw new Error('CHAT_SUBAGENT_NOT_CONFIGURED');
+    const provider = this.providers.get(subagent.provider_id);
+    const model = this.providers.getModel(subagent.model_id);
+    if (!provider?.enabled) throw new Error('CHAT_PROVIDER_UNAVAILABLE');
+    if (!model?.enabled || model.provider_id !== provider.id) throw new Error('CHAT_MODEL_UNAVAILABLE');
+    const syntheticAgent: Agent = {
+      id: subagent.id,
+      name: subagent.name,
+      slug: subagent.slug,
+      role: subagent.role,
+      description: subagent.description,
+      avatar_key: subagent.avatar_key,
+      provider_id: subagent.provider_id,
+      model_id: subagent.model_id,
+      system_prompt: subagent.system_prompt,
+      enabled: subagent.enabled,
+      paused: subagent.paused,
+      sort_order: subagent.sort_order,
+      idle_after_seconds: 300,
+      metadata: { ...subagent.metadata, worker_kind: 'subagent', team_id: subagent.team_id, owner_agent_id: subagent.owner_agent_id },
+      created_at: subagent.created_at,
+      updated_at: subagent.updated_at,
+    };
+    return {
+      worker_kind: 'subagent',
+      agent: syntheticAgent,
+      provider,
+      model,
+      owner_agent_id: subagent.owner_agent_id,
+      team_id: subagent.team_id,
+      subagent_id: subagent.id,
+    };
   }
 
   private resolveModel(binding: AgentBinding, override?: string): ProviderModel {
@@ -580,7 +629,7 @@ export class ChatRunnerService {
   }
 
   private toolsAvailable(binding: AgentBinding): boolean {
-    const policy = this.toolPolicies.get(binding.agent.id);
+    const policy = this.toolPolicies.get(this.auditAgentId(binding));
     return policy.enabled
       && binding.provider.protocol_driver === 'openai_chat'
       && binding.model.capabilities.tools !== false
@@ -631,13 +680,14 @@ export class ChatRunnerService {
   private buildMessages(
     projectId: string,
     conversationId: string,
-    agent: Agent,
+    binding: AgentBinding,
     stage: string,
     previousText: string,
     toolsEnabled = false,
   ): UniversalMessage[] {
+    const agent = binding.agent;
     const projectMemory = this.memory.getProjectMemory(projectId);
-    const teamRoomContext = this.teamRoomContextForAgent(agent.id);
+    const teamRoomContext = this.teamRoomContextForWorker(binding);
     const recent = this.messages.list(conversationId, RECENT_MESSAGE_LIMIT);
     const currentUser = [...recent].reverse().find((message) => message.role === 'user')?.content ?? '';
     const retrieved = currentUser
@@ -673,22 +723,17 @@ export class ChatRunnerService {
     return this.trimMessages(result, CHAT_CONTEXT_TOKEN_BUDGET);
   }
 
-  private teamRoomContextForAgent(agentId: string): string {
-    const team = this.database.prepare(`
-      SELECT DISTINCT t.id,t.name
-      FROM teams t
-      LEFT JOIN team_members tm ON tm.team_id=t.id
-      WHERE t.enabled=1 AND t.owner_agent_id IS NOT NULL
-        AND (t.owner_agent_id=? OR (tm.agent_id=? AND tm.enabled=1))
-      ORDER BY CASE WHEN t.owner_agent_id=? THEN 0 ELSE 1 END,t.created_at
-      LIMIT 1
-    `).get(agentId,agentId,agentId) as {id:string;name:string}|undefined;
+  private teamRoomContextForWorker(binding: AgentBinding): string {
+    const team = binding.worker_kind === 'subagent'
+      ? this.database.prepare('SELECT id,name FROM teams WHERE id=? AND enabled=1').get(binding.team_id) as {id:string;name:string}|undefined
+      : this.database.prepare(`SELECT id,name FROM teams WHERE owner_agent_id=? AND enabled=1 ORDER BY created_at LIMIT 1`).get(binding.agent.id) as {id:string;name:string}|undefined;
     if(!team)return '';
     const room=this.database.prepare('SELECT instructions,shared_context_json,memory_json FROM team_rooms WHERE team_id=?').get(team.id) as any;
     if(!room)return `Team: ${team.name}`;
     const read=(value:string)=>{try{const parsed=JSON.parse(value||'{}');return typeof parsed?.text==='string'?parsed.text:JSON.stringify(parsed)}catch{return ''}};
     return [
       `Team: ${team.name}`,
+      binding.worker_kind === 'subagent' ? `You are a Subagent inside this Team. You support the owner Agent; you are not an independent Agent.` : 'You are the owner Agent of this Team.',
       room.instructions ? `Team instructions: ${room.instructions}` : '',
       read(room.shared_context_json) ? `Shared context: ${read(room.shared_context_json)}` : '',
       read(room.memory_json) ? `Team memory: ${read(room.memory_json)}` : '',
@@ -717,6 +762,118 @@ export class ChatRunnerService {
 
     result.push(...kept);
     return result;
+  }
+
+  private auditAgentId(binding: AgentBinding): string {
+    return binding.worker_kind === 'agent' ? binding.agent.id : binding.owner_agent_id!;
+  }
+
+  private workerPayload(binding: AgentBinding): Record<string, unknown> {
+    return {
+      worker_kind: binding.worker_kind,
+      agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
+      subagent_id: binding.worker_kind === 'subagent' ? binding.subagent_id : null,
+      owner_agent_id: binding.owner_agent_id ?? null,
+      team_id: binding.team_id ?? null,
+    };
+  }
+
+  private setWorkerState(
+    binding: AgentBinding,
+    projectId: string,
+    runId: string | null,
+    state: string,
+    activity: string,
+    progress: number | null,
+  ): void {
+    if (binding.worker_kind === 'agent') {
+      this.states.upsert({
+        agent_id: binding.agent.id,
+        project_id: projectId,
+        run_id: runId,
+        state,
+        activity,
+        progress,
+      });
+      return;
+    }
+    const timestamp = new Date().toISOString();
+    this.database.prepare(`
+      INSERT INTO subagent_states(subagent_id,project_id,run_id,state,activity,progress,updated_at)
+      VALUES(?,?,?,?,?,?,?)
+      ON CONFLICT(subagent_id,project_id) DO UPDATE SET
+        run_id=excluded.run_id,state=excluded.state,activity=excluded.activity,progress=excluded.progress,updated_at=excluded.updated_at
+    `).run(binding.subagent_id, projectId, runId, state, activity, progress, timestamp);
+  }
+
+  private recordWorkerPerformance(
+    binding: AgentBinding,
+    runId: string,
+    projectId: string,
+    eventType: string,
+    detail: string,
+  ): void {
+    if (binding.worker_kind === 'agent') {
+      this.agentOps.recordPerformance({
+        agent_id: binding.agent.id,
+        run_id: runId,
+        project_id: projectId,
+        event_type: eventType,
+        source: 'system',
+        detail,
+      });
+      return;
+    }
+    const duplicate = this.database.prepare(
+      'SELECT 1 FROM subagent_performance_events WHERE subagent_id=? AND run_id=? AND source=? AND event_type=? LIMIT 1'
+    ).get(binding.subagent_id, runId, 'system', eventType);
+    if (duplicate) return;
+    this.database.prepare(`
+      INSERT INTO subagent_performance_events(id,subagent_id,run_id,project_id,event_type,score,source,detail,metadata_json,created_at)
+      VALUES(?,?,?,?,?,NULL,'system',?,'{}',?)
+    `).run(
+      crypto.randomUUID(),
+      binding.subagent_id,
+      runId,
+      projectId,
+      eventType,
+      detail,
+      new Date().toISOString(),
+    );
+  }
+
+  private recordWorkerUsage(
+    binding: AgentBinding,
+    providerId: string,
+    usage: UniversalUsage | undefined,
+    costUsd: number | undefined,
+    requestCount: number,
+    durationMs: number,
+  ): void {
+    if (binding.worker_kind === 'agent') {
+      this.usage.recordRunUsage(binding.agent.id, providerId, {
+        input_tokens: usage?.input_tokens,
+        output_tokens: usage?.output_tokens,
+        cost_usd: costUsd,
+        request_count: requestCount,
+        duration_ms: durationMs,
+      });
+      return;
+    }
+    this.database.prepare(`
+      INSERT INTO subagent_usage_snapshots(id,subagent_id,provider_id,input_tokens,output_tokens,cost_usd,request_count,duration_ms,created_at)
+      VALUES(?,?,?,?,?,?,?,?,?)
+    `).run(
+      crypto.randomUUID(),
+      binding.subagent_id,
+      providerId,
+      usage?.input_tokens ?? 0,
+      usage?.output_tokens ?? 0,
+      costUsd ?? null,
+      requestCount,
+      durationMs,
+      new Date().toISOString(),
+    );
   }
 
   private projectRoot(projectId: string): string {
@@ -769,7 +926,7 @@ export class ChatRunnerService {
     signal?: AbortSignal;
   }): Promise<{ text: string; usage?: UniversalUsage; finish_reason?: string; request_count: number; tool_steps: number; effective_provider: string; effective_model: string }> {
     const { rootRun, childRun, binding, stage, signal } = input;
-    const policy = this.toolPolicies.get(binding.agent.id);
+    const policy = this.toolPolicies.get(this.auditAgentId(binding));
     const definitions = toolRegistry.definitionsForPolicy(policy);
     const messages = input.messages.slice();
     let usage: UniversalUsage | undefined;
@@ -791,7 +948,7 @@ export class ChatRunnerService {
         })),
         metadata: {
           run_id: childRun.id,
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           tools_enabled: true,
           tool_step: step,
         },
@@ -805,7 +962,7 @@ export class ChatRunnerService {
       if (!result.tool_calls?.length) {
         if (result.text) {
           this.hub.publish(rootRun.id, 'response.delta', {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             stage,
             text: result.text,
@@ -834,16 +991,16 @@ export class ChatRunnerService {
         if (toolSteps > policy.max_tool_steps) throw new Error('CHAT_MAX_TOOL_STEPS');
 
         const executionState = call.name === 'run_tests' ? 'testing' : 'coding';
-        this.states.upsert({
-          agent_id: binding.agent.id,
-          project_id: rootRun.project_id,
-          run_id: rootRun.id,
-          state: executionState,
-          activity: `Usando ${call.name}`,
-          progress: Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
-        });
+        this.setWorkerState(
+          binding,
+          rootRun.project_id,
+          rootRun.id,
+          executionState,
+          `Usando ${call.name}`,
+          Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
+        );
         this.emit(rootRun, 'tool.started', `${binding.agent.name} iniciou ${call.name}`, {
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           child_run_id: childRun.id,
           tool_name: call.name,
           tool_call_id: call.id,
@@ -855,7 +1012,7 @@ export class ChatRunnerService {
           project_id: rootRun.project_id,
           project_root: this.projectRoot(rootRun.project_id),
           run_id: childRun.id,
-          agent_id: binding.agent.id,
+          agent_id: this.auditAgentId(binding),
           signal,
           idempotency_key: call.id,
         };
@@ -867,16 +1024,16 @@ export class ChatRunnerService {
         );
 
         if (toolResult.approval_required && toolResult.approval_id) {
-          this.states.upsert({
-            agent_id: binding.agent.id,
-            project_id: rootRun.project_id,
-            run_id: rootRun.id,
-            state: 'waiting',
-            activity: `Aguardando aprovação para ${call.name}`,
-            progress: null,
-          });
+          this.setWorkerState(
+            binding,
+            rootRun.project_id,
+            rootRun.id,
+            'waiting',
+            `Aguardando aprovação para ${call.name}`,
+            null,
+          );
           this.emit(rootRun, 'tool.approval_required', `${call.name} precisa de aprovação`, {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             tool_name: call.name,
             tool_call_id: call.id,
@@ -887,14 +1044,14 @@ export class ChatRunnerService {
           const approvalStatus = await this.waitForToolApproval(toolResult.approval_id, signal);
           if (approvalStatus === 'approved') {
             this.emit(rootRun, 'tool.approved', `${call.name} foi aprovado`, {
-              agent_id: binding.agent.id,
+              ...this.workerPayload(binding),
               child_run_id: childRun.id,
               tool_name: call.name,
               approval_id: toolResult.approval_id,
             });
           } else {
             this.emit(rootRun, 'tool.denied', `${call.name} foi negado`, {
-              agent_id: binding.agent.id,
+              ...this.workerPayload(binding),
               child_run_id: childRun.id,
               tool_name: call.name,
               approval_id: toolResult.approval_id,
@@ -918,7 +1075,7 @@ export class ChatRunnerService {
             ? `${binding.agent.name} concluiu ${call.name}`
             : `${call.name} não foi executado`,
           {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             tool_name: call.name,
             tool_call_id: call.id,
@@ -957,16 +1114,9 @@ export class ChatRunnerService {
     const { rootRun, childRun, binding, stage, previousText, isFinal, signal } = input;
     if (signal?.aborted) throw new ChatRunCancelledError();
     const state = stateForStage(stage);
-    this.states.upsert({
-      agent_id: binding.agent.id,
-      project_id: rootRun.project_id,
-      run_id: rootRun.id,
-      state: 'thinking',
-      activity: 'Preparando contexto',
-      progress: 0.05,
-    });
-    this.emit(rootRun, 'agent.state', `${binding.agent.name} está pensando`, {
-      agent_id: binding.agent.id,
+    this.setWorkerState(binding, rootRun.project_id, rootRun.id, 'thinking', 'Preparando contexto', 0.05);
+    this.emit(rootRun, 'worker.state', `${binding.agent.name} está pensando`, {
+      ...this.workerPayload(binding),
       state: 'thinking',
       activity: 'Preparando contexto',
       stage,
@@ -976,7 +1126,7 @@ export class ChatRunnerService {
     const messages = this.buildMessages(
       rootRun.project_id,
       rootRun.conversation_id,
-      binding.agent,
+      binding,
       stage,
       previousText,
       toolsEnabled,
@@ -988,25 +1138,25 @@ export class ChatRunnerService {
       max_output_tokens: binding.model.max_output_tokens ?? undefined,
       metadata: {
         run_id: childRun.id,
-        agent_id: binding.agent.id,
+        ...this.workerPayload(binding),
         tools_enabled: toolsEnabled,
       },
     };
 
-    this.states.upsert({
-      agent_id: binding.agent.id,
-      project_id: rootRun.project_id,
-      run_id: rootRun.id,
+    this.setWorkerState(
+      binding,
+      rootRun.project_id,
+      rootRun.id,
       state,
-      activity: stage === 'reviewer' ? 'Revisando resposta' : stage === 'planner' ? 'Planejando resposta' : 'Respondendo',
-      progress: 0.2,
-    });
-    this.emit(rootRun, 'agent.state', stage === 'reviewer'
+      stage === 'reviewer' ? 'Revisando resposta' : stage === 'planner' ? 'Planejando resposta' : 'Respondendo',
+      0.2,
+    );
+    this.emit(rootRun, 'worker.state', stage === 'reviewer'
       ? `${binding.agent.name} está revisando`
       : stage === 'planner'
         ? `${binding.agent.name} está planejando`
         : `${binding.agent.name} está respondendo`, {
-      agent_id: binding.agent.id,
+      ...this.workerPayload(binding),
       state,
       stage,
       provider_id: binding.provider.id,
@@ -1055,7 +1205,7 @@ export class ChatRunnerService {
             text += event.text;
             deltaCount += 1;
             this.hub.publish(rootRun.id, 'response.delta', {
-              agent_id: binding.agent.id,
+              ...this.workerPayload(binding),
               child_run_id: childRun.id,
               stage,
               text: event.text,
@@ -1071,7 +1221,7 @@ export class ChatRunnerService {
       } catch (error) {
         if (deltaCount > 0) throw error;
         this.emit(rootRun, 'response.streaming_fallback', `${binding.agent.name}: fallback sem streaming`, {
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           stage,
           reason: error instanceof Error ? error.message : 'stream_failed',
         }, 'warning');
@@ -1083,7 +1233,7 @@ export class ChatRunnerService {
         effectiveModel = result.model_id ?? effectiveModel;
         if (text) {
           this.hub.publish(rootRun.id, 'response.delta', {
-            agent_id: binding.agent.id,
+            ...this.workerPayload(binding),
             child_run_id: childRun.id,
             stage,
             text,
@@ -1100,7 +1250,7 @@ export class ChatRunnerService {
       effectiveModel = result.model_id ?? effectiveModel;
       if (text) {
         this.hub.publish(rootRun.id, 'response.delta', {
-          agent_id: binding.agent.id,
+          ...this.workerPayload(binding),
           child_run_id: childRun.id,
           stage,
           text,
@@ -1113,10 +1263,11 @@ export class ChatRunnerService {
     const assistantMessage = this.messages.create({
       conversation_id: rootRun.conversation_id,
       role: 'assistant',
-      agent_id: binding.agent.id,
+      agent_id: binding.worker_kind === 'agent' ? binding.agent.id : null,
       content: text,
       metadata: {
         source: 'chat_v2',
+        ...this.workerPayload(binding),
         root_run_id: rootRun.id,
         child_run_id: childRun.id,
         stage,
@@ -1140,6 +1291,7 @@ export class ChatRunnerService {
       output_tokens: usage?.output_tokens ?? null,
       metadata: {
         ...childRun.metadata,
+        ...this.workerPayload(binding),
         message_id: assistantMessage.id,
         finish_reason: finishReason ?? null,
         duration_ms: duration,
@@ -1152,17 +1304,18 @@ export class ChatRunnerService {
 
     const effectivePricingModel = this.providers.listModels(effectiveProvider, true)
       .find((candidate) => candidate.model_id === effectiveModel) ?? binding.model;
-    this.usage.recordRunUsage(binding.agent.id, effectiveProvider, {
-      input_tokens: usage?.input_tokens,
-      output_tokens: usage?.output_tokens,
-      cost_usd: estimateCostUsd(effectivePricingModel, usage),
-      request_count: requestCount,
-      duration_ms: duration,
-    });
+    this.recordWorkerUsage(
+      binding,
+      effectiveProvider,
+      usage,
+      estimateCostUsd(effectivePricingModel, usage),
+      requestCount,
+      duration,
+    );
 
     if (usage) {
       this.emit(rootRun, 'usage.updated', `Uso atualizado: ${binding.agent.name}`, {
-        agent_id: binding.agent.id,
+        ...this.workerPayload(binding),
         provider_id: binding.provider.id,
         model_id: binding.model.id,
         usage,
@@ -1173,7 +1326,7 @@ export class ChatRunnerService {
     }
 
     this.emit(rootRun, 'response.completed', `${binding.agent.name} concluiu a resposta`, {
-      agent_id: binding.agent.id,
+      ...this.workerPayload(binding),
       child_run_id: childRun.id,
       message_id: assistantMessage.id,
       stage,
