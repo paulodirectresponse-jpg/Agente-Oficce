@@ -25,6 +25,7 @@ import { v3AnalyticsRouter } from './v3AnalyticsRoutes.js';
 import { v3ReleaseRouter } from './v3ReleaseRoutes.js';
 import { v3IntegrationRouter } from './v3IntegrationRoutes.js';
 import { resourceRouter } from './resourceRoutes.js';
+import { ResourceService } from '../agent-office/resourceService.js';
 
 export const agentOfficeRouter = Router();
 
@@ -156,8 +157,13 @@ agentOfficeRouter.get('/agent-office/projects/:projectId/conversation', (request
     const conversations = new ConversationRepository(database.connection);
     const conversationId = conversations.ensureForProject(request.params.projectId);
     const messages = new MessageRepository(database.connection).list(conversationId, 200);
+    const resources = new ResourceService(database.connection);
+    const hydrated = messages.map((message: any) => {
+      const ids = Array.isArray(message.metadata?.attachment_ids) ? message.metadata.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [];
+      return ids.length ? { ...message, metadata: { ...message.metadata, attachments: resources.attachments(ids) } } : message;
+    });
     database.connection.close();
-    response.json({ ok: true, data: { conversation_id: conversationId, messages } });
+    response.json({ ok: true, data: { conversation_id: conversationId, messages: hydrated } });
   } catch (error) {
     response.status(500).json({ ok: false, error: { code: 'CONVERSATION_FAILED', message: error instanceof Error ? error.message : 'Unable to load conversation.' } });
   }
