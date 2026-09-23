@@ -136,6 +136,12 @@ export function AnalyticsView(){
           <div><span>Timeout / budget</span><strong>{data.execution.timed_out} / {data.execution.budget_exceeded}</strong><small>tentativas terminais</small></div>
           <div><span>Duração tentativa</span><strong>{ms(data.execution.average_attempt_duration_ms)}</strong><small>{data.execution.attempts} attempts</small></div>
         </div>
+        <section className="analytics-quality">
+          <div><strong>Workforces</strong><span>{data.execution.workforces.total}</span></div>
+          <div><strong>Concluídas</strong><span>{data.execution.workforces.completed}</span></div>
+          <div><strong>Falhas / canceladas</strong><span>{data.execution.workforces.failed} / {data.execution.workforces.cancelled}</span></div>
+          <div><strong>Recursos médios</strong><span>{data.execution.workforces.average_resources}</span></div>
+        </section>
         <section className="analytics-card"><div className="analytics-card-head"><div><span className="office-kicker">Tools</span><h2>Ferramentas e approvals</h2></div><small>{data.execution.tool_calls} chamadas · {data.execution.tool_failures} falhas</small></div>
           <div className="analytics-table-wrap"><table className="data-table analytics-table"><thead><tr><th>Tool</th><th>Calls</th><th>Completed</th><th>Failed</th><th>Duração</th><th>Approvals</th><th>Denied</th></tr></thead><tbody>
             {data.tools.map(t=><tr key={t.name}><td className="mono">{t.name}</td><td>{t.calls}</td><td>{t.completed}</td><td>{t.failed}</td><td>{ms(t.average_duration_ms)}</td><td>{t.approvals}</td><td>{t.denied}</td></tr>)}
@@ -161,6 +167,12 @@ export function AnalyticsView(){
           <div><span>Tokens</span><strong>{fmt(data.orchestrator.input_tokens+data.orchestrator.output_tokens)}</strong><small>somente Orchestrator</small></div>
           <div><span>Níveis</span><strong>{data.orchestrator.levels.fast}/{data.orchestrator.levels.deep}</strong><small>fast / deep</small></div>
         </div>
+        <section className="analytics-quality">
+          <div><strong>Execuções ligadas</strong><span>{data.orchestrator.execution_outcome.linked}</span></div>
+          <div><strong>Execuções concluídas</strong><span>{data.orchestrator.execution_outcome.completed}</span></div>
+          <div><strong>Falhas / canceladas</strong><span>{data.orchestrator.execution_outcome.failed} / {data.orchestrator.execution_outcome.cancelled}</span></div>
+          <div><strong>Sucesso pós-routing</strong><span>{pct(data.orchestrator.execution_outcome.success_rate)}</span></div>
+        </section>
         <section className="analytics-card"><div className="analytics-levels">
           {Object.entries(data.orchestrator.levels).map(([key,value])=><div key={key}><span>{key}</span><strong>{value}</strong><div><i style={{width:`${data.orchestrator.total?Math.max(3,(value/data.orchestrator.total)*100):0}%`}}/></div></div>)}
         </div></section>
