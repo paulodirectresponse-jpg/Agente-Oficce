@@ -240,7 +240,33 @@ Prefab collision geometry is checked against those zones.
 
 This prevents visually "nice" but functionally impossible room compositions.
 
-## 9. Calibrated renderer contract
+## 9. Character occlusion inside furniture
+
+Some top-down assets cannot be drawn as one flat image if an Agent must visually sit inside them.
+
+Calibration therefore supports:
+
+```text
+occlusion:
+  mode: horizontal-split
+  splitY: <source-pixel>
+```
+
+The prefab renderer turns one calibrated asset into two passes:
+
+```text
+asset back segment
+      ↓
+Agent
+      ↓
+asset front segment
+```
+
+This is especially useful for desks/workstations whose front edge must cover a seated Agent while the chair/monitor remains behind the Agent.
+
+The split coordinate is calibrated once for the asset and is never guessed in individual room layouts.
+
+## 10. Calibrated renderer contract
 
 Compiled prefab nodes carry:
 
@@ -255,7 +281,7 @@ The prefab renderer draws only the visible calibrated region of each PNG.
 
 Therefore transparent padding can no longer shift an object away from its intended blueprint coordinate.
 
-## 10. What Stage 5.2A intentionally does not do
+## 11. What Stage 5.2A intentionally does not do
 
 It does **not** rebuild the Development runtime yet.
 
