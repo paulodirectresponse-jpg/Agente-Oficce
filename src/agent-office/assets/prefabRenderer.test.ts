@@ -25,6 +25,20 @@ describe('prefab renderer geometry',()=>{
     expect(front!.destination.height).toBe(120);
   });
 
+
+  it('keeps a composite workstation behind the Agent while exposing only curated front occluders',()=>{
+    const node={...base,occlusion:{
+      mode:'front-rects' as const,
+      frontRects:[
+        {x:10,y:80,width:100,height:20},
+        {x:10,y:100,width:25,height:40},
+        {x:85,y:100,width:25,height:40},
+      ],
+    }};
+    expect(prefabNodeRects(node,'back')).toEqual({source:node.sourceRect,destination:node.destinationRect});
+    expect(prefabNodeRects(node,'front')).toBeNull();
+  });
+
   it('does not redraw a normal unsplit node during the front occlusion pass',()=>{
     const node={...base,occlusion:{mode:'none' as const}};
     expect(prefabNodeRects(node,'front')).toBeNull();
