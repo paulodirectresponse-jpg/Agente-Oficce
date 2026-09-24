@@ -58,6 +58,7 @@ export function TrabalhoView({project}:{project:Project|null}){
   const [sending,setSending]=useState(false);
   const [resolvingApproval,setResolvingApproval]=useState<string|null>(null);
   const [jumpVisible,setJumpVisible]=useState(false);
+  const [planExpanded,setPlanExpanded]=useState(false);
   const sourceRef=useRef<EventSource|null>(null);
   const connectedRunRef=useRef<string|null>(null);
   const lastSequenceRef=useRef<Record<string,number>>({});
@@ -119,7 +120,7 @@ export function TrabalhoView({project}:{project:Project|null}){
 
   useEffect(()=>{
     sourceRef.current?.close();connectedRunRef.current=null;lastSequenceRef.current={};
-    setLiveEvents([]);setStreaming({});setSnapshot(null);setConversation(null);setRuns([]);setMode('conversation');setInspectorOpen(false);setActivityOpen(false);autoOpenedPreviewRef.current=null;
+    setLiveEvents([]);setStreaming({});setSnapshot(null);setConversation(null);setRuns([]);setMode('conversation');setInspectorOpen(false);setActivityOpen(false);setPlanExpanded(false);autoOpenedPreviewRef.current=null;
     void refresh();
     return()=>sourceRef.current?.close();
   },[project?.id,refresh]);
@@ -240,19 +241,7 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-message-body"><div className="work-v2-message-meta"><strong>{workerNames.get(key)??'Agent Office'}</strong><span>ao vivo</span></div><MessageContent content={text} streaming/></div>
               </article>)}
 
-              {activeSteps.length>0&&<section className="work-v2-inline-plan">
-                <div className="work-v2-inline-plan-head"><strong>Etapas</strong><span>{completedSteps}/{activeSteps.length}</span></div>
-                <div className="work-v2-inline-plan-steps">{activeSteps.map(step=><div key={step.id} className={'inline-step '+step.status}><span>{step.status==='completed'?'✓':step.status==='running'?'●':'○'}</span><strong>{step.title||step.key}</strong></div>)}</div>
-              </section>}
 
-              {isRunning&&<button type="button" className="work-v2-execution-summary" onClick={()=>setActivityOpen(true)}>
-                <span className="work-v2-live-dot" aria-hidden="true"/>
-                <div>
-                  <strong>Construindo</strong>
-                  <span>{workforceResources.length?workforceResources.length+' recursos trabalhando juntos':'Agent Office trabalhando'}{activeSteps.length?' · '+completedSteps+' de '+activeSteps.length+' etapas':''}</span>
-                </div>
-                <span>Ver execução →</span>
-              </button>}
 
               {snapshot?.pending_approvals.map(approval=><section className="work-v2-approval" key={approval.id}>
                 <div><strong>Aprovação necessária</strong><p>{approval.reason||'Esta ação pode alterar algo fora da conversa.'}</p><small>{approval.tool_name}</small></div>
@@ -263,6 +252,22 @@ export function TrabalhoView({project}:{project:Project|null}){
 
               {jumpVisible&&<button type="button" className="work-v2-jump" onClick={()=>{const element=transcriptRef.current;if(element)element.scrollTop=element.scrollHeight;setJumpVisible(false)}}>↓ Mais recente</button>}
             </div>
+
+            {(activeSteps.length>0||isRunning)&&<section className={'work-v2-goal-dock '+(planExpanded?'expanded':'')}>
+              <button type="button" className="work-v2-goal-summary" onClick={()=>setPlanExpanded(value=>!value)}>
+                <span className="work-v2-live-dot" aria-hidden="true"/>
+                <div className="work-v2-goal-copy">
+                  <strong>{snapshot?.active_plan?.goal||'Goal em execução'}</strong>
+                  <span>{activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||(isRunning?'Executando':'Concluído')}</span>
+                </div>
+                <span className="work-v2-goal-progress">{completedSteps}/{activeSteps.length||1}</span>
+                <span className="work-v2-goal-caret">{planExpanded?'⌃':'⌄'}</span>
+              </button>
+              {planExpanded&&<div className="work-v2-goal-details">
+                <div className="work-v2-goal-steps">{activeSteps.map(step=><div key={step.id} className={'goal-step '+step.status}><span>{step.status==='completed'?'✓':step.status==='running'?'●':step.status==='failed'?'!':'○'}</span><div><strong>{step.title||step.key}</strong><small>{step.status==='completed'?'Concluído':step.status==='running'?'Em andamento':step.status==='failed'?'Falhou':'Pendente'}</small></div></div>)}</div>
+                <button type="button" className="work-v2-goal-activity" onClick={()=>setActivityOpen(true)}>Abrir atividade detalhada →</button>
+              </div>}
+            </section>}
 
             <form className="work-v2-composer" onSubmit={submit} onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='copy'}} onDrop={e=>{e.preventDefault();addPendingFiles(Array.from(e.dataTransfer.files??[]))}}>
               {isRunning&&<div className="work-v2-command-mode">
