@@ -39,11 +39,15 @@ chatRouter.post('/runs', async (request, response) => {
     const projectId = String(request.body?.project_id || '');
     const message = String(request.body?.message || '');
     const requestedTarget = typeof request.body?.target === 'string' ? request.body.target : 'auto';
+    const executionPolicy = typeof request.body?.execution_policy === 'string' ? request.body.execution_policy : 'auto';
+    const toolHint = typeof request.body?.tool_hint === 'string' ? request.body.tool_hint : '';
     const attachmentIds = Array.isArray(request.body?.attachment_ids) ? request.body.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [];
     const attachmentKinds = [...new Set(new ResourceService(database.connection).attachments(attachmentIds).map(item=>String(item.metadata.kind||'other')))];
-    const routingMessage = attachmentKinds.length
-      ? message + '\n\n[Routing context only: the request includes attached media/files of type(s): ' + attachmentKinds.join(', ') + '. Route execution so the actual attachments are inspected by a compatible model. Never answer as if an attachment was analyzed when it was not.]'
-      : message;
+    const routingHints:string[]=[];
+    if(attachmentKinds.length)routingHints.push('The request includes attached media/files of type(s): '+attachmentKinds.join(', ')+'. Route execution so the actual attachments are inspected by a compatible multimodal model. Never claim to have analyzed an attachment that was not actually provided to the model.');
+    if(toolHint==='web_search'||executionPolicy==='research')routingHints.push('This request requires live web/browser research. Prefer a worker with browser tools and actually inspect sources before answering.');
+    if(executionPolicy!=='auto')routingHints.push('Requested execution policy: '+executionPolicy+'.');
+    const routingMessage = routingHints.length ? message+'\n\n[Routing context only: '+routingHints.join(' ')+']' : message;
     if (!database.connection.prepare('SELECT 1 FROM projects WHERE id=?').get(projectId)) {
       throw new Error('CHAT_PROJECT_NOT_FOUND');
     }
@@ -110,7 +114,8 @@ chatRouter.post('/runs', async (request, response) => {
     const workforceId = decision.target_mode === 'dynamic_team' ? decision.target_team_id : undefined;
     if (workforceId) new TeamService(database.connection).bindWorkforceToChat(workforceId, prepared.run.id);
     const signal = chatRunControls.register(prepared.run.id);
-    const longRunning = shouldUseLongRun(message, decision);
+    const forceDurable=['plan','build','review','test','until_done'].includes(executionPolicy);
+    const longRunning = forceDurable || shouldUseLongRun(message, decision);
     if (longRunning) {
       const durable = new LongRunService(database.connection);
       const created = durable.create(prepared, orchestration, message, attachmentIds);
