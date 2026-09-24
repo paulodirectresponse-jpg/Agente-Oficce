@@ -57,8 +57,8 @@ export const DEVELOPMENT_V3_ZONES={
   work:{x:500,y:315,width:510,height:330},
   lounge:{x:255,y:635,width:330,height:230},
   planning:{x:965,y:120,width:390,height:260},
-  meeting:{x:1035,y:390,width:300,height:285},
-  storage:{x:235,y:235,width:145,height:330},
+  meeting:{x:1035,y:390,width:300,height:320},
+  storage:{x:235,y:235,width:145,height:390},
   entry:{x:760,y:805,width:160,height:95},
 } as const;
 
