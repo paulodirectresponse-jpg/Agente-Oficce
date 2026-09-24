@@ -44,6 +44,12 @@ const SPRITES:Record<StationKind,string>={
   lead:'/office-assets/characters/tech-lead.png',
   operations:'/office-assets/characters/product-owner.png',
 };
+const SCENE_ASSETS={
+  decor:'/office-assets/decorations_LRK.png',
+  cabinets:'/office-assets/cabinets_LRK.png',
+  kitchen:'/office-assets/kitchen_LRK.png',
+  living:'/office-assets/livingroom_LRK.png',
+};
 
 const COLORS={
   floor:'#c9baa3',
@@ -85,6 +91,10 @@ function roundedRect(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:n
   const rr=Math.min(r,w/2,h/2);
   ctx.beginPath();ctx.moveTo(x+rr,y);ctx.arcTo(x+w,y,x+w,y+h,rr);ctx.arcTo(x+w,y+h,x,y+h,rr);ctx.arcTo(x,y+h,x,y,rr);ctx.arcTo(x,y,x+w,y,rr);ctx.closePath();
 }
+function cropAsset(ctx:CanvasRenderingContext2D,img:HTMLImageElement|undefined,sx:number,sy:number,sw:number,sh:number,x:number,y:number,scale=1){
+  if(!img?.complete||!img.naturalWidth)return;
+  ctx.drawImage(img,sx,sy,sw,sh,x,y,sw*(TILE/16)*scale,sh*(TILE/16)*scale);
+}
 function label(ctx:CanvasRenderingContext2D,text:string,x:number,y:number){
   ctx.fillStyle='rgba(39,56,61,.42)';ctx.font='700 12px ui-monospace,monospace';ctx.fillText(text.toUpperCase(),x,y);
 }
@@ -118,7 +128,7 @@ function board(ctx:CanvasRenderingContext2D,x:number,y:number,w=140,h=72){
   const c=['#e0bd55','#78afc2','#d48478','#86a66e'];let n=0;
   for(let yy=0;yy<2;yy++)for(let xx=0;xx<4;xx++){ctx.fillStyle=c[n++%c.length];ctx.fillRect(x+13+xx*29,y+14+yy*27,21,17)}
 }
-function drawWorld(ctx:CanvasRenderingContext2D,time:number){
+function drawWorld(ctx:CanvasRenderingContext2D,time:number,images?:Map<string,HTMLImageElement>){
   ctx.fillStyle=COLORS.floor;ctx.fillRect(0,0,WORLD_W,WORLD_H);
   ctx.strokeStyle=COLORS.line;ctx.lineWidth=1;
   for(let x=0;x<=WORLD_W;x+=TILE){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,WORLD_H);ctx.stroke()}
@@ -173,6 +183,20 @@ function drawWorld(ctx:CanvasRenderingContext2D,time:number){
 
   ctx.fillStyle='rgba(255,255,255,.08)';
   for(let x=340;x<1180;x+=55)for(let y=280;y<650;y+=55)ctx.fillRect(x,y,2,2);
+
+  if(images){
+    const decor=images.get('scene:decor'),cabinets=images.get('scene:cabinets');
+    cropAsset(ctx,cabinets,0,0,48,64,410,754,.95);
+    cropAsset(ctx,cabinets,0,0,48,64,503,754,.95);
+    cropAsset(ctx,cabinets,0,0,48,64,1558,680,.72);
+    for(const [x,y,small] of [[305,225,false],[1190,224,false],[838,674,true],[350,676,true],[1602,250,false],[1204,632,true]] as Array<[number,number,boolean]>){
+      cropAsset(ctx,decor,small?32:48,48,16,32,x,y,small?1.05:1.28);
+    }
+    cropAsset(ctx,decor,0,0,16,48,1228,694,1.15);
+    cropAsset(ctx,decor,96,48,48,32,70,33,1.15);
+    cropAsset(ctx,decor,96,48,48,32,1275,34,1.15);
+    cropAsset(ctx,decor,0,96,16,16,330,34,1.2);
+  }
 }
 function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAgent,img:HTMLImageElement|undefined,time:number,selected:boolean){
   const working=isWorking(agent.state),walking=Math.hypot(rt.tx-rt.x,rt.ty-rt.y)>3;
@@ -233,8 +257,12 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
 
   useEffect(()=>{
     const map=imagesRef.current;let pending=0;
-    for(const [kind,url] of Object.entries(SPRITES) as Array<[StationKind,string]>){
-      if(map.has(kind))continue;pending++;const img=new Image();img.src=url;img.onload=()=>{pending--;if(pending<=0)setReady(true)};img.onerror=()=>{pending--;if(pending<=0)setReady(true)};map.set(kind,img);
+    const queue:Array<[string,string]>=[
+      ...(Object.entries(SPRITES) as Array<[StationKind,string]>).map(([kind,url])=>[kind,url] as [string,string]),
+      ...Object.entries(SCENE_ASSETS).map(([key,url])=>['scene:'+key,url] as [string,string]),
+    ];
+    for(const [key,url] of queue){
+      if(map.has(key))continue;pending++;const img=new Image();img.src=url;img.onload=()=>{pending--;if(pending<=0)setReady(true)};img.onerror=()=>{pending--;if(pending<=0)setReady(true)};map.set(key,img);
     }
     if(pending===0)setReady(true);
   },[]);
@@ -283,7 +311,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
       const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,rect.width,rect.height);ctx.imageSmoothingEnabled=false;
       const dt=Math.min(.05,(time-last)/1000);last=time;
       const camera=cameraRef.current;ctx.save();ctx.translate(camera.x,camera.y);ctx.scale(camera.zoom,camera.zoom);
-      drawWorld(ctx,time);
+      drawWorld(ctx,time,imagesRef.current);
 
       const byId=new Map(positioned.map(x=>[x.agent.id,x.agent]));
       for(const rt of entitiesRef.current.values()){
@@ -302,7 +330,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
 
       const mdpr=Math.min(devicePixelRatio||1,2),mw=172,mh=100;
       if(mini.width!==Math.floor(mw*mdpr)||mini.height!==Math.floor(mh*mdpr)){mini.width=Math.floor(mw*mdpr);mini.height=Math.floor(mh*mdpr)}
-      const m=mini.getContext('2d');if(m){m.setTransform(mdpr,0,0,mdpr,0,0);m.clearRect(0,0,mw,mh);m.save();m.scale(mw/WORLD_W,mh/WORLD_H);drawWorld(m,time);for(const rt of entitiesRef.current.values()){m.fillStyle='#173c4d';m.fillRect(rt.x-7,rt.y-7,14,14)}m.restore();const vw=rect.width/camera.zoom/WORLD_W*mw,vh=rect.height/camera.zoom/WORLD_H*mh,vx=(-camera.x/camera.zoom)/WORLD_W*mw,vy=(-camera.y/camera.zoom)/WORLD_H*mh;m.strokeStyle='rgba(236,248,251,.82)';m.lineWidth=1.5;m.strokeRect(clamp(vx,0,mw),clamp(vy,0,mh),Math.min(vw,mw),Math.min(vh,mh))}
+      const m=mini.getContext('2d');if(m){m.setTransform(mdpr,0,0,mdpr,0,0);m.clearRect(0,0,mw,mh);m.save();m.scale(mw/WORLD_W,mh/WORLD_H);drawWorld(m,time,imagesRef.current);for(const rt of entitiesRef.current.values()){m.fillStyle='#173c4d';m.fillRect(rt.x-7,rt.y-7,14,14)}m.restore();const vw=rect.width/camera.zoom/WORLD_W*mw,vh=rect.height/camera.zoom/WORLD_H*mh,vx=(-camera.x/camera.zoom)/WORLD_W*mw,vy=(-camera.y/camera.zoom)/WORLD_H*mh;m.strokeStyle='rgba(236,248,251,.82)';m.lineWidth=1.5;m.strokeRect(clamp(vx,0,mw),clamp(vy,0,mh),Math.min(vw,mw),Math.min(vh,mh))}
       raf=requestAnimationFrame(render);
     };
     raf=requestAnimationFrame(render);return()=>cancelAnimationFrame(raf);
