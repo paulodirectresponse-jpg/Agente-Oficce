@@ -25,7 +25,7 @@ const credenza='storage.meeting.credenza.wood.5310a6eae9';
 const plantLarge='plant.prop.036.large.round.pot.plant.2ab1c2f413';
 const plantMedium='plant.prop.037.medium.square.planter.plant.212fc9ff2f';
 
-function prefab(input:Omit<PrefabDefinition,'schemaVersion'>):PrefabDefinition{
+function prefab(input:unknown):PrefabDefinition{
   return PrefabDefinitionSchema.parse({schemaVersion:1,...input});
 }
 
