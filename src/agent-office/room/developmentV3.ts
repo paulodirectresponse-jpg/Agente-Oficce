@@ -23,6 +23,7 @@ export const DEVELOPMENT_V3_ASSETS={
   door:'door.architecture.015.wooden.door.hinge.left.1fa3fd1eae',
   workstation:'desk.combination.001.complete.workstation.22f9e85f92',
   wallDisplay:'monitor.prop.015.wall.display.6410060367',
+  marketWall:'monitor.tech.007.large.market.video.wall.b3fd1bf0dc',
   whiteboard:'whiteboard.035.p02.17.whiteboard.with.diagrams.5db621d5d2',
   conferenceTable:'table.001.p01.01.large.rectangular.conference.table.9fa0913ec6',
   conferenceChair:'chair.010.p01.10.blue.conference.chair.b5e08d3b17',
@@ -33,6 +34,8 @@ export const DEVELOPMENT_V3_ASSETS={
   plantMedium:'plant.prop.037.medium.square.planter.plant.212fc9ff2f',
   plantSmall:'plant.prop.039.small.brown.pot.plant.c01b2b0360',
   floorLamp:'lighting.prop.009.floor.lamp.22dbca4e23',
+  dividerPlanter:'plant.061.p04.04.workstation.divider.planter.888514e87d',
+  sideboard:'storage.furniture.005.low.sideboard.df01bea9c3',
 } as const;
 
 export type DevelopmentV3AssetId=typeof DEVELOPMENT_V3_ASSETS[keyof typeof DEVELOPMENT_V3_ASSETS];
@@ -86,7 +89,7 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
     shadow:true,
   })),
 
-  {id:'dashboard',assetId:DEVELOPMENT_V3_ASSETS.wallDisplay,x:1135,y:260,scale:.78,layer:'surface'},
+  {id:'dashboard',assetId:DEVELOPMENT_V3_ASSETS.marketWall,x:1095,y:260,scale:.64,layer:'surface'},
   {id:'whiteboard',assetId:DEVELOPMENT_V3_ASSETS.whiteboard,x:1210,y:472,scale:.72,layer:'surface'},
   {id:'meeting-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:1190,y:610,scale:.60,layer:'furniture_back',shadow:true},
   {id:'meeting-chair-l',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1110,y:620,scale:.52,layer:'furniture_front'},
@@ -97,6 +100,9 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   {id:'lounge-lamp',assetId:DEVELOPMENT_V3_ASSETS.floorLamp,x:325,y:742,scale:.78,layer:'furniture_back'},
   {id:'bookcase',assetId:DEVELOPMENT_V3_ASSETS.bookcase,x:330,y:520,scale:.66,layer:'furniture_back',shadow:true},
   {id:'document-cabinet',assetId:DEVELOPMENT_V3_ASSETS.documentCabinet,x:1310,y:390,scale:.52,layer:'furniture_back',shadow:true},
+  {id:'sideboard',assetId:DEVELOPMENT_V3_ASSETS.sideboard,x:1080,y:345,scale:.72,layer:'furniture_back',shadow:true},
+  {id:'divider-planter-a',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:755,y:510,scale:.46,layer:'furniture_front',shadow:true},
+  {id:'divider-planter-b',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:975,y:510,scale:.46,layer:'furniture_front',shadow:true},
 
   {id:'plant-large-left',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:360,y:310,scale:.66,layer:'furniture_front',shadow:true},
   {id:'plant-large-right',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:1320,y:720,scale:.62,layer:'furniture_front',shadow:true},
