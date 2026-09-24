@@ -90,3 +90,30 @@ Stage 4 is complete when:
 9. project unit/type/build gates pass.
 
 The next visual gate is an installed/private build screenshot compared directly with the approved Agent Office reference.
+
+
+## Approved composition alignment — 24/09/2026
+
+The visual gate was reset around the user-approved Development preview.
+
+The approved composition is now treated as a spatial contract, not a loose moodboard.
+
+Non-negotiable rules:
+- six workstations in two aligned rows of three;
+- the lounge owns its rug footprint and no workstation may cross it;
+- the meeting area owns a separate rug and glass-defined footprint;
+- storage sits flush to the left wall and cannot rest on unrelated surfaces;
+- the only entrance is centered in a real bottom-wall opening;
+- planning assets are attached to the upper architectural/planning wall;
+- greenery is used to support zones and dividers, never as random filler;
+- Canvas effects may add light/shadow/selection but must not invent duplicate furniture or dashboards.
+
+Automated composition validation now rejects:
+- workstations outside the work zone;
+- workstations entering lounge or meeting zones;
+- lounge objects outside the lounge footprint;
+- meeting furniture outside the meeting footprint;
+- storage outside its wall zone;
+- entrances not placed in the real wall opening.
+
+This alignment is the final Stage-4 visual layout baseline until a new preview is explicitly approved.
