@@ -4,3 +4,8 @@ export * from './roomTemplates.js';
 export * from './officeSpec.js';
 export * from './assetRecipes.js';
 export * from './catalogStyles.js';
+export * from './assetCalibration.js';
+export * from './prefabSystem.js';
+export * from './prefabRenderer.js';
+export * from './prefabRoom.js';
+export * from './developmentPrefabs.js';
