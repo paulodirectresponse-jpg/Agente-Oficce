@@ -216,6 +216,11 @@ export function validatePrefabComposition(prefabs:CompiledPrefab[]){
   for(let i=0;i<prefabs.length;i++){
     for(let j=i+1;j<prefabs.length;j++){
       const a=prefabs[i],b=prefabs[j];
+      for(const collisionA of a.collision){
+        for(const collisionB of b.collision){
+          if(intersects(collisionA,collisionB))errors.push(`collision-overlap:${a.instance.id}:${b.instance.id}`);
+        }
+      }
       for(const keep of a.keepClear){
         for(const collision of b.collision){
           if(intersects(keep,collision))errors.push(`keep-clear-overlap:${a.instance.id}:${b.instance.id}`);
