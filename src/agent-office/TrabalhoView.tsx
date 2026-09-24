@@ -7,6 +7,7 @@ import { V2Drawer, V2EmptyState, V2Status, V2Tabs } from './shell/V2Primitives.j
 import { MessageContent } from './conversation/MessageContent.js';
 import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
 import { VoiceInputButton } from './conversation/VoiceInputButton.js';
+import { applyComposerSuggestion, composerSuggestions, parseComposerInput } from './conversation/ComposerDirectives.js';
 
 type ActiveAction='orient'|'enqueue'|'interrupt';
 type WorkMode='conversation'|'sala';
@@ -161,13 +162,14 @@ export function TrabalhoView({project}:{project:Project|null}){
     return'Agent Office';
   };
 
+  const commandHints=useMemo(()=>composerSuggestions(message,agents),[message,agents]);
   const addPendingFiles=(incoming:File[])=>setPendingFiles(cur=>[...cur,...incoming].filter((file,index,all)=>all.findIndex(x=>x.name===file.name&&x.size===file.size&&x.lastModified===file.lastModified)===index).slice(0,12));
   const refreshProjectKnowledge=useCallback(async()=>{if(!project)return;try{setProjectKnowledge(await api.listKnowledge('project',project.id))}catch{}},[project?.id]);
   useEffect(()=>{void refreshProjectKnowledge()},[refreshProjectKnowledge]);
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();if(!project||(!message.trim()&&!pendingFiles.length)||sending)return;
-    const text=message.trim()||'Analise os arquivos anexados.';const files=pendingFiles.slice();const optimisticId='local-'+Date.now();
+    const parsed=parseComposerInput(message,agents);const text=parsed.message||'Analise os arquivos anexados.';const actualTarget=parsed.target??target;const files=pendingFiles.slice();const optimisticId='local-'+Date.now();
     setMessage('');setPendingFiles([]);setSending(true);setUploading(Boolean(files.length));setError(null);
     setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:optimisticId,role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{pending:true,pending_file_names:files.map(file=>file.name)}}]}:cur);
     let uploaded:ResourceFile[]=[];
@@ -175,10 +177,10 @@ export function TrabalhoView({project}:{project:Project|null}){
       if(files.length)uploaded=await Promise.all(files.map(file=>api.uploadResource(project.id,file,'chat')));
       setConversation(cur=>cur?{...cur,messages:cur.messages.map(item=>item.id===optimisticId?{...item,metadata:{...item.metadata,pending:false,attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}:item)}:cur);
       if(isRunning&&activeRun){
-        await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text+(uploaded.length?'\n\nArquivos anexados: '+uploaded.map(file=>file.storage_path).join(', '):''),target,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id});
+        await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text+(uploaded.length?'\n\nArquivos anexados: '+uploaded.map(file=>file.storage_path).join(', '):''),target:actualTarget,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id});
         await refresh();
       }else{
-        const receipt=await api.startChatRun({project_id:project.id,conversation_id:conversation?.conversation_id,message:text,target,attachment_ids:uploaded.map(file=>file.id)});
+        const receipt=await api.startChatRun({project_id:project.id,conversation_id:conversation?.conversation_id,message:text,target:actualTarget,attachment_ids:uploaded.map(file=>file.id),execution_policy:parsed.execution_policy,tool_hint:parsed.tool_hint,directives:parsed.directives});
         setSelectedRunId(receipt.run_id);
         await refresh();await connect(receipt.run_id);
       }
@@ -238,6 +240,11 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-message-body"><div className="work-v2-message-meta"><strong>{workerNames.get(key)??'Agent Office'}</strong><span>ao vivo</span></div><MessageContent content={text} streaming/></div>
               </article>)}
 
+              {activeSteps.length>0&&<section className="work-v2-inline-plan">
+                <div className="work-v2-inline-plan-head"><strong>Etapas</strong><span>{completedSteps}/{activeSteps.length}</span></div>
+                <div className="work-v2-inline-plan-steps">{activeSteps.map(step=><div key={step.id} className={'inline-step '+step.status}><span>{step.status==='completed'?'✓':step.status==='running'?'●':'○'}</span><strong>{step.title||step.key}</strong></div>)}</div>
+              </section>}
+
               {isRunning&&<button type="button" className="work-v2-execution-summary" onClick={()=>setActivityOpen(true)}>
                 <span className="work-v2-live-dot" aria-hidden="true"/>
                 <div>
@@ -264,7 +271,8 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <button type="button" className={activeAction==='interrupt'?'active danger':''} onClick={()=>setActiveAction('interrupt')}>Mudar agora</button>
               </div>}
               {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><PendingAttachmentCard key={file.name+'-'+index} file={file} onRemove={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}/>)}</div>}
-              <textarea value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={isRunning?'Dê uma orientação ou peça outra coisa…':'Peça algo ao Agent Office…'} rows={3}/>
+              <div className="composer-input-wrap"><textarea value={message} onChange={e=>setMessage(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.currentTarget.form?.requestSubmit()}}} placeholder={isRunning?'Dê uma orientação ou peça outra coisa…':'Peça algo ao Agent Office…'} rows={3}/>
+              {commandHints.length>0&&<div className="composer-command-hints">{commandHints.map(item=><button type="button" key={item.token} onMouseDown={e=>e.preventDefault()} onClick={()=>setMessage(current=>applyComposerSuggestion(current,item.token))}><strong>{item.token}</strong><span>{item.label}</span></button>)}</div>}</div>
               <div className="work-v2-composer-footer">
                 <span>{isRunning?'A execução continua enquanto você conversa.':'Pronto para iniciar.'}</span>
                 <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);addPendingFiles(next);e.currentTarget.value=''}}/></label><VoiceInputButton disabled={sending} onTranscript={text=>setMessage(current=>current.trim()?current.trimEnd()+' '+text:text)}/><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
