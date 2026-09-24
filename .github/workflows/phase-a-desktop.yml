@@ -5,6 +5,7 @@ on:
     branches:
       - feat/experience-v2-universal-api
       - feat/development-vertical-slice-zero-cost
+      - feat/development-vertical-slice-v2-assets
   pull_request:
     branches:
       - main
