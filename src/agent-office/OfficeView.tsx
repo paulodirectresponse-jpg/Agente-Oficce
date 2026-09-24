@@ -345,9 +345,9 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     return visual !== 'offline' && visual !== 'resting';
   }).length;
 
-  const connectRunStream = useCallback(async (receipt: ChatRunReceipt) => {
+  const connectRunStream = useCallback(async (runId: string) => {
     eventSourceRef.current?.close();
-    const url = await api.getChatStreamUrl(receipt.run_id);
+    const url = await api.getChatStreamUrl(runId);
     const source = new EventSource(url);
     eventSourceRef.current = source;
 
@@ -364,15 +364,30 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         ...current.filter((item) => !(item.run_id === envelope.run_id && item.sequence === envelope.sequence)),
       ].slice(0, 50));
 
-      if (envelope.event === 'agent.state') {
+      if (envelope.event === 'agent.state' || envelope.event === 'worker.state') {
         const agentId = typeof envelope.data.agent_id === 'string' ? envelope.data.agent_id : '';
-        const state = typeof envelope.data.state === 'string' ? envelope.data.state : 'idle';
+        const state = typeof envelope.data.state === 'string' ? envelope.data.state : 'responding';
         const activityText = typeof envelope.data.activity === 'string' ? envelope.data.activity : '';
         if (agentId) {
           setLiveStates((current) => ({
             ...current,
             [agentId]: {
               state,
+              activity: activityText || current[agentId]?.activity || 'Trabalhando',
+              updated_at: envelope.timestamp,
+            },
+          }));
+        }
+      }
+
+      if (['tool.started','tool.completed','execution.step.telemetry','execution.step.failed','execution.preview.ready'].includes(envelope.event)) {
+        const agentId = typeof envelope.data.agent_id === 'string' ? envelope.data.agent_id : '';
+        if (agentId) {
+          const activityText=roomTelemetrySummary(envelope);
+          setLiveStates((current)=>({
+            ...current,
+            [agentId]:{
+              state: envelope.event==='execution.step.failed'?'error':current[agentId]?.state||'responding',
               activity: activityText,
               updated_at: envelope.timestamp,
             },
@@ -442,7 +457,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     }
 
     source.onerror = () => {
-      void api.getChatRun(receipt.run_id)
+      void api.getChatRun(runId)
         .then((run) => {
           if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
             setRunStatus(run.status);
@@ -467,15 +482,23 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   }, [loadSnapshot, project]);
 
   const commandHints=useMemo(()=>composerSuggestions(message,agents),[message,agents]);
+  const workspaceRunId=workspace?.active_run?.id??null;
+  useEffect(()=>{
+    if(!workspaceRunId||eventSourceRef.current||currentRun?.run_id===workspaceRunId)return;
+    setRunStatus('running');
+    setSending(true);
+    void connectRunStream(workspaceRunId).catch(()=>undefined);
+  },[workspaceRunId,currentRun?.run_id,connectRunStream]);
   const activeSteps=workspace?.active_plan?.steps??[];
   const completedSteps=activeSteps.filter(step=>step.status==='completed').length;
   const roomTelemetry=useMemo(()=>liveEvents.filter(event=>['tool.started','tool.completed','execution.step.started','execution.step.telemetry','execution.step.completed','execution.step.failed','execution.preview.ready','worker.state'].includes(event.event)).slice(0,roomChatExpanded?4:1),[liveEvents,roomChatExpanded]);
 
   const cancelCurrentRun = async () => {
-    if (!currentRun || runStatus !== 'running') return;
+    const runId=currentRun?.run_id??workspace?.active_run?.id;
+    if (!runId || runStatus !== 'running') return;
     setError(null);
     try {
-      await api.cancelChatRun(currentRun.run_id);
+      await api.cancelChatRun(runId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao cancelar a execução.');
     }
@@ -530,7 +553,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         directives:parsed.directives,
       });
       setCurrentRun(receipt);
-      await connectRunStream(receipt);
+      await connectRunStream(receipt.run_id);
     } catch (reason) {
       setConversation(current=>current?{...current,messages:current.messages.filter(item=>item.id!==optimisticId)}:current);
       setSending(false);
@@ -575,8 +598,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       ? 'Falhou'
                       : 'Pronto'}
             </span>
-            {runStatus === 'running' && currentRun && (
-              <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>Cancelar</button>
+            {runStatus === 'running' && (currentRun || workspace?.active_run) && (
+              <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>■ Parar</button>
             )}
             <span className="api-only-pill">{currentRun?.tools_enabled ? 'Tools ativos' : 'Texto/API'}</span>
             <span className="agent-count-pill">{activeCount}/{visibleAgents.length || 0} ativos</span>
