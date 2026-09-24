@@ -42,12 +42,12 @@ export const AssetRecordSchema=z.object({
   category:AssetCategorySchema,
   family:z.string().min(1),
   variant:z.string().default('default'),
-  source:{
+  source:z.object({
     pack:z.string().min(1),
     originalPath:z.string().min(1),
     sha256:z.string().regex(/^[a-f0-9]{64}$/),
-  },
-  runtime:{
+  }),
+  runtime:z.object({
     uri:z.string().min(1),
     widthPx:z.number().int().positive(),
     heightPx:z.number().int().positive(),
@@ -57,7 +57,7 @@ export const AssetRecordSchema=z.object({
     layer:AssetLayerSchema,
     zBias:z.number().default(0),
     collision:z.enum(['none','solid','partial']).default('solid'),
-  },
+  }),
   interaction:AssetInteractionSchema.default('none'),
   tags:z.array(z.string()).default([]),
   roomTags:z.array(z.string()).default([]),
