@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/experience-v2-universal-api
+      - feat/development-v3-approved-layout
   pull_request:
     branches:
       - main
