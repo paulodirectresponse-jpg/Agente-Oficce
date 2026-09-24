@@ -7,6 +7,7 @@ import { getAgentOfficeConfig } from './config.js';
 import { WorkspaceService } from './workspaceService.js';
 import { MessageRepository } from './conversationRepository.js';
 import { ChatRunRepository, ActivityRepository } from './v2DataModel.js';
+import { PreviewService } from './previewService.js';
 import { chatEventHub } from './chatEventHub.js';
 import type { RoutingDecision } from './orchestratorGateway.js';
 
@@ -31,8 +32,9 @@ export function shouldUseLongRun(message:string,decision:RoutingDecision):boolea
   const text=message.toLowerCase();
   const explicit=/\b(at[eé] terminar|at[eé] concluir|s[oó] pare|n[aã]o pare|until[- ]?done|horas|24\s*h|completo|inteiro|do zero|end[- ]to[- ]end)\b/i.test(text);
   const action=/\b(fa[cç]a|crie|construa|implemente|refa[cç]a|corrija|programe|desenvolva|migre|integre|publique|teste|finalize|arrume|edite)\b/i.test(text);
-  const projectWork=/\b(site|app|aplicativo|sistema|projeto|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|arquitetura|software)\b/i.test(text);
-  return explicit||(decision.requires_plan&&decision.complexity==='high'&&action&&projectWork);
+  const projectWork=/\b(site|app|aplicativo|sistema|projeto|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|arquitetura|software|landing\s?page|p[aá]gina\s?de\s?venda|dashboard)\b/i.test(text);
+  const webBuild=action&&/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(text);
+  return explicit||webBuild||(decision.requires_plan&&decision.complexity==='high'&&action&&projectWork);
 }
 
 function goalContract(message:string):GoalContract{
@@ -366,6 +368,15 @@ export class LongRunService{
     const last=this.db.prepare(`SELECT a.result_summary FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id WHERE s.plan_id=? AND s.key='06_delivery' AND a.status='completed' ORDER BY a.attempt_number DESC LIMIT 1`).get(planId) as any;
     const fallback=this.db.prepare("SELECT result_summary FROM step_attempts WHERE step_id IN (SELECT id FROM execution_steps WHERE plan_id=?) AND status='completed' ORDER BY ended_at DESC LIMIT 1").get(planId) as any;
     const text=String(last?.result_summary||fallback?.result_summary||'Execução concluída e validada.').replace(/QUALITY_GATE:\s*PASS/gi,'').trim();
+    const wantsPreview=/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(String(config.original_request||''));
+    if(wantsPreview){
+      try{
+        const preview=await new PreviewService(this.db).start(config.project_id,{chat_run_id:rootRunId});
+        this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.ready',title:'Preview pronto',detail:String(preview?.url||''),payload:{url:preview?.url??null,status:preview?.status??null}});
+      }catch(error){
+        this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.failed',severity:'warning',title:'Preview não iniciou automaticamente',detail:error instanceof Error?error.message:'PREVIEW_START_FAILED',payload:{}});
+      }
+    }
     const message=this.messages.create({conversation_id:config.conversation_id,role:'assistant',content:text,metadata:{source:'long_run_v1',root_run_id:rootRunId,execution_plan_id:planId,final:true}});
     const root=this.runs.get(rootRunId);if(root)this.runs.update(rootRunId,{status:'completed',ended_at:now(),error:null,metadata:{...root.metadata,execution_plan_id:planId,final_message_id:message.id,long_running:true}});
     chatEventHub.publish(rootRunId,'response.delta',{text,stage:'final_delivery',long_running:true});
