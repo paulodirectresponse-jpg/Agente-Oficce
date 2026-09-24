@@ -9,3 +9,4 @@ export * from './prefabSystem.js';
 export * from './prefabRenderer.js';
 export * from './prefabRoom.js';
 export * from './developmentPrefabs.js';
+export * from './characterCalibration.js';
