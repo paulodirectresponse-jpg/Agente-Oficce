@@ -65,7 +65,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  getRoomAssetStatus: () => request<{installed:boolean;root:string;registry_exists:boolean;files_exists:boolean}>('/api/agent-office/room-assets/status'),
+  getRoomAssetStatus: () => request<{installed:boolean;root:string;registry_exists:boolean;files_exists:boolean;calibration_exists:boolean}>('/api/agent-office/room-assets/status'),
+  getRoomAssetCalibration: () => request<unknown>('/api/agent-office/room-assets/calibration'),
   getRoomAssetRegistry: async () => {
     const registry=await request<{assets?:Array<{runtime?:{uri?:string};[key:string]:unknown}>}>('/api/agent-office/room-assets/registry');
     const base=await resolveApiBase();
