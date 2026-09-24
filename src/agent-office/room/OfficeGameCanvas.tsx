@@ -77,6 +77,14 @@ function stationPosition(agent:RoomAgentView,index:number){
   const cycle=Math.floor(index/list.length);
   return{x:base.x+cycle*34,y:base.y+cycle*26};
 }
+function behaviorPosition(agent:RoomAgentView,home:Vec,index:number):Vec{
+  const lane=(hash(agent.id)%5)-2;
+  if(agent.state==='thinking'||agent.state==='planning')return{x:165+lane*34,y:185+(index%2)*22};
+  if(agent.state==='testing'||agent.state==='reviewing')return{x:935+lane*38,y:845+(index%2)*28};
+  if(agent.state==='waiting')return{x:180+lane*34,y:880+(index%2)*24};
+  if(agent.state==='resting'||agent.state==='completed')return{x:1375+lane*42,y:865+(index%2)*28};
+  return home;
+}
 function isWorking(state:RoomAgentView['state']){
   return ['thinking','planning','responding','coding','testing','reviewing'].includes(state);
 }
@@ -252,7 +260,10 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
 
   const positioned=useMemo(()=>{
     const count:Record<StationKind,number>={development:0,research:0,lead:0,operations:0};
-    return agents.map(agent=>({agent,pos:stationPosition(agent,count[agent.station]++)}));
+    return agents.map((agent,index)=>{
+      const home=stationPosition(agent,count[agent.station]++);
+      return{agent,pos:behaviorPosition(agent,home,index)};
+    });
   },[agents]);
 
   useEffect(()=>{
