@@ -158,7 +158,21 @@ export class VoiceService{
       try{return await Promise.resolve(this.localTranscribe(buffer,language))}
       catch(error){if(!status.cloud_ready)throw error}
     }
-    if(status.cloud_ready)return this.cloudTranscribe(buffer,language);
+    if(status.cloud_ready){
+      try{return await this.cloudTranscribe(buffer,language)}
+      catch(cloudError){
+        if(process.platform!=='win32')throw cloudError;
+        try{
+          await bootstrapLocalRuntime();status=this.status();
+          if(status.local_ready)return Promise.resolve(this.localTranscribe(buffer,language));
+        }catch(localError){
+          const cloudMessage=cloudError instanceof Error?cloudError.message:String(cloudError);
+          const localMessage=localError instanceof Error?localError.message:String(localError);
+          throw new Error('VOICE_CLOUD_AND_LOCAL_FAILED:'+cloudMessage+' | '+localMessage);
+        }
+        throw cloudError;
+      }
+    }
     if(process.platform==='win32'){
       await bootstrapLocalRuntime();status=this.status();
       if(status.local_ready)return Promise.resolve(this.localTranscribe(buffer,language));
