@@ -142,9 +142,11 @@ function collision(c:AssetCategory){
   if(['plant','chair','seating','door'].includes(c))return'partial' as const;
   return'solid' as const;
 }
-function assetId(pack:string,path:string,c:AssetCategory,hash:string){
+function assetId(pack:string,path:string,c:AssetCategory){
   const base=slug(basename(path,extname(path))).slice(0,48)||c;
-  return slug(`${c}.${base}.${hash.slice(0,8)}`).replace(/-/g,'.');
+  // IDs are based on source identity, not PNG bytes, so updating artwork does not break RoomLayout references.
+  const stable=createHash('sha256').update(`${pack}|${path}`).digest('hex').slice(0,8);
+  return slug(`${c}.${base}.${stable}`).replace(/-/g,'.');
 }
 function sourceRoots(source:string){
   const tmp=mkdtempSync(join(tmpdir(),'agent-office-assets-'));const roots:{pack:string;root:string;temp:boolean}[]=[];
@@ -180,7 +182,7 @@ function main(){
     try{
       const {width,height}=pngSize(f.absolute);const hash=sha256(f.absolute);
       if(hashes.has(hash)){skipped.push({path:`${f.pack}/${f.relative}`,reason:`duplicate-of:${hashes.get(hash)}`});continue}
-      const category=classify(f.relative);const rooms=roomTags(f.relative,f.pack);const id=assetId(f.pack,f.relative,category,hash);
+      const category=classify(f.relative);const rooms=roomTags(f.relative,f.pack);const id=assetId(f.pack,f.relative,category);
       hashes.set(hash,id);
       const runtimeName=`${id}.png`;const uri=`/office-assets/licensed/files/${runtimeName}`;
       const record:AssetRecord={
