@@ -26,7 +26,7 @@ const plantLarge='plant.prop.036.large.round.pot.plant.2ab1c2f413';
 const plantMedium='plant.prop.037.medium.square.planter.plant.212fc9ff2f';
 
 function prefab(input:unknown):PrefabDefinition{
-  return PrefabDefinitionSchema.parse({schemaVersion:1,...input});
+  return PrefabDefinitionSchema.parse({schemaVersion:1,...(input as Record<string,unknown>)});
 }
 
 export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
