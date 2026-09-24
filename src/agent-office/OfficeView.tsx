@@ -50,6 +50,11 @@ const STREAM_EVENTS = [
   'tool.started',
   'tool.completed',
   'tool.approval_required',
+  'execution.step.started',
+  'execution.step.telemetry',
+  'execution.step.completed',
+  'execution.step.failed',
+  'execution.preview.ready',
   'run.completed',
   'run.failed',
   'run.cancelled',
@@ -78,6 +83,19 @@ function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function roomTelemetrySummary(event:ChatStreamEnvelope){
+  const data=event.data;
+  const operation=typeof data.operation==='string'?data.operation:'';
+  const target=typeof data.target==='string'?data.target:'';
+  if(event.event==='tool.started'||event.event==='tool.completed')return (operation||String(data.tool_name||'Ação'))+(target?' · '+target:'');
+  if(event.event==='execution.step.started')return 'Etapa iniciada · '+String(data.step_title||'');
+  if(event.event==='execution.step.completed')return 'Etapa concluída · '+String(data.step_title||'');
+  if(event.event==='execution.step.failed')return 'Ajustando etapa · '+String(data.message||data.step_title||'');
+  if(event.event==='execution.step.telemetry')return String(data.message||operation||'Validando');
+  if(event.event==='execution.preview.ready')return 'Preview validado';
+  if(event.event==='worker.state')return String(data.activity||'Trabalhando');
+  return event.event;
 }
 
 function activitySummary(event: ActivityEventV2): string {
@@ -449,6 +467,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const commandHints=useMemo(()=>composerSuggestions(message,agents),[message,agents]);
   const activeSteps=workspace?.active_plan?.steps??[];
   const completedSteps=activeSteps.filter(step=>step.status==='completed').length;
+  const roomTelemetry=useMemo(()=>liveEvents.filter(event=>['tool.started','tool.completed','execution.step.started','execution.step.telemetry','execution.step.completed','execution.step.failed','execution.preview.ready','worker.state'].includes(event.event)).slice(0,roomChatExpanded?4:1),[liveEvents,roomChatExpanded]);
 
   const cancelCurrentRun = async () => {
     if (!currentRun || runStatus !== 'running') return;
@@ -579,6 +598,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               {focus==='office'&&<button type="button" className="room-chat-toggle" onClick={()=>setRoomChatExpanded(value=>!value)}>{roomChatExpanded?'Ocultar histórico':'Histórico'}</button>}
             </div>
           </div>
+
+          {roomTelemetry.length>0&&<div className="room-live-trace">{roomTelemetry.map(event=><div key={event.run_id+':'+event.sequence}><span/><strong>{roomTelemetrySummary(event)}</strong><small>{formatTime(event.timestamp)}</small></div>)}</div>}
 
           {activeSteps.length>0&&<section className="room-inline-plan">
             <div><strong>Etapas</strong><span>{completedSteps}/{activeSteps.length}</span></div>
