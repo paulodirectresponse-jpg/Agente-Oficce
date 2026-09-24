@@ -169,8 +169,13 @@ class ChatStepExecutor implements StepExecutor{
   }
 
   private evidence(planId:string){
-    const rows=this.db.prepare('SELECT type,payload_json FROM execution_artifacts WHERE plan_id=? ORDER BY created_at').all(planId) as any[];
-    return rows.slice(-12).map(row=>({type:row.type,payload:json(row.payload_json,{})}));
+    const artifacts=(this.db.prepare('SELECT type,payload_json,created_at FROM execution_artifacts WHERE plan_id=? ORDER BY created_at').all(planId) as any[])
+      .slice(-12).map(row=>({kind:'artifact',type:row.type,payload:json(row.payload_json,{}),created_at:row.created_at}));
+    const attempts=(this.db.prepare(`SELECT s.key,s.title,a.result_summary,a.output_json,a.ended_at
+      FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id
+      WHERE s.plan_id=? AND a.status='completed' ORDER BY a.ended_at`).all(planId) as any[])
+      .slice(-8).map(row=>({kind:'step_output',step_key:row.key,title:row.title,summary:String(row.result_summary||'').slice(0,10000),output:json(row.output_json,{}),ended_at:row.ended_at}));
+    return[...attempts,...artifacts].slice(-18);
   }
 
   private orientations(planId:string){
@@ -208,8 +213,9 @@ class ChatStepExecutor implements StepExecutor{
       'SUCCESS CRITERIA:',
       JSON.stringify(json(stepRow?.success_criteria_json,[]),null,2),
       '',
-      'RECENT EVIDENCE FROM PREVIOUS STEPS:',
+      'PREVIOUS STEP OUTPUTS AND EVIDENCE:',
       JSON.stringify(evidence,null,2),
+      input.work_packet?'\nSCHEDULER WORK PACKET:\n'+JSON.stringify(input.work_packet,null,2):'',
       orientations.messages.length?'\nUSER ORIENTATIONS RECEIVED DURING EXECUTION:\n'+orientations.messages.map(x=>'- '+x).join('\n'):'',
       orientations.attachment_ids.length?'\nNew media/files were attached with the user orientation. Inspect the attached files directly; do not rely on path text alone.':'',
       '',
