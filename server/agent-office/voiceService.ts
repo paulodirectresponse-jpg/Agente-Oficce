@@ -7,7 +7,7 @@ import { getAgentOfficeConfig } from './config.js';
 import { DevelopmentSecretStore } from './secretStore.js';
 import { ProviderRepositoryV2, type Provider } from './v2DataModel.js';
 
-const WHISPER_RELEASE='v1.9.4';
+const WHISPER_RELEASE='v1.9.2';
 const WHISPER_ZIP_URL=`https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_RELEASE}/whisper-bin-x64.zip`;
 const WHISPER_MODEL_URL='https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true';
 let bootstrapPromise:Promise<void>|null=null;
@@ -154,11 +154,15 @@ export class VoiceService{
     if(!buffer.length)throw new Error('VOICE_AUDIO_EMPTY');
     if(buffer.length>25*1024*1024)throw new Error('VOICE_AUDIO_TOO_LARGE');
     let status=this.status();
-    if(!status.local_ready&&process.platform==='win32'){
-      try{await bootstrapLocalRuntime();status=this.status()}catch(error){if(!status.cloud_ready)throw error}
+    if(status.local_ready){
+      try{return await Promise.resolve(this.localTranscribe(buffer,language))}
+      catch(error){if(!status.cloud_ready)throw error}
     }
-    if(status.local_ready){try{return await Promise.resolve(this.localTranscribe(buffer,language))}catch(error){if(!status.cloud_ready)throw error}}
     if(status.cloud_ready)return this.cloudTranscribe(buffer,language);
+    if(process.platform==='win32'){
+      await bootstrapLocalRuntime();status=this.status();
+      if(status.local_ready)return Promise.resolve(this.localTranscribe(buffer,language));
+    }
     throw new Error('VOICE_TRANSCRIPTION_UNAVAILABLE');
   }
 }
