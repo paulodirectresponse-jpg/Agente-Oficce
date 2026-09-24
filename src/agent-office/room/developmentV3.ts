@@ -171,9 +171,37 @@ export const DEVELOPMENT_V3_ROOM_LAYOUT:RoomLayout={
     ...DEVELOPMENT_V3_WORKSTATIONS.map((ws,index)=>({
       id:`development.workstation.${index+1}`,kind:'workstation',x:ws.agentX,y:ws.agentY,capacity:1,assetPlacementId:ws.id,tags:['development','work','coding'],
     })),
-    {id:'development.whiteboard',kind:'whiteboard',x:1185,y:490,capacity:3,assetPlacementId:'whiteboard',tags:['planning','review']},
-    {id:'development.meeting',kind:'meeting',x:1190,y:650,capacity:4,assetPlacementId:'meeting-table',tags:['meeting','review']},
-    {id:'development.lounge',kind:'seat',x:430,y:745,capacity:3,assetPlacementId:'lounge-sofa',tags:['rest','waiting']},
-    {id:'development.entry',kind:'door',x:1290,y:810,capacity:1,assetPlacementId:'entrance',tags:['entry']},
+    {id:'development.whiteboard',kind:'whiteboard',x:805,y:285,capacity:3,assetPlacementId:'whiteboard',tags:['planning','review']},
+    {id:'development.meeting',kind:'meeting',x:1185,y:625,capacity:4,assetPlacementId:'meeting-table',tags:['meeting','review']},
+    {id:'development.lounge',kind:'seat',x:420,y:790,capacity:3,assetPlacementId:'lounge-sofa',tags:['rest','waiting']},
+    {id:'development.entry',kind:'door',x:840,y:852,capacity:1,assetPlacementId:'entrance',tags:['entry']},
   ],
 };
+
+
+export function pointInsideZone(x:number,y:number,zone:{x:number;y:number;width:number;height:number}){
+  return x>=zone.x&&x<=zone.x+zone.width&&y>=zone.y&&y<=zone.y+zone.height;
+}
+
+export function validateDevelopmentV3Composition(){
+  const errors:string[]=[];
+  const byId=new Map(DEVELOPMENT_V3_PLACEMENTS.map(p=>[p.id,p]));
+  for(const ws of DEVELOPMENT_V3_WORKSTATIONS){
+    if(!pointInsideZone(ws.x,ws.y,DEVELOPMENT_V3_ZONES.work))errors.push(`workstation-outside-work-zone:${ws.id}`);
+    if(pointInsideZone(ws.x,ws.y,DEVELOPMENT_V3_ZONES.lounge))errors.push(`workstation-overlaps-lounge:${ws.id}`);
+    if(pointInsideZone(ws.x,ws.y,DEVELOPMENT_V3_ZONES.meeting))errors.push(`workstation-overlaps-meeting:${ws.id}`);
+  }
+  for(const id of ['lounge-rug','lounge-sofa','lounge-table','lounge-lamp']){
+    const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.lounge))errors.push(`lounge-item-outside-zone:${id}`);
+  }
+  for(const id of ['meeting-rug','meeting-table','meeting-chair-north','meeting-chair-south','meeting-chair-west','meeting-chair-east']){
+    const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.meeting))errors.push(`meeting-item-outside-zone:${id}`);
+  }
+  const entrance=byId.get('entrance');
+  if(!entrance||!pointInsideZone(entrance.x,entrance.y,DEVELOPMENT_V3_ZONES.entry))errors.push('entrance-outside-real-wall-opening');
+  const storageIds=['storage-bookcase','storage-cabinet'];
+  for(const id of storageIds){
+    const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.storage))errors.push(`storage-outside-wall-zone:${id}`);
+  }
+  return{ok:errors.length===0,errors};
+}
