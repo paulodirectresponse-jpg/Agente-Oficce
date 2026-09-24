@@ -23,3 +23,18 @@ This is an art/renderer gate, not the final asset library. Some desks, screens, 
 ## Gate
 
 Do not expand the remaining office until Development is accepted visually. The next engineering step after approval is AssetRegistry + reusable room module + collision/path grid.
+
+## V2 — asset-first validation
+
+V1 confirmed that camera scale and compact composition were directionally correct but that runtime-drawn furniture could not reach the approved art target.
+
+V2 therefore changes the gate:
+- furniture is rendered from real pixel-art sprite assets;
+- agents remain live runtime entities;
+- furniture, agents and foreground occluders are separated into layers;
+- six workstations are composed from desk + monitor + chair sprites;
+- lounge, storage, plants, whiteboard and collaboration furniture use sprites;
+- Canvas is retained for architecture, lighting, floor, glass and effects only;
+- no paid asset is required.
+
+The V2 source kit lives in `public/office-assets/v2/`. It is a validation kit, not yet the permanent Agent Office asset library.
