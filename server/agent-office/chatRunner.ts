@@ -1483,5 +1483,8 @@ export class ChatRunnerService {
       payload:enriched,
     });
     this.hub.publish(run.id, event, enriched);
+    if(run.parent_run_id){
+      this.hub.publish(run.parent_run_id,event,{...enriched,source_run_id:run.id});
+    }
   }
 }
