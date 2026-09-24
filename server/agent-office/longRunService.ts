@@ -144,6 +144,7 @@ class ChatStepExecutor implements StepExecutor{
     private readonly selectedAgents:string[],
     private readonly selectedSubagents:string[],
     private readonly attachmentIds:string[],
+    private readonly requiredTools:string[],
     private readonly modelOverride?:string,
     private readonly signal?:AbortSignal,
   ){this.runs=new ChatRunRepository(db)}
@@ -204,6 +205,7 @@ class ChatStepExecutor implements StepExecutor{
       selected_subagent_ids:chosenSubs.length?chosenSubs:undefined,
       model_override:(chosenAgents.length+chosenSubs.length)===1?this.modelOverride:undefined,
       attachment_ids:[...new Set([...this.attachmentIds,...orientations.attachment_ids])],
+      required_tools:this.requiredTools,
       internal:true,parent_run_id:this.rootRunId,execution_plan_id:input.plan_id,execution_step_id:input.step_id,
     });
     await service.execute(prepared,this.signal);
@@ -254,7 +256,7 @@ export class LongRunService{
     this.db.prepare("INSERT INTO execution_artifacts(id,plan_id,step_id,type,uri,payload_json,created_at)VALUES(lower(hex(randomblob(16))),?,NULL,'mission_config',NULL,?,?)").run(plan.id,JSON.stringify({
       root_run_id:prepared.run.id,conversation_id:prepared.conversation_id,project_id:prepared.run.project_id,
       selected_agents:prepared.selected_agents,selected_subagents:prepared.selected_subagents,model_override:prepared.model_override??null,
-      orchestration_run_id:orchestration.orchestration_run_id,original_request:message,attachment_ids:attachmentIds,
+      orchestration_run_id:orchestration.orchestration_run_id,original_request:message,attachment_ids:attachmentIds,required_tools:orchestration.decision.required_tools??[],
     }),t);
     this.runs.update(prepared.run.id,{metadata:{...prepared.run.metadata,execution_plan_id:plan.id,long_running:true,goal_contract:contract}});
     this.emit(prepared.run.id,prepared.run.project_id,'worker.state',{state:'planning',activity:'Execução longa preparada',execution_plan_id:plan.id});
@@ -282,7 +284,7 @@ export class LongRunService{
         const contract=this.loadGoalContract(currentPlanId);
         const executor=new ChatStepExecutor(
           this.db,rootRunId,config.conversation_id,config.project_id,contract,
-          config.selected_agents??[],config.selected_subagents??[],config.attachment_ids??[],config.model_override??undefined,signal,
+          config.selected_agents??[],config.selected_subagents??[],config.attachment_ids??[],config.required_tools??[],config.model_override??undefined,signal,
         );
         const scheduler=new ExecutionScheduler(this.db,executor);
         const before=this.stepProgress(currentPlanId);
