@@ -45,6 +45,7 @@ export const DEVELOPMENT_V3_ASSETS={
   printer:'electronics.prop.020.compact.printer.scanner.4611e63027',
   dividerPlanter:'plant.061.p04.04.workstation.divider.planter.888514e87d',
   sideboard:'storage.furniture.005.low.sideboard.df01bea9c3',
+  dashboardCredenza:'storage.meeting.credenza.wood.5310a6eae9',
 } as const;
 
 export type DevelopmentV3AssetId=typeof DEVELOPMENT_V3_ASSETS[keyof typeof DEVELOPMENT_V3_ASSETS];
@@ -69,6 +70,7 @@ export const DEVELOPMENT_V3_ZONES={
   meeting:{x:1035,y:390,width:300,height:320},
   storage:{x:235,y:235,width:145,height:390},
   entry:{x:760,y:805,width:160,height:95},
+  circulation:{x:570,y:665,width:420,height:160},
 } as const;
 
 export const DEVELOPMENT_V3_WORKSTATIONS=[
@@ -113,7 +115,7 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   {id:'glass-planning-b',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:910,y:188,scale:1.04,layer:'wall_back'},
   {id:'whiteboard',assetId:DEVELOPMENT_V3_ASSETS.whiteboard,x:805,y:250,scale:.66,layer:'surface'},
   {id:'dashboard',assetId:DEVELOPMENT_V3_ASSETS.marketWall,x:1170,y:250,scale:.59,layer:'surface'},
-  {id:'dashboard-sideboard',assetId:DEVELOPMENT_V3_ASSETS.sideboard,x:1170,y:327,scale:.62,layer:'furniture_back',shadow:true},
+  {id:'dashboard-sideboard',assetId:DEVELOPMENT_V3_ASSETS.dashboardCredenza,x:1170,y:335,scale:.70,layer:'furniture_back',shadow:true},
 
   // Left storage wall. All storage is flush to the wall and on the floor.
   {id:'storage-bookcase',assetId:DEVELOPMENT_V3_ASSETS.bookcase,x:315,y:455,scale:.72,layer:'furniture_back',shadow:true},
@@ -233,6 +235,12 @@ export function validateDevelopmentV3Composition(){
   const rightWall=DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id.startsWith('bottom-wall-right-'));
   if(!leftWall||!rightWall)errors.push('entry-wall-segments-missing');
   if(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='entrance'))errors.push('unexpected-door-in-open-passage');
+  const circulationSensitive=DEVELOPMENT_V3_PLACEMENTS.filter(p=>
+    p.id.startsWith('ws-')||p.id.startsWith('meeting-')||p.id.startsWith('lounge-')||p.id.startsWith('storage-')
+  );
+  for(const p of circulationSensitive){
+    if(pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.circulation))errors.push(`object-blocks-circulation:${p.id}`);
+  }
   const storageIds=['storage-bookcase','storage-cabinet'];
   for(const id of storageIds){
     const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.storage))errors.push(`storage-outside-wall-zone:${id}`);
