@@ -117,6 +117,22 @@ Example:
 }
 ```
 
+### Socket coordinate contract
+
+Socket coordinates in asset calibration are always expressed in **source-image pixel coordinates**, before alpha trimming.
+
+During prefab compilation they are transformed through:
+
+```text
+source image socket
+  -> remove alpha-trim offset
+  -> subtract calibrated visual anchor
+  -> apply canonical scale
+  -> prefab world position
+```
+
+This keeps manually measured sockets stable even when transparent padding is removed by the calibration scanner.
+
 ## 4. Prefabs
 
 A prefab is a visually approved composition whose internal layout is locked.
