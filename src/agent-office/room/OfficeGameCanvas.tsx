@@ -6,7 +6,6 @@ const WORLD_W=1680;
 const WORLD_H=980;
 const MIN_ZOOM=.58;
 const MAX_ZOOM=1.9;
-const TILE=WORLD_W/64;
 
 type Vec={x:number;y:number};
 type Camera={x:number;y:number;zoom:number};
@@ -32,7 +31,7 @@ type Props={
 };
 
 const STATIONS:Record<StationKind,Vec[]>={
-  development:[{x:650,y:372},{x:820,y:372},{x:990,y:372},{x:650,y:540},{x:820,y:540},{x:990,y:540}],
+  development:[{x:595,y:392},{x:805,y:392},{x:1015,y:392},{x:595,y:555},{x:805,y:555},{x:1015,y:555}],
   operations:[{x:1128,y:370},{x:1290,y:370},{x:1128,y:548},{x:1290,y:548}],
   research:[{x:428,y:735},{x:575,y:735},{x:500,y:838}],
   lead:[{x:895,y:748},{x:1060,y:748},{x:980,y:842}],
@@ -45,10 +44,18 @@ const SPRITES:Record<StationKind,string>={
   operations:'/office-assets/characters/product-owner.png',
 };
 const SCENE_ASSETS={
-  decor:'/office-assets/decorations_LRK.png',
-  cabinets:'/office-assets/cabinets_LRK.png',
-  kitchen:'/office-assets/kitchen_LRK.png',
-  living:'/office-assets/livingroom_LRK.png',
+  desk:'/office-assets/v2/desk_front.png',
+  pc:'/office-assets/v2/pc_front_on_1.png',
+  chair:'/office-assets/v2/chair_back.png',
+  plantLarge:'/office-assets/v2/plant_large.png',
+  plant:'/office-assets/v2/plant.png',
+  whiteboard:'/office-assets/v2/whiteboard.png',
+  sofa:'/office-assets/v2/sofa_front.png',
+  table:'/office-assets/v2/table_small_front.png',
+  bookshelf:'/office-assets/v2/bookshelf_double.png',
+  coffee:'/office-assets/v2/coffee.png',
+  painting:'/office-assets/v2/painting_large.png',
+  bin:'/office-assets/v2/bin.png',
 };
 
 const COLORS={
@@ -79,10 +86,10 @@ function stationPosition(agent:RoomAgentView,index:number){
 }
 function behaviorPosition(agent:RoomAgentView,home:Vec,index:number):Vec{
   const lane=(hash(agent.id)%5)-2;
-  if(agent.state==='thinking'||agent.state==='planning')return{x:165+lane*34,y:185+(index%2)*22};
-  if(agent.state==='testing'||agent.state==='reviewing')return{x:935+lane*38,y:845+(index%2)*28};
-  if(agent.state==='waiting')return{x:180+lane*34,y:880+(index%2)*24};
-  if(agent.state==='resting'||agent.state==='completed')return{x:1375+lane*42,y:865+(index%2)*28};
+  if(agent.state==='thinking'||agent.state==='planning')return{x:1180+lane*26,y:365+(index%2)*22};
+  if(agent.state==='testing'||agent.state==='reviewing')return{x:1115+lane*28,y:665+(index%2)*22};
+  if(agent.state==='waiting')return{x:430+lane*24,y:665+(index%2)*20};
+  if(agent.state==='resting'||agent.state==='completed')return{x:515+lane*28,y:680+(index%2)*20};
   return home;
 }
 function isWorking(state:RoomAgentView['state']){
@@ -99,123 +106,151 @@ function roundedRect(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:n
   const rr=Math.min(r,w/2,h/2);
   ctx.beginPath();ctx.moveTo(x+rr,y);ctx.arcTo(x+w,y,x+w,y+h,rr);ctx.arcTo(x+w,y+h,x,y+h,rr);ctx.arcTo(x,y+h,x,y,rr);ctx.arcTo(x,y,x+w,y,rr);ctx.closePath();
 }
-function cropAsset(ctx:CanvasRenderingContext2D,img:HTMLImageElement|undefined,sx:number,sy:number,sw:number,sh:number,x:number,y:number,scale=1){
+function drawSprite(
+  ctx:CanvasRenderingContext2D,
+  img:HTMLImageElement|undefined,
+  x:number,
+  y:number,
+  scale=1,
+  anchorX=.5,
+  anchorY=1,
+  alpha=1,
+){
   if(!img?.complete||!img.naturalWidth)return;
-  ctx.drawImage(img,sx,sy,sw,sh,x,y,sw*(TILE/16)*scale,sh*(TILE/16)*scale);
+  const w=img.naturalWidth*scale,h=img.naturalHeight*scale;
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(img,x-w*anchorX,y-h*anchorY,w,h);
+  ctx.restore();
 }
-function plant(ctx:CanvasRenderingContext2D,x:number,y:number){
-  ctx.fillStyle='#755744';ctx.fillRect(x-8,y+12,16,19);ctx.fillStyle='#4c8d63';
-  for(const [dx,dy,r] of [[-9,0,11],[5,-6,12],[14,6,10],[-2,10,12]] as const){ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill()}
+function spriteShadow(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number){
+  ctx.save();
+  ctx.fillStyle='rgba(5,15,21,.28)';
+  ctx.beginPath();ctx.ellipse(x,y,w,h,0,0,Math.PI*2);ctx.fill();
+  ctx.restore();
 }
-function sofa(ctx:CanvasRenderingContext2D,x:number,y:number,w=140){
-  ctx.fillStyle='#506d8b';ctx.fillRect(x,y,w,42);ctx.fillStyle='#6683a4';ctx.fillRect(x+8,y+7,w-16,27);ctx.fillStyle='#344d65';ctx.fillRect(x-8,y+9,12,34);ctx.fillRect(x+w-4,y+9,12,34);
-}
-function roundTable(ctx:CanvasRenderingContext2D,x:number,y:number,r=38){
-  ctx.fillStyle='#89684f';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#304e5d';
-  for(let i=0;i<4;i++){const a=i*Math.PI/2;ctx.fillRect(x+Math.cos(a)*(r+25)-9,y+Math.sin(a)*(r+25)-9,18,18)}
-}
-function board(ctx:CanvasRenderingContext2D,x:number,y:number,w=140,h=72){
-  ctx.fillStyle='#ded9cb';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#6d6156';ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);
-  const c=['#e0bd55','#78afc2','#d48478','#86a66e'];let n=0;
-  for(let yy=0;yy<2;yy++)for(let xx=0;xx<4;xx++){ctx.fillStyle=c[n++%c.length];ctx.fillRect(x+13+xx*29,y+14+yy*27,21,17)}
+function techGlow(ctx:CanvasRenderingContext2D,x:number,y:number,r=55){
+  ctx.save();ctx.globalCompositeOperation='screen';
+  const g=ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0,'rgba(70,210,238,.22)');
+  g.addColorStop(1,'rgba(70,210,238,0)');
+  ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2);ctx.restore();
 }
 function drawWorld(ctx:CanvasRenderingContext2D,time:number,images?:Map<string,HTMLImageElement>){
-  const pulse=.5+.5*Math.sin(time/550);
-  // Zero-cost vertical slice: one dense, premium Development studio using only
-  // our CC0 sheets plus Canvas lighting. This intentionally replaces the old
-  // full-office schematic while we validate the final art language.
-  const x=330,y=125,w=980,h=660;
-  ctx.fillStyle='#08141d';ctx.fillRect(0,0,WORLD_W,WORLD_H);
-  ctx.fillStyle='#0d2230';ctx.fillRect(190,55,1300,820);
+  const pulse=.5+.5*Math.sin(time/620);
+  const x=300,y=92,w=1080,h=730;
+  ctx.fillStyle='#07131d';ctx.fillRect(0,0,WORLD_W,WORLD_H);
 
-  // corridor / shell
-  ctx.fillStyle='#142b38';ctx.fillRect(x-28,y-28,w+56,h+56);
-  ctx.fillStyle='#203b49';ctx.fillRect(x-18,y-18,w+36,h+36);
-  ctx.fillStyle='#b89f7d';ctx.fillRect(x,y,w,h);
+  // Deep architectural shell.
+  ctx.fillStyle='#0b202d';ctx.fillRect(x-42,y-42,w+84,h+84);
+  ctx.fillStyle='#132e3d';ctx.fillRect(x-30,y-30,w+60,h+60);
+  ctx.fillStyle='#1b4050';ctx.fillRect(x-20,y-20,w+40,h+40);
 
-  // warm plank floor
-  for(let yy=y;yy<y+h;yy+=26){
-    for(let xx=x;xx<x+w;xx+=104){
-      const off=((yy-y)/26)%2?52:0;
-      ctx.fillStyle=((xx+yy)/26)%2?'#bda786':'#c6b08d';
-      ctx.fillRect(xx-off,yy,102,24);
+  // Warm floor, intentionally restrained so the actual furniture sprites dominate.
+  ctx.fillStyle='#b89c76';ctx.fillRect(x,y,w,h);
+  for(let yy=y;yy<y+h;yy+=28){
+    for(let xx=x-56;xx<x+w;xx+=112){
+      const off=((yy-y)/28)%2?56:0;
+      ctx.fillStyle=((xx+yy)/28)%2?'#b49770':'#c1a47d';
+      ctx.fillRect(xx+off,yy,110,26);
+      ctx.strokeStyle='rgba(83,59,39,.09)';ctx.strokeRect(xx+off,yy,110,26);
     }
   }
 
-  // dark architectural walls + glass frontage
-  ctx.fillStyle='#102633';ctx.fillRect(x,y,w,24);ctx.fillRect(x,y,22,h);ctx.fillRect(x+w-22,y,22,h);
-  ctx.fillStyle='#173747';ctx.fillRect(x+22,y+24,w-44,10);
-  ctx.fillStyle='rgba(102,200,222,.18)';ctx.fillRect(x+48,y+34,w-96,5);
-  ctx.strokeStyle='rgba(117,210,231,.35)';ctx.lineWidth=2;
-  for(let gx=x+55;gx<x+w-55;gx+=115){ctx.beginPath();ctx.moveTo(gx,y+34);ctx.lineTo(gx,y+112);ctx.stroke()}
-  ctx.fillStyle='rgba(11,28,38,.72)';ctx.fillRect(x+40,y+46,258,54);
-  ctx.fillStyle='#dff7ff';ctx.font='800 22px Inter,system-ui,sans-serif';ctx.fillText('</>  DEVELOPMENT',x+62,y+80);
-  ctx.fillStyle=`rgba(99,207,228,${.65+pulse*.35})`;ctx.fillRect(x+40,y+99,258,3);
+  // Thick dark walls and upper glass line.
+  ctx.fillStyle='#0d2634';ctx.fillRect(x,y,w,34);ctx.fillRect(x,y,28,h);ctx.fillRect(x+w-28,y,28,h);
+  ctx.fillStyle='#173b4a';ctx.fillRect(x+28,y+34,w-56,12);
+  ctx.fillStyle='rgba(81,191,218,.15)';ctx.fillRect(x+54,y+46,w-108,8);
+  ctx.strokeStyle='rgba(106,214,237,.34)';ctx.lineWidth=2;
+  for(let gx=x+68;gx<x+w-68;gx+=132){ctx.beginPath();ctx.moveTo(gx,y+46);ctx.lineTo(gx,y+132);ctx.stroke()}
 
-  // carpeted work pod
-  ctx.fillStyle='#315d63';ctx.fillRect(x+145,y+180,670,365);
-  ctx.fillStyle='rgba(7,24,31,.16)';
-  for(let yy=y+194;yy<y+535;yy+=18)for(let xx=x+158;xx<x+800;xx+=18)ctx.fillRect(xx,yy,1,1);
+  // Identity plaque and dashboard.
+  roundedRect(ctx,x+52,y+62,282,62,9);ctx.fillStyle='rgba(7,25,35,.88)';ctx.fill();
+  ctx.strokeStyle='rgba(94,207,231,.32)';ctx.stroke();
+  ctx.fillStyle='#e6f7fb';ctx.font='800 22px Inter,system-ui,sans-serif';ctx.fillText('</>  DEVELOPMENT',x+74,y+101);
+  ctx.fillStyle=`rgba(95,215,239,${.58+pulse*.36})`;ctx.fillRect(x+52,y+122,282,4);
 
-  // back wall dashboard
-  roundedRect(ctx,x+610,y+52,285,90,8);ctx.fillStyle='#102a39';ctx.fill();
-  ctx.strokeStyle='rgba(92,201,226,.35)';ctx.stroke();
-  ctx.fillStyle='#5fd3ea';ctx.fillRect(x+630,y+75,94,5);ctx.fillRect(x+630,y+91,145,4);
-  ctx.fillStyle='#6fdda9';for(let i=0;i<7;i++)ctx.fillRect(x+800+i*10,y+112-(i%4)*8,6,16+(i%4)*8);
+  roundedRect(ctx,x+690,y+58,295,100,10);ctx.fillStyle='rgba(9,31,43,.92)';ctx.fill();
+  ctx.strokeStyle='rgba(91,194,219,.3)';ctx.stroke();
+  ctx.fillStyle='#6ed8ec';ctx.fillRect(x+716,y+84,92,5);ctx.fillRect(x+716,y+101,156,4);
+  ctx.fillStyle='#6fdda9';
+  for(let i=0;i<8;i++)ctx.fillRect(x+868+i*11,y+132-(i%5)*8,7,20+(i%5)*8);
 
-  // desks: richer pods, screens and warm task light
-  const pods=[[x+190,y+270],[x+505,y+270],[x+190,y+438],[x+505,y+438]] as const;
-  for(const [dx,dy] of pods){
-    ctx.fillStyle='rgba(7,17,24,.25)';ctx.fillRect(dx+8,dy+22,270,55);
-    ctx.fillStyle='#8b684b';ctx.fillRect(dx,dy,286,22);
-    ctx.fillStyle='#b98b5f';ctx.fillRect(dx+6,dy+3,274,14);
-    for(const mx of [dx+42,dx+172]){
-      ctx.shadowColor='rgba(78,207,236,.45)';ctx.shadowBlur=18;
-      ctx.fillStyle='#102d3c';ctx.fillRect(mx,dy-58,78,55);ctx.shadowBlur=0;
-      ctx.strokeStyle='#547d8d';ctx.strokeRect(mx,dy-58,78,55);
-      ctx.fillStyle='#59cfe8';ctx.fillRect(mx+10,dy-45,52,4);ctx.fillRect(mx+10,dy-32,37,3);
-      ctx.fillStyle='#6fdca9';ctx.fillRect(mx+10,dy-20,24,3);
-    }
-    ctx.fillStyle='#263f4c';ctx.fillRect(dx+42,dy+33,44,30);ctx.fillRect(dx+172,dy+33,44,30);
-  }
+  // Main rug and subtle zone separation.
+  roundedRect(ctx,x+145,y+190,720,385,16);ctx.fillStyle='#285a61';ctx.fill();
+  ctx.strokeStyle='rgba(84,183,193,.25)';ctx.stroke();
+  ctx.fillStyle='rgba(8,28,34,.12)';
+  for(let yy=y+210;yy<y+555;yy+=22)for(let xx=x+165;xx<x+845;xx+=22)ctx.fillRect(xx,yy,2,2);
 
-  // collaboration island
-  roundTable(ctx,x+865,y+330,48);board(ctx,x+825,y+420,125,82);
-  ctx.fillStyle='#193442';ctx.fillRect(x+842,y+150,108,84);
-  ctx.fillStyle='#63cfe4';ctx.fillRect(x+857,y+168,76,5);ctx.fillStyle='#d9e9e6';ctx.fillRect(x+857,y+184,55,4);
-
-  // planters / visual separators
-  for(const p of [{x:x+115,y:y+190},{x:x+115,y:y+500},{x:x+835,y:y+540},{x:x+80,y:y+600},{x:x+905,y:y+590}])plant(ctx,p.x,p.y);
-  ctx.fillStyle='#72553d';ctx.fillRect(x+448,y+190,34,350);
-  for(let py=y+215;py<y+520;py+=58){ctx.fillStyle='#4c8d63';ctx.beginPath();ctx.arc(x+465,py,23,0,Math.PI*2);ctx.fill()}
-
-  // lounge/review corner inside Development
-  sofa(ctx,x+65,y+570,180);roundTable(ctx,x+285,y+615,30);
-  ctx.fillStyle='rgba(16,39,51,.82)';ctx.fillRect(x+625,y+575,285,70);
-  ctx.fillStyle='#b9d8df';ctx.font='700 12px Inter,system-ui,sans-serif';ctx.fillText('BUILD  •  TEST  •  REVIEW',x+650,y+602);
-  ctx.fillStyle='#58cde6';ctx.fillRect(x+650,y+617,190,5);
-
-  // CC0 sheets add real pixel detail over the composed scene.
   if(images){
-    const decor=images.get('scene:decor'),cabinets=images.get('scene:cabinets');
-    for(const [px,py] of [[x+55,y+145],[x+915,y+120],[x+920,y+520],[x+75,y+500],[x+770,y+145]] as const)
-      cropAsset(ctx,decor,48,48,16,32,px,py,1.18);
-    cropAsset(ctx,cabinets,0,0,48,64,x+35,y+250,.78);
-    cropAsset(ctx,cabinets,0,0,48,64,x+890,y+250,.78);
+    const desk=images.get('scene:desk'),pc=images.get('scene:pc'),chair=images.get('scene:chair');
+    const plantLarge=images.get('scene:plantLarge'),plant=images.get('scene:plant');
+    const whiteboard=images.get('scene:whiteboard'),sofa=images.get('scene:sofa');
+    const table=images.get('scene:table'),bookshelf=images.get('scene:bookshelf');
+    const coffee=images.get('scene:coffee'),painting=images.get('scene:painting'),bin=images.get('scene:bin');
+
+    // Six real sprite-based workstations.
+    const seats=[
+      {x:x+295,y:y+335},{x:x+505,y:y+335},{x:x+715,y:y+335},
+      {x:x+295,y:y+500},{x:x+505,y:y+500},{x:x+715,y:y+500},
+    ];
+    for(const [i,s] of seats.entries()){
+      spriteShadow(ctx,s.x,s.y+16,70,16);
+      techGlow(ctx,s.x,s.y-72,48);
+      drawSprite(ctx,desk,s.x,s.y,3.25,.5,1);
+      drawSprite(ctx,pc,s.x,s.y-54,3.05,.5,1);
+      drawSprite(ctx,chair,s.x,s.y+42,2.75,.5,1);
+      if(i%2===0)drawSprite(ctx,coffee,s.x+62,s.y-15,2.25,.5,1,.95);
+    }
+
+    // Vertical green separator and perimeter vegetation.
+    for(const py of [y+250,y+340,y+430,y+520])drawSprite(ctx,plant,x+515,py,2.75,.5,1);
+    drawSprite(ctx,plantLarge,x+112,y+255,3.15,.5,1);
+    drawSprite(ctx,plantLarge,x+925,y+555,3.15,.5,1);
+    drawSprite(ctx,plant,x+116,y+550,2.7,.5,1);
+    drawSprite(ctx,plant,x+908,y+205,2.7,.5,1);
+
+    // Collaboration / review side.
+    drawSprite(ctx,whiteboard,x+936,y+438,3.45,.5,1);
+    drawSprite(ctx,table,x+930,y+350,3.2,.5,1);
+    drawSprite(ctx,plant,x+1002,y+366,2.45,.5,1);
+    drawSprite(ctx,bin,x+1015,y+480,2.5,.5,1);
+
+    // Lounge corner and storage.
+    drawSprite(ctx,sofa,x+178,y+675,4.0,.5,1);
+    drawSprite(ctx,table,x+330,y+690,3.05,.5,1);
+    drawSprite(ctx,bookshelf,x+70,y+690,3.15,.5,1);
+    drawSprite(ctx,painting,x+1015,y+215,3.0,.5,1);
   }
 
-  // warm lamps + cyan tech light: the reference relies on both.
+  // Review status panel and warm/cool light pools.
+  roundedRect(ctx,x+640,y+625,300,76,8);ctx.fillStyle='rgba(8,32,43,.9)';ctx.fill();
+  ctx.fillStyle='#c8e6eb';ctx.font='700 12px Inter,system-ui,sans-serif';ctx.fillText('BUILD   •   TEST   •   REVIEW',x+665,y+654);
+  ctx.fillStyle='#5bd1e8';ctx.fillRect(x+665,y+671,190,5);
+
   ctx.save();ctx.globalCompositeOperation='screen';
-  for(const [lx,ly] of [[x+72,y+128],[x+930,y+128],[x+90,y+555]] as const){
-    const g=ctx.createRadialGradient(lx,ly,0,lx,ly,85);g.addColorStop(0,'rgba(255,188,92,.25)');g.addColorStop(1,'rgba(255,188,92,0)');
-    ctx.fillStyle=g;ctx.fillRect(lx-85,ly-85,170,170);
+  for(const [lx,ly] of [[x+95,y+160],[x+1010,y+165],[x+155,y+620]] as const){
+    const g=ctx.createRadialGradient(lx,ly,0,lx,ly,105);
+    g.addColorStop(0,'rgba(255,188,91,.22)');g.addColorStop(1,'rgba(255,188,91,0)');
+    ctx.fillStyle=g;ctx.fillRect(lx-105,ly-105,210,210);
   }
-  const cg=ctx.createRadialGradient(x+490,y+350,20,x+490,y+350,390);cg.addColorStop(0,'rgba(47,182,214,.10)');cg.addColorStop(1,'rgba(47,182,214,0)');
-  ctx.fillStyle=cg;ctx.fillRect(x+80,y+20,820,720);ctx.restore();
+  const cg=ctx.createRadialGradient(x+520,y+390,20,x+520,y+390,430);
+  cg.addColorStop(0,'rgba(50,192,222,.09)');cg.addColorStop(1,'rgba(50,192,222,0)');
+  ctx.fillStyle=cg;ctx.fillRect(x+70,y+80,900,680);ctx.restore();
 
-  // foreground glass gives depth when agents cross the lower edge.
-  ctx.fillStyle='rgba(61,155,180,.10)';ctx.fillRect(x+255,y+h-14,470,14);
-  ctx.strokeStyle='rgba(118,213,235,.32)';ctx.strokeRect(x+255,y+h-14,470,14);
+  // Lower glass facade.
+  ctx.fillStyle='rgba(50,144,170,.10)';ctx.fillRect(x+310,y+h-20,460,20);
+  ctx.strokeStyle='rgba(112,211,235,.34)';ctx.strokeRect(x+310,y+h-20,460,20);
+}
+function drawForeground(ctx:CanvasRenderingContext2D,images?:Map<string,HTMLImageElement>){
+  if(!images)return;
+  const x=300,y=92,h=730;
+  const plant=images.get('scene:plant');
+  // A few foreground sprites intentionally occlude agents to create real depth.
+  drawSprite(ctx,plant,x+485,y+h-6,3.0,.5,1,.98);
+  drawSprite(ctx,plant,x+790,y+h-7,3.0,.5,1,.98);
+  ctx.fillStyle='rgba(42,139,165,.08)';ctx.fillRect(x+310,y+h-19,460,19);
 }
 function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAgent,img:HTMLImageElement|undefined,time:number,selected:boolean){
   const working=isWorking(agent.state),walking=Math.hypot(rt.tx-rt.x,rt.ty-rt.y)>3;
@@ -223,15 +258,15 @@ function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAg
   ctx.save();ctx.translate(rt.x,rt.y+bob);
 
   ctx.globalAlpha=agent.state==='offline'?.42:agent.state==='paused'?.62:1;
-  ctx.fillStyle='rgba(13,24,28,.28)';ctx.beginPath();ctx.ellipse(0,15,16,7,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(13,24,28,.28)';ctx.beginPath();ctx.ellipse(0,17,18,8,0,0,Math.PI*2);ctx.fill();
 
-  if(selected){ctx.strokeStyle='#69d4e7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,14,24,12,0,0,Math.PI*2);ctx.stroke()}
+  if(selected){ctx.strokeStyle='#69d4e7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,16,27,13,0,0,Math.PI*2);ctx.stroke()}
 
   if(img?.complete&&img.naturalWidth){
     const frames=Math.max(1,Math.floor(img.naturalWidth/32));
     const frame=walking?Math.floor(time/110+rt.phase)%Math.min(frames,6):Math.floor(time/420+rt.phase)%Math.min(frames,6);
     ctx.imageSmoothingEnabled=false;
-    ctx.drawImage(img,frame*32,0,32,32,-24,-42,48,48);
+    ctx.drawImage(img,frame*32,0,32,32,-30,-52,60,60);
   }else{
     ctx.fillStyle='#385e78';ctx.fillRect(-12,-29,24,32);ctx.fillStyle='#d3b18d';ctx.beginPath();ctx.arc(0,-35,10,0,Math.PI*2);ctx.fill();
   }
@@ -308,8 +343,8 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
   const fit=()=>{
     const el=viewportRef.current;if(!el)return;const r=el.getBoundingClientRect();
     const overview=clamp(Math.min((r.width-28)/WORLD_W,(r.height-28)/WORLD_H),MIN_ZOOM,1);
-    const z=clamp(Math.max(overview,.88),MIN_ZOOM,MAX_ZOOM);
-    const focus={x:820,y:455};
+    const z=clamp(Math.max(overview,.98),MIN_ZOOM,MAX_ZOOM);
+    const focus={x:835,y:462};
     cameraRef.current={x:r.width/2-focus.x*z,y:r.height/2-focus.y*z,zoom:z};setZoom(z);
   };
   useEffect(()=>{const el=viewportRef.current;if(!el)return;const ro=new ResizeObserver(fit);ro.observe(el);fit();return()=>ro.disconnect()},[]);
@@ -344,6 +379,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
         if(dist>1){const speed=agent.state==='offline'?80:190;const step=Math.min(dist,speed*dt);rt.x+=dx/dist*step;rt.y+=dy/dist*step;if(dist<5)rt.spawnDone=true}
         drawAgent(ctx,agent,rt,imagesRef.current.get(agent.station),time,agent.selected);
       }
+      drawForeground(ctx,imagesRef.current);
 
       if(lastHandoff){
         const from=positioned.find(x=>x.agent.name===lastHandoff.from||x.agent.id===lastHandoff.from);
