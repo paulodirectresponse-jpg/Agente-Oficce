@@ -82,7 +82,7 @@ export type CompiledPrefabNode={
   layer:AssetLayer;
   zBias:number;
   scale:number;
-  occlusion:{mode:'none'|'horizontal-split';splitY?:number};
+  occlusion:{mode:'none'|'horizontal-split'|'front-rects';splitY?:number;frontRects?:Array<{x:number;y:number;width:number;height:number}>};
   tags:string[];
 };
 
