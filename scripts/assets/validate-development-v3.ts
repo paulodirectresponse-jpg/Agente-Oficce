@@ -31,6 +31,33 @@ if(DEVELOPMENT_V3_AGENT_SPRITES.length<6)errors.push('character-variants');
 const composition=validateDevelopmentV3Composition();
 errors.push(...composition.errors.map(error=>`composition:${error}`));
 
+const majorFurniture=DEVELOPMENT_V3_PLACEMENTS.filter(p=>
+  p.id.startsWith('ws-')||
+  ['storage-bookcase','storage-cabinet','meeting-table','meeting-chair-north','meeting-chair-south','meeting-chair-west','meeting-chair-east','lounge-sofa','lounge-table'].includes(p.id)
+);
+const box=(p:(typeof majorFurniture)[number])=>{
+  const asset=registry.get(p.assetId);
+  if(!asset)return null;
+  const w=asset.runtime.widthPx*p.scale*.68;
+  const h=asset.runtime.heightPx*p.scale*.68;
+  const ax=p.anchorX??asset.runtime.anchor.x??.5;
+  const ay=p.anchorY??asset.runtime.anchor.y??1;
+  return{x1:p.x-w*ax,y1:p.y-h*ay,x2:p.x+w*(1-ax),y2:p.y+h*(1-ay)};
+};
+const overlaps=(a:ReturnType<typeof box>,b:ReturnType<typeof box>)=>Boolean(a&&b&&a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1);
+const allowedOverlap=(a:string,b:string)=>{
+  const pair=new Set([a,b]);
+  if(pair.has('meeting-table')&&[...pair].some(id=>id.startsWith('meeting-chair-')))return true;
+  return false;
+};
+for(let i=0;i<majorFurniture.length;i++){
+  for(let j=i+1;j<majorFurniture.length;j++){
+    const a=majorFurniture[i],b=majorFurniture[j];
+    if(allowedOverlap(a.id,b.id))continue;
+    if(overlaps(box(a),box(b)))errors.push(`major-furniture-overlap:${a.id}:${b.id}`);
+  }
+}
+
 console.log(JSON.stringify({
   ok:errors.length===0,
   registryAssets:registry.stats().total,
@@ -38,6 +65,8 @@ console.log(JSON.stringify({
   placements:DEVELOPMENT_V3_PLACEMENTS.length,
   characterSets:DEVELOPMENT_V3_AGENT_SPRITES.length,
   interactions:DEVELOPMENT_V3_ROOM_LAYOUT.interactions.length,
+  compositionChecks:composition.errors.length===0,
+  majorFurnitureChecked:majorFurniture.length,
   errors,
 },null,2));
 
