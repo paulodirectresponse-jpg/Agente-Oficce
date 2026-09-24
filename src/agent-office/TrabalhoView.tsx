@@ -178,7 +178,7 @@ export function TrabalhoView({project}:{project:Project|null}){
       if(files.length)uploaded=await Promise.all(files.map(file=>api.uploadResource(project.id,file,'chat')));
       setConversation(cur=>cur?{...cur,messages:cur.messages.map(item=>item.id===optimisticId?{...item,metadata:{...item.metadata,pending:false,attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}:item)}:cur);
       if(isRunning&&activeRun){
-        await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text+(uploaded.length?'\n\nArquivos anexados: '+uploaded.map(file=>file.storage_path).join(', '):''),target:actualTarget,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id});
+        await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text,target:actualTarget,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id,attachment_ids:uploaded.map(file=>file.id)});
         await refresh();
       }else{
         const receipt=await api.startChatRun({project_id:project.id,conversation_id:conversation?.conversation_id,message:text,target:actualTarget,attachment_ids:uploaded.map(file=>file.id),execution_policy:parsed.execution_policy,tool_hint:parsed.tool_hint,directives:parsed.directives});
