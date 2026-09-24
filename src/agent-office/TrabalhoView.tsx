@@ -72,6 +72,8 @@ export function TrabalhoView({project}:{project:Project|null}){
   const [projectKnowledge,setProjectKnowledge]=useState<KnowledgeItem[]>([]);
   const [error,setError]=useState<string|null>(null);
   const [sending,setSending]=useState(false);
+  const [stopping,setStopping]=useState(false);
+  const [previewStarting,setPreviewStarting]=useState(false);
   const [resolvingApproval,setResolvingApproval]=useState<string|null>(null);
   const [jumpVisible,setJumpVisible]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
@@ -91,9 +93,9 @@ export function TrabalhoView({project}:{project:Project|null}){
   const activeSteps=snapshot?.active_plan?.steps??[];
   const completedSteps=activeSteps.filter(step=>step.status==='completed').length;
   const previewUseful=Boolean(snapshot?.preview?.url||snapshot?.preview?.status==='healthy'||snapshot?.git?.files?.length);
-  const telemetryEvents=useMemo(()=>liveEvents.filter(event=>['tool.started','tool.completed','execution.step.started','execution.step.telemetry','execution.step.completed','execution.step.failed','handoff.created','worker.state'].includes(event.event)),[liveEvents]);
-  const toolCount=liveEvents.filter(event=>event.event==='tool.completed'&&event.data.ok!==false).length;
-  const touchedTargets=useMemo(()=>[...new Set(liveEvents.map(event=>typeof event.data.target==='string'?event.data.target:'').filter(Boolean))],[liveEvents]);
+  const previewHealthy=Boolean(snapshot?.preview?.status==='healthy'&&snapshot?.preview?.url);
+  const telemetryEvents=useMemo(()=>liveEvents.filter(event=>['tool.started','tool.completed','execution.step.telemetry','execution.step.failed','handoff.created','worker.state','execution.preview.ready'].includes(event.event)),[liveEvents]);
+  const conversationActivity=useMemo(()=>telemetryEvents.slice(0,10).reverse(),[telemetryEvents]);
   const runElapsed=activeRun?.started_at?formatElapsed(clock-new Date(activeRun.started_at).getTime()):'0s';
 
   const refresh=useCallback(async()=>{
@@ -214,6 +216,29 @@ export function TrabalhoView({project}:{project:Project|null}){
     finally{setSending(false);setUploading(false)}
   };
 
+  const stopActiveRun=async()=>{
+    if(!activeRun||terminal(activeRun.status)||stopping)return;
+    setStopping(true);setError(null);
+    try{
+      await api.cancelChatRun(activeRun.id);
+      sourceRef.current?.close();sourceRef.current=null;connectedRunRef.current=null;setStreaming({});
+      window.setTimeout(()=>void refresh(),100);
+    }catch(reason){setError(humanError(reason))}
+    finally{setStopping(false)}
+  };
+
+  const openPreview=()=>{setInspectorOpen(true)};
+  const startPreview=async()=>{
+    if(!project||previewStarting)return;
+    setPreviewStarting(true);setError(null);
+    try{
+      await api.startPreviewV3(project.id,{chat_run_id:inspectRunId??undefined});
+      setInspectorOpen(true);
+      await refresh();
+    }catch(reason){setError(humanError(reason))}
+    finally{setPreviewStarting(false)}
+  };
+
   const resolveApproval=async(approval:ToolApproval,status:'approved'|'denied')=>{
     setResolvingApproval(approval.id);
     try{await api.resolveToolApprovalV2(approval.id,status);await refresh()}
@@ -238,6 +263,7 @@ export function TrabalhoView({project}:{project:Project|null}){
       <div className="work-v2-header-actions">
         <V2Status tone={statusTone}>{stateLabel(activeRun?.status)}</V2Status>
         <button type="button" className="v2-quiet-button" onClick={()=>setKnowledgeOpen(true)}>Conhecimento</button><button type="button" className="v2-quiet-button" onClick={()=>setActivityOpen(true)}>Atividade{isRunning?' · ao vivo':''}</button>
+        {isRunning&&<button type="button" className="v2-stop-button" onClick={()=>void stopActiveRun()} disabled={stopping} aria-label="Parar execução">{stopping?'Parando…':'■ Parar'}</button>}
         {(previewUseful||inspectRunId)&&<button type="button" className={inspectorOpen?'v2-quiet-button active':'v2-quiet-button'} onClick={()=>setInspectorOpen(value=>!value)}>Inspecionar</button>}
       </div>
     </header>
@@ -263,7 +289,32 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <div className="work-v2-message-body"><div className="work-v2-message-meta"><strong>{workerNames.get(key)??'Agent Office'}</strong><span>ao vivo</span></div><MessageContent content={text} streaming/></div>
               </article>)}
 
+              {conversationActivity.length>0&&<section className="work-v2-operation-feed" aria-label="Atividade da execução">
+                {conversationActivity.map(event=>{
+                  const name=workerNames.get(workerKey(event.data))??'Agent Office';
+                  const detail=telemetrySummary(event);
+                  const target=typeof event.data.target==='string'?event.data.target:'';
+                  const command=typeof event.data.command==='string'?event.data.command:'';
+                  const tone=event.event==='execution.step.failed'?'danger':event.event==='tool.completed'||event.event==='execution.preview.ready'?'success':'live';
+                  return <div key={event.run_id+':'+event.sequence} className={'work-v2-operation '+tone}>
+                    <span className="work-v2-operation-icon" aria-hidden="true">{tone==='success'?'✓':tone==='danger'?'!':'·'}</span>
+                    <div><strong>{name}</strong><span>{detail||eventLabel(event.event)}</span>{(target||command)&&<small>{target||command}</small>}</div>
+                    <time>{shortTime(event.timestamp)}</time>
+                  </div>
+                })}
+              </section>}
 
+              {previewHealthy&&<section className="work-v2-preview-ready">
+                <div className="preview-ready-icon">↗</div>
+                <div><strong>Aplicação disponível para preview</strong><span>O servidor local está ativo e pronto para visualizar.</span></div>
+                <button type="button" className="primary" onClick={openPreview}>Abrir preview</button>
+                <button type="button" onClick={()=>window.open(snapshot?.preview?.url??'','_blank')}>Nova janela</button>
+              </section>}
+              {!previewHealthy&&snapshot?.git?.files?.length>0&&!isRunning&&<section className="work-v2-preview-ready muted-preview">
+                <div className="preview-ready-icon">◇</div>
+                <div><strong>Resultado pronto para visualizar</strong><span>Inicie o preview local para conferir a aplicação.</span></div>
+                <button type="button" className="primary" disabled={previewStarting} onClick={()=>void startPreview()}>{previewStarting?'Iniciando…':'Iniciar preview'}</button>
+              </section>}
 
               {snapshot?.pending_approvals.map(approval=><section className="work-v2-approval" key={approval.id}>
                 <div><strong>Aprovação necessária</strong><p>{approval.reason||'Esta ação pode alterar algo fora da conversa.'}</p><small>{approval.tool_name}</small></div>
@@ -280,19 +331,18 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <span className="work-v2-live-dot" aria-hidden="true"/>
                 <div className="work-v2-goal-copy">
                   <strong>{snapshot?.active_plan?.goal||'Goal em execução'}</strong>
-                  <span>{telemetryEvents[0]?telemetrySummary(telemetryEvents[0]):activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||(isRunning?'Executando':'Concluído')}</span>
+                  <span>{activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||(isRunning?'Executando':'Concluído')}</span>
                 </div>
-                <div className="work-v2-goal-stats"><span>{runElapsed}</span><span>{toolCount} ações</span>{touchedTargets.length>0&&<span>{touchedTargets.length} alvos</span>}</div>
+                <div className="work-v2-goal-stats"><span>{runElapsed}</span></div>
                 <span className="work-v2-goal-progress">{completedSteps}/{activeSteps.length||1}</span>
                 <span className="work-v2-goal-caret">{planExpanded?'⌃':'⌄'}</span>
               </button>
-              {telemetryEvents.length>0&&<div className="work-v2-live-trace">{telemetryEvents.slice(0,4).map(event=><div key={event.run_id+':'+event.sequence} className={'trace-row '+event.event.replace(/\./g,'-')}><span className="trace-dot"/><div><strong>{telemetrySummary(event)}</strong><small>{shortTime(event.timestamp)}{typeof event.data.duration_ms==='number'?' · '+formatElapsed(event.data.duration_ms):''}</small></div></div>)}</div>}
+
               {planExpanded&&<div className="work-v2-goal-details">
                 <div className="work-v2-goal-steps">{activeSteps.map(step=>{
-                  const events=liveEvents.filter(event=>event.data.execution_step_id===step.id&&event.event!=='response.delta').slice(0,4);
                   const attempt=(snapshot?.active_plan?.attempts??[]).filter((item:any)=>item.step_id===step.id).at(-1) as any;
                   const elapsed=attempt?.started_at?formatElapsed((attempt.ended_at?new Date(attempt.ended_at).getTime():clock)-new Date(attempt.started_at).getTime()):null;
-                  return <div key={step.id} className={'goal-step-card '+step.status}><div className="goal-step"><span>{step.status==='completed'?'✓':step.status==='running'?'●':step.status==='failed'?'!':'○'}</span><div><strong>{step.title||step.key}</strong><small>{step.status==='completed'?'Concluído':step.status==='running'?'Em andamento':step.status==='failed'?'Falhou':'Pendente'}{elapsed?' · '+elapsed:''}</small></div></div>{events.length>0&&<div className="goal-step-events">{events.map(event=><div key={event.run_id+':'+event.sequence}><span>›</span><div><strong>{telemetrySummary(event)}</strong><small>{shortTime(event.timestamp)}{typeof event.data.duration_ms==='number'?' · '+formatElapsed(event.data.duration_ms):''}</small></div></div>)}</div>}</div>
+                  return <div key={step.id} className={'goal-step-card '+step.status}><div className="goal-step"><span>{step.status==='completed'?'✓':step.status==='running'?'●':step.status==='failed'?'!':'○'}</span><div><strong>{step.title||step.key}</strong><small>{step.status==='completed'?'Concluído':step.status==='running'?'Em andamento':step.status==='failed'?'Falhou':'Pendente'}{elapsed?' · '+elapsed:''}</small></div></div></div>
                 })}</div>
                 <button type="button" className="work-v2-goal-activity" onClick={()=>setActivityOpen(true)}>Abrir atividade detalhada →</button>
               </div>}
@@ -309,7 +359,7 @@ export function TrabalhoView({project}:{project:Project|null}){
               {commandHints.length>0&&<div className="composer-command-hints">{commandHints.map(item=><button type="button" key={item.token} onMouseDown={e=>e.preventDefault()} onClick={()=>setMessage(current=>applyComposerSuggestion(current,item.token))}><strong>{item.token}</strong><span>{item.label}</span></button>)}</div>}</div>
               <div className="work-v2-composer-footer">
                 <span>{isRunning?'A execução continua enquanto você conversa.':'Pronto para iniciar.'}</span>
-                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);addPendingFiles(next);e.currentTarget.value=''}}/></label><VoiceInputButton disabled={sending} onTranscript={text=>setMessage(current=>current.trim()?current.trimEnd()+' '+text:text)}/><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button></div>
+                <div className="work-v2-composer-actions"><label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={e=>{const next=Array.from(e.target.files??[]);addPendingFiles(next);e.currentTarget.value=''}}/></label><VoiceInputButton disabled={sending} onTranscript={text=>setMessage(current=>current.trim()?current.trimEnd()+' '+text:text)}/><select aria-label="Destino" value={target} onChange={e=>setTarget(e.target.value)}><option value="auto">Auto</option><option value="team">Equipe</option>{agents.filter(agent=>agent.enabled&&agent.provider_id&&agent.model_id).map(agent=><option key={agent.id} value={agent.id}>{agent.name}</option>)}</select>{isRunning?<button type="button" className="work-v2-send stop" disabled={stopping} onClick={()=>void stopActiveRun()} aria-label="Parar execução">{stopping?'…':'■'}</button>:<button className="work-v2-send" disabled={sending||(!message.trim()&&!pendingFiles.length)} aria-label="Enviar">{uploading?'↑':sending?'•••':'➤'}</button>}</div>
               </div>
               {error&&<div className="work-v2-error" role="alert">{error}</div>}
             </form>
