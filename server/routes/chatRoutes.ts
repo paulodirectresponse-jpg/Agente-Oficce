@@ -63,6 +63,7 @@ chatRouter.post('/runs', async (request, response) => {
     });
 
     const decision = orchestration.decision;
+    if(toolHint==='web_search'||executionPolicy==='research')decision.required_tools=[...new Set([...(decision.required_tools??[]),'browser_open'])];
     let selectedAgentIds: string[] = [];
     let selectedSubagentIds: string[] = [];
     if (decision.target_agent_id) {
@@ -107,6 +108,7 @@ chatRouter.post('/runs', async (request, response) => {
       routing_level: orchestration.level,
       routing_decision: decision as unknown as Record<string, unknown>,
       attachment_ids: attachmentIds,
+      required_tools: decision.required_tools,
     });
 
     const receipt = service.receipt(prepared);
