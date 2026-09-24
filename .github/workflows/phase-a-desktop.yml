@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - feat/experience-v2-universal-api
-      - feat/stage5-private-runtime-assets
   pull_request:
     branches:
       - main
