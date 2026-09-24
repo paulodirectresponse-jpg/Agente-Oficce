@@ -69,10 +69,14 @@ export class WorkspaceService{
     return{run:this.runRow(run),tools,activities,files_changed:files,workforce:workforce?new TeamService(this.db).getWorkforce(workforce.id):null,plan:plan?this.plan(plan.id):null,artifacts,baseline:this.db.prepare('SELECT * FROM workspace_run_baselines WHERE chat_run_id=?').get(runId)??null};
   }
   listRuns(projectId:string){return (this.db.prepare('SELECT * FROM chat_runs WHERE project_id=? AND parent_run_id IS NULL ORDER BY started_at DESC LIMIT 80').all(projectId) as any[]).map(r=>this.runRow(r))}
-  queueCommand(input:{project_id:string;chat_run_id?:string|null;execution_plan_id?:string|null;command_type:'orient'|'enqueue'|'interrupt';message:string;target?:string}){
-    const id=crypto.randomUUID(),t=new Date().toISOString();this.db.prepare(`INSERT INTO workspace_run_commands(id,project_id,chat_run_id,execution_plan_id,command_type,message,target,status,created_at)VALUES(?,?,?,?,?,?,?,'pending',?)`).run(id,input.project_id,input.chat_run_id??null,input.execution_plan_id??null,input.command_type,input.message,input.target??'auto',t);
-    if(input.execution_plan_id&&input.command_type!=='interrupt'){const type=input.command_type==='orient'?'orient':'enqueue_message';this.db.prepare(`INSERT INTO execution_commands(id,plan_id,command_type,payload_json,status,created_at)VALUES(?,?,?,?, 'pending',?)`).run(crypto.randomUUID(),input.execution_plan_id,type,JSON.stringify({message:input.message,workspace_command_id:id}),t)}
-    return this.db.prepare('SELECT * FROM workspace_run_commands WHERE id=?').get(id);
+  queueCommand(input:{project_id:string;chat_run_id?:string|null;execution_plan_id?:string|null;command_type:'orient'|'enqueue'|'interrupt';message:string;target?:string;attachment_ids?:string[]}){
+    const id=crypto.randomUUID(),t=new Date().toISOString(),attachments=[...new Set((input.attachment_ids??[]).filter(Boolean))];
+    this.db.prepare(`INSERT INTO workspace_run_commands(id,project_id,chat_run_id,execution_plan_id,command_type,message,target,status,created_at)VALUES(?,?,?,?,?,?,?,'pending',?)`).run(id,input.project_id,input.chat_run_id??null,input.execution_plan_id??null,input.command_type,input.message,input.target??'auto',t);
+    if(input.execution_plan_id&&input.command_type!=='interrupt'){
+      const type=input.command_type==='orient'?'orient':'enqueue_message';
+      this.db.prepare(`INSERT INTO execution_commands(id,plan_id,command_type,payload_json,status,created_at)VALUES(?,?,?,?, 'pending',?)`).run(crypto.randomUUID(),input.execution_plan_id,type,JSON.stringify({message:input.message,workspace_command_id:id,attachment_ids:attachments}),t)
+    }
+    return {...(this.db.prepare('SELECT * FROM workspace_run_commands WHERE id=?').get(id) as any),attachment_ids:attachments};
   }
   consumeOrientations(runId:string){
     const rows=this.db.prepare("SELECT * FROM workspace_run_commands WHERE chat_run_id=? AND command_type='orient' AND status='pending' ORDER BY created_at").all(runId) as any[];if(!rows.length)return[];
