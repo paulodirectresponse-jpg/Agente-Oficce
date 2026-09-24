@@ -10,11 +10,13 @@ import type {
   ResourceFile,
   ToolApproval,
   UniversalProvider,
+  WorkspaceSnapshot,
 } from './types.js';
 import { api } from './api.js';
 import { MessageContent } from './conversation/MessageContent.js';
 import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
 import { VoiceInputButton } from './conversation/VoiceInputButton.js';
+import { applyComposerSuggestion, composerSuggestions, parseComposerInput } from './conversation/ComposerDirectives.js';
 import { OfficeMap } from './room/OfficeMap.js';
 
 type OfficeFocus = 'office' | 'chat';
@@ -172,19 +174,21 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [approvals, setApprovals] = useState<ToolApproval[]>([]);
   const [resolvingApproval, setResolvingApproval] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const loadSnapshot = useCallback(async () => {
     if (!project) return;
     try {
-      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity, nextApprovals] = await Promise.all([
+      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity, nextApprovals, nextWorkspace] = await Promise.all([
         api.listAgentsV2(),
         api.listProvidersV2(),
         api.listAgentStatesV2(project.id),
         api.getConversation(project.id),
         api.listActivityV2(project.id),
         api.listToolApprovalsV2(project.id),
+        api.getWorkspaceSnapshotV3(project.id),
       ]);
       setAgents(nextAgents.filter((agent) => agent.enabled).sort((a, b) => a.sort_order - b.sort_order));
       setProviders(nextProviders);
@@ -192,6 +196,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       setConversation(nextConversation);
       setActivity(nextActivity);
       setApprovals(nextApprovals);
+      setWorkspace(nextWorkspace);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar o escritório.');
@@ -217,6 +222,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         api.listActivityV2(project.id).then(setActivity),
         api.getConversation(project.id).then(setConversation),
         api.listToolApprovalsV2(project.id).then(setApprovals),
+        api.getWorkspaceSnapshotV3(project.id).then(setWorkspace),
       ]).catch(() => undefined);
     }, 3500);
 
@@ -438,6 +444,10 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     };
   }, [loadSnapshot, project]);
 
+  const commandHints=useMemo(()=>composerSuggestions(message,agents),[message,agents]);
+  const activeSteps=workspace?.active_plan?.steps??[];
+  const completedSteps=activeSteps.filter(step=>step.status==='completed').length;
+
   const cancelCurrentRun = async () => {
     if (!currentRun || runStatus !== 'running') return;
     setError(null);
@@ -465,7 +475,9 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     event.preventDefault();
     if (!project || (!message.trim() && !pendingFiles.length) || sending) return;
 
-    const text = message.trim() || 'Analise os arquivos anexados.';
+    const parsed=parseComposerInput(message,agents);
+    const text = parsed.message || 'Analise os arquivos anexados.';
+    const actualTarget=parsed.target??target;
     const files = pendingFiles.slice();
     const optimisticId=`optimistic-${Date.now()}`;
     setMessage('');
@@ -488,8 +500,11 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         project_id: project.id,
         conversation_id: conversation?.conversation_id,
         message: text,
-        target,
+        target:actualTarget,
         attachment_ids: uploaded.map((file) => file.id),
+        execution_policy:parsed.execution_policy,
+        tool_hint:parsed.tool_hint,
+        directives:parsed.directives,
       });
       setCurrentRun(receipt);
       await connectRunStream(receipt);
@@ -562,6 +577,12 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
             </div>
           </div>
 
+          {activeSteps.length>0&&<section className="room-inline-plan">
+            <div><strong>Etapas</strong><span>{completedSteps}/{activeSteps.length}</span></div>
+            <div className="room-inline-plan-track">{activeSteps.map(step=><span key={step.id} className={step.status} title={step.title||step.key}>{step.status==='completed'?'✓':step.status==='running'?'●':'○'}</span>)}</div>
+            <small>{activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||'Concluído'}</small>
+          </section>}
+
           <div className="chat-transcript">
             {conversation?.messages.length ? conversation.messages.slice(-16).map((item) => {
               const agent = item.agent_id ? agents.find((candidate) => candidate.id === item.agent_id) : null;
@@ -605,7 +626,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
 
           <form className="chat-composer" onSubmit={submit} onDragOver={(event)=>{event.preventDefault();event.dataTransfer.dropEffect='copy'}} onDrop={(event)=>{event.preventDefault();setPendingFiles(cur=>[...cur,...Array.from(event.dataTransfer.files??[])].slice(0,12))}}>
             {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><PendingAttachmentCard key={file.name+'-'+index} file={file} onRemove={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}/>)}</div>}
-            <textarea
+            <div className="composer-input-wrap"><textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={(event) => {
@@ -618,6 +639,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               rows={2}
               disabled={sending}
             />
+            {commandHints.length>0&&<div className="composer-command-hints">{commandHints.map(item=><button type="button" key={item.token} onMouseDown={e=>e.preventDefault()} onClick={()=>setMessage(current=>applyComposerSuggestion(current,item.token))}><strong>{item.token}</strong><span>{item.label}</span></button>)}</div>}</div>
             <div className="composer-row">
               <div className="composer-context">
                 <span className="shared-context-dot" />
