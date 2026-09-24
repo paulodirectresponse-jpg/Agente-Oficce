@@ -22,6 +22,7 @@ roomAssetRouter.get('/room-assets/status',(_req,res)=>{
       root,
       registry_exists:fs.existsSync(registry),
       files_exists:fs.existsSync(files),
+      calibration_exists:fs.existsSync(path.join(root,'calibration.json')),
     },
   });
 });
@@ -37,6 +38,21 @@ roomAssetRouter.get('/room-assets/registry',(_req,res)=>{
     res.json({ok:true,data:payload});
   }catch(error){
     res.status(500).json({ok:false,error:{code:'ROOM_ASSET_REGISTRY_INVALID',message:error instanceof Error?error.message:'Invalid room asset registry.'}});
+  }
+});
+
+
+roomAssetRouter.get('/room-assets/calibration',(_req,res)=>{
+  const file=path.join(assetRoot(),'calibration.json');
+  if(!fs.existsSync(file)){
+    res.status(404).json({ok:false,error:{code:'ROOM_ASSET_CALIBRATION_NOT_FOUND',message:'Licensed room asset calibration is not installed.'}});
+    return;
+  }
+  try{
+    const payload=JSON.parse(fs.readFileSync(file,'utf8'));
+    res.json({ok:true,data:payload});
+  }catch(error){
+    res.status(500).json({ok:false,error:{code:'ROOM_ASSET_CALIBRATION_INVALID',message:error instanceof Error?error.message:'Invalid room asset calibration.'}});
   }
 });
 
