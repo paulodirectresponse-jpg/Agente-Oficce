@@ -34,7 +34,9 @@
     "assets:catalog": "npm run assets:import:lennox",
     "assets:validate:lennox": "tsx scripts/assets/validate-lennox-catalog.ts",
     "assets:catalog:gate": "npm run assets:validate:lennox",
-    "room:development-v3:validate": "tsx scripts/assets/validate-development-v3.ts"
+    "room:development-v3:validate": "tsx scripts/assets/validate-development-v3.ts",
+    "assets:calibrate": "tsx scripts/assets/calibrate-asset-catalog.ts",
+    "assets:calibration:gate": "npm run assets:typecheck && npm run test -- --runInBand"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
