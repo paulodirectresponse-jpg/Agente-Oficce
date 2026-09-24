@@ -63,6 +63,27 @@ describe('prefab system',()=>{
     expect(seat!.y).toBe(445);
   });
 
+
+  it('projects calibrated asset sockets into world space',()=>{
+    const {registry}=fixture();
+    const workstationId='desk.combination.001.complete.workstation.22f9e85f92';
+    const assets=registry.list();
+    const calibrations=new AssetCalibrationCatalog({
+      schemaVersion:1,generatedAt:'2026-09-24',canonicalTileSize:32,
+      assets:assets.map(a=>deriveCalibration(a,{x:8,y:12,width:80,height:76},32,
+        a.id===workstationId?{
+          assetId:a.id,
+          sockets:[{id:'seat',kind:'work',x:40,y:70,facing:'north',pose:'seated-working',layer:'same'}],
+          confidence:'curated',
+        }:undefined)),
+    });
+    const library=new PrefabLibrary(DEVELOPMENT_PREFABS);
+    const compiled=compilePrefab({id:'work',prefabId:'development.workpod.6',x:800,y:500},library,registry,calibrations);
+    const assetSockets=compiled.sockets.filter(s=>s.source==='asset'&&s.assetNodeId?.startsWith('work:ws'));
+    expect(assetSockets).toHaveLength(6);
+    expect(assetSockets.every(s=>s.kind==='work')).toBe(true);
+  });
+
   it('keeps internal placements locked to the prefab rather than room-level arbitrary scales',()=>{
     const work=DEVELOPMENT_PREFABS.find(p=>p.id==='development.workpod.6')!;
     expect(work.placements.every(p=>['compact','standard','spacious'].includes(p.scaleToken))).toBe(true);
