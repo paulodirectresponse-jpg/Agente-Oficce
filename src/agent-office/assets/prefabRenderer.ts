@@ -11,7 +11,7 @@ export const PREFAB_LAYER_ORDER:AssetLayer[]=[
   'floor','wall_back','furniture_back','surface','character','furniture_front','wall_front','fx','overlay',
 ];
 
-function splitRects(node:CompiledPrefabNode,pass:PrefabNodePass){
+export function prefabNodeRects(node:CompiledPrefabNode,pass:PrefabNodePass){
   const s=node.sourceRect,d=node.destinationRect;
   if(node.occlusion.mode!=='horizontal-split'||node.occlusion.splitY===undefined||pass==='all'){
     return pass==='front'&&node.occlusion.mode==='none'?null:{source:s,destination:d};
@@ -44,7 +44,7 @@ export function drawCompiledPrefabNode(
 ){
   const image=images.get(node.assetId);
   if(!image)return false;
-  const rects=splitRects(node,pass);
+  const rects=prefabNodeRects(node,pass);
   if(!rects)return false;
   const s=rects.source,d=rects.destination;
   ctx.save();
