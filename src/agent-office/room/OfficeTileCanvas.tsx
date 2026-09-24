@@ -172,8 +172,14 @@ export function OfficeTileCanvas(){
   const ref=useRef<HTMLCanvasElement|null>(null);
   useEffect(()=>{
     const canvas=ref.current;if(!canvas)return;
-    const render=()=>{const width=Math.max(1,canvas.clientWidth),height=Math.max(1,canvas.clientHeight),dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(width*dpr));canvas.height=Math.max(1,Math.floor(height*dpr));const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);draw(ctx,width,height)};
-    const ro=new ResizeObserver(render);ro.observe(canvas);render();return()=>ro.disconnect();
+    let disposed=false,raf=0,last=0;
+    const assets:OfficeAssets={floors:null,cabinets:null,decor:null,kitchen:null,living:null};
+    const render=(time=0)=>{const width=Math.max(1,canvas.clientWidth),height=Math.max(1,canvas.clientHeight),dpr=Math.min(window.devicePixelRatio||1,2),nextW=Math.max(1,Math.floor(width*dpr)),nextH=Math.max(1,Math.floor(height*dpr));if(canvas.width!==nextW||canvas.height!==nextH){canvas.width=nextW;canvas.height=nextH}const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);draw(ctx,width,height,assets,time)};
+    const load=(key:keyof OfficeAssets,url:string)=>{const img=new Image();assets[key]=img;img.src=url;img.onload=()=>{if(!disposed)render(performance.now())}};
+    load('floors','/office-assets/floorswalls_LRK.png');load('cabinets','/office-assets/cabinets_LRK.png');load('decor','/office-assets/decorations_LRK.png');load('kitchen','/office-assets/kitchen_LRK.png');load('living','/office-assets/livingroom_LRK.png');
+    const tick=(time:number)=>{if(disposed)return;if(time-last>180){last=time;render(time)}raf=requestAnimationFrame(tick)};
+    const ro=new ResizeObserver(()=>render(performance.now()));ro.observe(canvas);render(performance.now());raf=requestAnimationFrame(tick);
+    return()=>{disposed=true;cancelAnimationFrame(raf);ro.disconnect()};
   },[]);
   return <canvas ref={ref} className="office-tile-canvas" aria-hidden="true"/>;
 }
