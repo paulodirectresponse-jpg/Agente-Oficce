@@ -69,10 +69,14 @@ function planDraft(input:{
   contract:GoalContract;
   selected_agents:string[];
   selected_subagents:string[];
+  role_agents?:{planner?:string|null;builder?:string|null;reviewer?:string|null;validator?:string|null;auditor?:string|null;delivery?:string|null};
 }):PlanDraft{
   const team=input.decision.target_team_id??null;
   const direct=input.selected_agents.length===1&&!input.selected_subagents.length&&!team?input.selected_agents[0]:null;
-  const assign=(step:any)=>({...step,assigned_agent_id:direct,assigned_team_id:direct?null:team});
+  const assign=(step:any,role:keyof NonNullable<typeof input.role_agents>)=>{
+    const roleAgent=!team&&!input.selected_subagents.length?(input.role_agents?.[role]??direct):null;
+    return{...step,assigned_agent_id:roleAgent,assigned_team_id:roleAgent?null:team};
+  };
   const common={risk:'medium' as const,retry_policy:{max_retries:3},timeout_ms:45*60*1000};
   const steps=[
     assign({key:'01_inspect_plan',title:'Analisar e planejar',goal:[
@@ -81,37 +85,37 @@ function planDraft(input:{
       'Crie um plano operacional detalhado para cumprir o Goal Contract.',
       'Identifique riscos, dependências, testes e critérios verificáveis.',
       'Não encerre com teoria: prepare a execução concreta das próximas etapas.'
-    ].join(' '),...common,priority:100,expected_outputs:['Plano operacional','Riscos e dependências'],success_criteria:['Escopo compreendido','Plano cobre o objetivo original']}),
+    ].join(' '),...common,priority:100,expected_outputs:['Plano operacional','Riscos e dependências'],success_criteria:['Escopo compreendido','Plano cobre o objetivo original']},'planner'),
     assign({key:'02_implement',title:'Implementar',goal:[
       'Execute integralmente o plano definido na etapa anterior.',
       'Faça as alterações necessárias no projeto usando as ferramentas disponíveis.',
       'Não entregue somente trechos ou sugestões se o objetivo exigir implementação real.',
       'Preserve compatibilidade e registre decisões importantes.'
-    ].join(' '),...common,priority:90,expected_outputs:['Implementação funcional','Arquivos alterados'],success_criteria:['Mudanças concretas realizadas','Objetivo funcional implementado']}),
+    ].join(' '),...common,priority:90,expected_outputs:['Implementação funcional','Arquivos alterados'],success_criteria:['Mudanças concretas realizadas','Objetivo funcional implementado']},'builder'),
     assign({key:'03_review_fix',title:'Revisar e corrigir',goal:[
       'Atue como revisor crítico independente da implementação anterior.',
       'Procure bugs, lacunas, regressões, simplificações indevidas, inconsistências e requisitos esquecidos.',
       'Corrija diretamente todos os problemas encontrados quando houver ferramentas para isso.',
       'Revise novamente após corrigir. Não aprove trabalho sem evidência.'
-    ].join(' '),...common,priority:80,expected_outputs:['Revisão crítica','Correções adicionais'],success_criteria:['Problemas críticos corrigidos','Implementação coerente com o pedido']}),
+    ].join(' '),...common,priority:80,expected_outputs:['Revisão crítica','Correções adicionais'],success_criteria:['Problemas críticos corrigidos','Implementação coerente com o pedido']},'reviewer'),
     assign({key:'04_validate',title:'Testar e validar',goal:[
       'Valide a solução de forma objetiva.',
       'Execute os testes relevantes, typecheck, build e smoke tests que façam sentido para este projeto.',
       'Se qualquer validação falhar por causa das alterações, investigue e corrija antes de concluir.',
       'Termine a resposta com exatamente QUALITY_GATE: PASS somente se as validações relevantes estiverem satisfatórias; caso contrário use QUALITY_GATE: REVISE.'
-    ].join(' '),...common,priority:70,expected_outputs:['Resultados de testes','Build/smoke quando aplicável'],success_criteria:['Validações relevantes aprovadas','QUALITY_GATE: PASS']}),
+    ].join(' '),...common,priority:70,expected_outputs:['Resultados de testes','Build/smoke quando aplicável'],success_criteria:['Validações relevantes aprovadas','QUALITY_GATE: PASS']},'validator'),
     assign({key:'05_final_audit',title:'Auditoria final',goal:[
       'Faça uma auditoria final usando o pedido ORIGINAL e o Goal Contract como fonte de verdade.',
       'Compare item por item o que foi pedido com o estado atual real do projeto.',
       'Não confie apenas nos resumos das etapas anteriores: inspecione evidências e estado atual.',
       'Corrija qualquer lacuna residual que ainda possa ser resolvida.',
       'Termine com exatamente QUALITY_GATE: PASS apenas quando o objetivo original e a Definition of Done estiverem cumpridos; caso contrário use QUALITY_GATE: REVISE.'
-    ].join(' '),...common,priority:60,expected_outputs:['Auditoria contra objetivo original','Correções finais'],success_criteria:['Definition of Done satisfeita','QUALITY_GATE: PASS']}),
+    ].join(' '),...common,priority:60,expected_outputs:['Auditoria contra objetivo original','Correções finais'],success_criteria:['Definition of Done satisfeita','QUALITY_GATE: PASS']},'auditor'),
     assign({key:'06_delivery',title:'Preparar entrega',goal:[
       'Prepare a entrega final ao usuário.',
       'Resuma o que foi feito, as validações executadas, as evidências mais importantes e qualquer limitação real remanescente.',
       'Não invente sucesso. Seja conciso, mas deixe claro que o objetivo foi validado.'
-    ].join(' '),...common,priority:50,expected_outputs:['Relatório final verificável'],success_criteria:['Entrega clara e baseada em evidência']}),
+    ].join(' '),...common,priority:50,expected_outputs:['Relatório final verificável'],success_criteria:['Entrega clara e baseada em evidência']},'delivery'),
   ];
   const dependencies=[
     {step_key:'02_implement',depends_on_key:'01_inspect_plan'},{step_key:'03_review_fix',depends_on_key:'02_implement'},
@@ -304,11 +308,29 @@ export class LongRunService{
   private readonly activity:ActivityRepository;
   constructor(private readonly db:Database){this.runs=new ChatRunRepository(db);this.messages=new MessageRepository(db);this.activity=new ActivityRepository(db)}
 
+  private roleAgents(selected:string[],decision:RoutingDecision){
+    const rows=this.db.prepare("SELECT id,name,role,description,enabled,paused,provider_id,model_id FROM agents WHERE enabled=1 AND paused=0 AND provider_id IS NOT NULL AND model_id IS NOT NULL").all() as Array<{id:string;name:string;role:string;description:string}>;
+    const canExpand=decision.target_mode!=='agent'&&decision.target_mode!=='explicit';
+    const pool=canExpand?[...rows.filter(row=>selected.includes(row.id)),...rows.filter(row=>!selected.includes(row.id))]:rows.filter(row=>selected.includes(row.id));
+    const pick=(pattern:RegExp,fallback?:string|null)=>{
+      const hit=pool.find(row=>pattern.test((row.name+' '+row.role+' '+row.description).toLowerCase()));
+      return hit?.id??fallback??selected[0]??null;
+    };
+    const builder=pick(/builder|develop|code|engineer|program|frontend|backend/);
+    const planner=pick(/orchestr|plan|architect|lead|manager|research/,builder);
+    const reviewer=pick(/review|critic|qa|auditor|quality|test/,builder);
+    const validator=pick(/qa|test|validation|review|auditor/,reviewer);
+    const auditor=pick(/auditor|review|critic|orchestr|quality/,reviewer);
+    const delivery=pick(/orchestr|lead|manager|builder/,builder);
+    return{planner,builder,reviewer,validator,auditor,delivery};
+  }
+
   create(prepared:PreparedChatRun,orchestration:{orchestration_run_id:string;decision:RoutingDecision},message:string,attachmentIds:string[]=[]){
     const contract=goalContract(message);
     const draft=planDraft({
       project_id:prepared.run.project_id,orchestration_run_id:orchestration.orchestration_run_id,
       decision:orchestration.decision,contract,selected_agents:prepared.selected_agents,selected_subagents:prepared.selected_subagents,
+      role_agents:this.roleAgents(prepared.selected_agents,orchestration.decision),
     });
     const plan=new ExecutionGraphService(this.db).createValidated(draft) as any;
     const t=now();
@@ -392,6 +414,7 @@ export class LongRunService{
     const draft=planDraft({
       project_id:config.project_id,orchestration_run_id:config.orchestration_run_id,decision,contract,
       selected_agents:config.selected_agents??[],selected_subagents:config.selected_subagents??[],
+      role_agents:this.roleAgents(config.selected_agents??[],decision),
     });
     const next=durable.commitReplan(request.request_id,draft) as any;
     if(!next?.id)return null;
