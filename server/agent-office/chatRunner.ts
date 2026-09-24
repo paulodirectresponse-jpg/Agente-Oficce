@@ -1466,7 +1466,7 @@ export class ChatRunnerService {
     payload: Record<string, unknown>,
     severity: 'debug' | 'info' | 'warning' | 'error' = 'info',
   ): void {
-    const enriched={
+    const enriched:Record<string,unknown>={
       ...payload,
       execution_plan_id:payload.execution_plan_id??run.metadata?.execution_plan_id??null,
       execution_step_id:payload.execution_step_id??run.metadata?.execution_step_id??null,
