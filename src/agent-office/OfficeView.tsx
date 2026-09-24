@@ -88,7 +88,8 @@ function roomTelemetrySummary(event:ChatStreamEnvelope){
   const data=event.data;
   const operation=typeof data.operation==='string'?data.operation:'';
   const target=typeof data.target==='string'?data.target:'';
-  if(event.event==='tool.started'||event.event==='tool.completed')return (operation||String(data.tool_name||'Ação'))+(target?' · '+target:'');
+  const command=typeof data.command==='string'?data.command:'';
+  if(event.event==='tool.started'||event.event==='tool.completed')return (operation||String(data.tool_name||'Ação'))+(target?' · '+target:command?' · '+command:'');
   if(event.event==='execution.step.started')return 'Etapa iniciada · '+String(data.step_title||'');
   if(event.event==='execution.step.completed')return 'Etapa concluída · '+String(data.step_title||'');
   if(event.event==='execution.step.failed')return 'Ajustando etapa · '+String(data.message||data.step_title||'');
