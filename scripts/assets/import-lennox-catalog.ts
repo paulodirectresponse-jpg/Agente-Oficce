@@ -107,25 +107,45 @@ function isReference(path:string,pack:string){
 function classify(path:string):AssetCategory{
   const v=norm(path),f=norm(basename(path,extname(path)));
   if(v.includes('character')||/\b(worker|employee|manager|receptionist|presenter|participant|operator|analyst|anchor|editor|journalist|technician|officer|staff|trader|trainee|supervisor)\b/.test(f))return'character';
+  if(v.includes('tiles and landscaping')&&/^tile /.test(f))return'floor';
   const rules:[AssetCategory,RegExp][]=[
-    ['floor',/\b(floor|flooring|pavement|grass|walkway|sidewalk)\b/],['rug',/\b(rug|carpet)\b/],['glass',/\bglass\b/],
-    ['access_control',/\b(access control|security access|badge reader|turnstile|accessible gate)\b/],['door',/\b(door|entrance gate|entrance)\b/],['window',/\bwindow\b/],
-    ['whiteboard',/\b(whiteboard|notice board|noticeboard|kanban|planning board|cork bulletin board|corkboard)\b/],['server',/\b(server|rack|router|switch|network cabinet|ups|patch panel)\b/],
-    ['monitor',/\b(monitor|monitors|display|screen|tv|dashboard|video wall|analytics)\b/],['computer',/\b(computer|pc\b|laptop|keyboard|mouse|docking station)\b/],
-    ['tool',/\b(pliers|wrench|screwdriver|hammer|wire stripper|cable spool|cable coil|tool|repair)\b/],['plant',/\b(plant|tree|flower|planter|greenery|succulent|palm|leaf .*pot)\b/],
-    ['coffee',/\b(coffee|espresso|water dispenser|water cooler|drink dispenser|vending|snack|kettle|mug|cup|bottle|carafe)\b/],['appliance',/\b(fridge|refrigerator|microwave|sink|toaster|appliance|shredder|soap dispenser)\b/],
-    ['kitchen',/\b(kitchen|pantry|breakroom|break room)\b/],['lighting',/\b(lamp|light|sconce|lighting|softbox)\b/],['signage',/\b(sign|logo|wayfinding|directory|poster|plaque|label|certificate|badge)\b/],
-    ['supply',/\b(notebook|folder|binders?|pen holder|clipboard|sticky notes|marker|paper|plates|books and folders|file stack|notepad|organizer|brochure stand)\b/],
-    ['desk',/\b(desk|workstation|workbench|reception counter|security counter|operator station|trading station|work counter)\b/],['table',/\b(table|conference table|meeting table|countertop slab|island counter|dining set|lectern)\b/],
-    ['chair',/\b(chair|stool)\b/],['seating',/\b(sofa|couch|bench|armchair|loveseat)\b/],['storage',/\b(cabinet|shelf|shelves|shelving|locker|drawer|storage|bookcase|bookshelf|credenza|filing|cubby|sorter|sideboard|archive cart|recycling station|caddy)\b/],
+    ['plant',/\b(plant|tree|flower|planter|greenery|succulent|palm|leaf .*pot)\b/],
+    ['lighting',/\b(lamp|sconce|lighting|softbox|ceiling light|task light|floor light)\b/],
+    ['access_control',/\b(access control|security access|badge reader|turnstile|accessible gate)\b/],
+    ['whiteboard',/\b(whiteboard|notice board|noticeboard|kanban|planning board|cork bulletin board|corkboard)\b/],
+    ['server',/\b(server|server rack|router|network switch|network cabinet|ups|patch panel)\b/],
+    ['monitor',/\b(monitor|monitors|display|screen|tv|dashboard|video wall|analytics)\b/],
+    ['computer',/\b(computer|pc\b|laptop|keyboard|mouse|docking station)\b/],
+    ['tool',/\b(pliers|wrench|screwdriver|hammer|wire stripper|cable spool|cable coil|tool|repair)\b/],
+    ['coffee',/\b(coffee|espresso|water dispenser|water cooler|drink dispenser|vending|snack|kettle|mug|cup|bottle|carafe)\b/],
+    ['appliance',/\b(fridge|refrigerator|microwave|sink|toaster|appliance|shredder|soap dispenser)\b/],
+    ['signage',/\b(sign|logo|wayfinding|directory|poster|plaque|label|certificate|badge)\b/],
+    ['supply',/\b(notebook|folder|binders?|pen holder|clipboard|sticky notes|marker|paper|plates|books and folders|file stack|notepad|organizer|brochure stand|utensil)\b/],
     ['electronics',/\b(printer|copier|copy machine|phone|telephone|tablet|camera|cctv|speaker|microphone|speakerphone|console|terminal|scanner|projector|headset|communicator|control panel|motherboard|power adapter|remote|device)\b/],
+    ['seating',/\b(sofa|couch|bench|armchair|loveseat|beanbag)\b/],
+    ['chair',/\b(chair|stool)\b/],
+    ['storage',/\b(cabinet|shelf|shelves|shelving|locker|drawer|storage|bookcase|bookshelf|credenza|filing|cubby|sorter|sideboard|archive cart|recycling station|caddy|rack)\b/],
+    ['desk',/\b(desk|workstation|workbench|reception counter|security counter|operator station|trading station|work counter)\b/],
+    ['table',/\b(table|conference table|meeting table|countertop slab|island counter|dining set|lectern)\b/],
+    ['kitchen',/\b(kitchen|pantry|breakroom|break room)\b/],
     ['decor',/\b(decor|clock|painting|picture|art|framed|book|trash|waste|bin|magazine|document|tray|box|accessor|centerpiece|mat|cushion|bowl|sculpture|bell|pillow|fire extinguisher|queue post|queue tape)\b/],
-    ['architecture',/\b(wall|divider|corner|join|column|pillar|partition|structure|baseboard|trim|ceiling|opening|border|elevator|ventilation grille|air vent)\b/],['vehicle',/\b(car|vehicle|bike|bicycle)\b/],
+    ['rug',/\b(rug|carpet)\b/],
+    ['floor',/\b(floor|flooring|pavement|paving|grass tile|walkway|sidewalk|ceramic tile|utility tile)\b/],
+    ['glass',/\bglass\b/],
+    ['door',/\b(door|entrance gate|double entrance|single entrance)\b/],
+    ['window',/\bwindow\b/],
+    ['architecture',/\b(wall|divider|corner|join|column|pillar|partition|structure|baseboard|trim|ceiling|opening|border|elevator|ventilation grille|air vent)\b/],
+    ['vehicle',/\b(car|vehicle|bike|bicycle)\b/],
   ];
-  for(const [c,r] of rules)if(r.test(f))return c;
-  if(v.includes('architecture'))return'architecture';if(v.includes('electronics')||v.includes('equipment'))return'electronics';
-  if(v.includes('storage'))return'storage';if(v.includes('nature'))return'plant';if(v.includes('decorations'))return'decor';
-  if(v.includes('tools and parts'))return'tool';if(v.includes('office supplies'))return'supply';if(v.includes('furniture'))return'decor';
+  for(const [category,rule] of rules)if(rule.test(f))return category;
+  if(v.includes('architecture'))return'architecture';
+  if(v.includes('electronics')||v.includes('equipment'))return'electronics';
+  if(v.includes('storage'))return'storage';
+  if(v.includes('nature'))return'plant';
+  if(v.includes('decorations'))return'decor';
+  if(v.includes('tools and parts'))return'tool';
+  if(v.includes('office supplies'))return'supply';
+  if(v.includes('furniture'))return'decor';
   return'misc';
 }
 function interaction(c:AssetCategory,path:string):AssetInteraction{
