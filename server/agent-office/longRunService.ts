@@ -155,10 +155,15 @@ class ChatStepExecutor implements StepExecutor{
 
   private orientations(planId:string){
     const rows=this.db.prepare("SELECT id,payload_json FROM execution_commands WHERE plan_id=? AND status='pending' AND command_type IN ('orient','enqueue_message') ORDER BY created_at").all(planId) as any[];
-    if(!rows.length)return[];
-    const t=now();
-    for(const row of rows)this.db.prepare("UPDATE execution_commands SET status='applied',applied_at=? WHERE id=?").run(t,row.id);
-    return rows.map(row=>json<any>(row.payload_json,{}).message).filter((x:any)=>typeof x==='string'&&x.trim());
+    if(!rows.length)return{messages:[] as string[],attachment_ids:[] as string[]};
+    const t=now(),messages:string[]=[],attachmentIds:string[]=[];
+    for(const row of rows){
+      this.db.prepare("UPDATE execution_commands SET status='applied',applied_at=? WHERE id=?").run(t,row.id);
+      const payload=json<any>(row.payload_json,{});
+      if(typeof payload.message==='string'&&payload.message.trim())messages.push(payload.message.trim());
+      if(Array.isArray(payload.attachment_ids))for(const value of payload.attachment_ids)if(typeof value==='string'&&value&&!attachmentIds.includes(value))attachmentIds.push(value);
+    }
+    return{messages,attachment_ids:attachmentIds};
   }
 
   async execute(input:{plan_id:string;step_id:string;step_key:string;agent_id:string|null;subagent_id?:string|null;worker_kind?:'agent'|'subagent'|null;team_id?:string|null;goal:string;timeout_ms:number;work_packet?:WorkPacket}){
@@ -183,7 +188,8 @@ class ChatStepExecutor implements StepExecutor{
       '',
       'RECENT EVIDENCE FROM PREVIOUS STEPS:',
       JSON.stringify(evidence,null,2),
-      orientations.length?'\nUSER ORIENTATIONS RECEIVED DURING EXECUTION:\n'+orientations.map(x=>'- '+x).join('\n'):'',
+      orientations.messages.length?'\nUSER ORIENTATIONS RECEIVED DURING EXECUTION:\n'+orientations.messages.map(x=>'- '+x).join('\n'):'',
+      orientations.attachment_ids.length?'\nNew media/files were attached with the user orientation. Inspect the attached files directly; do not rely on path text alone.':'',
       '',
       'Rules: inspect actual state, use tools when needed, persist real changes, verify claims, and continue until this step is genuinely complete.',
     ].filter(Boolean).join('\n');
@@ -197,7 +203,7 @@ class ChatStepExecutor implements StepExecutor{
       selected_agent_ids:chosenAgents.length?chosenAgents:undefined,
       selected_subagent_ids:chosenSubs.length?chosenSubs:undefined,
       model_override:(chosenAgents.length+chosenSubs.length)===1?this.modelOverride:undefined,
-      attachment_ids:this.attachmentIds,
+      attachment_ids:[...new Set([...this.attachmentIds,...orientations.attachment_ids])],
       internal:true,parent_run_id:this.rootRunId,execution_plan_id:input.plan_id,execution_step_id:input.step_id,
     });
     await service.execute(prepared,this.signal);
