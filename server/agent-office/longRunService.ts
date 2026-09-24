@@ -467,12 +467,15 @@ export class LongRunService{
     const text=String(last?.result_summary||fallback?.result_summary||'Execução concluída e validada.').replace(/QUALITY_GATE:\s*PASS/gi,'').trim();
     const wantsPreview=/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(String(config.original_request||''));
     if(wantsPreview){
-      try{
-        const preview=await new PreviewService(this.db).start(config.project_id,{chat_run_id:rootRunId});
-        this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.ready',title:'Preview pronto',detail:String(preview?.url||''),payload:{url:preview?.url??null,status:preview?.status??null}});
-      }catch(error){
-        this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.failed',severity:'warning',title:'Preview não iniciou automaticamente',detail:error instanceof Error?error.message:'PREVIEW_START_FAILED',payload:{}});
+      const previews=new PreviewService(this.db);
+      let preview=previews.status(config.project_id);
+      if(!preview||preview.status!=='healthy'||!preview.url)preview=await previews.start(config.project_id,{chat_run_id:rootRunId});
+      if(!preview||preview.status!=='healthy'||!preview.url){
+        this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.failed',severity:'error',title:'Preview obrigatório falhou',detail:'A entrega web não foi considerada concluída porque o preview não ficou saudável.',payload:{status:preview?.status??null}});
+        throw new Error('EXECUTION_REQUIRED_PREVIEW_FINAL_CHECK_FAILED');
       }
+      this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.ready',title:'Preview pronto',detail:String(preview.url),payload:{url:preview.url,status:preview.status}});
+      chatEventHub.publish(rootRunId,'execution.preview.ready',{url:preview.url,status:preview.status,execution_plan_id:planId});
     }
     const message=this.messages.create({conversation_id:config.conversation_id,role:'assistant',content:text,metadata:{source:'long_run_v1',root_run_id:rootRunId,execution_plan_id:planId,final:true}});
     const root=this.runs.get(rootRunId);if(root)this.runs.update(rootRunId,{status:'completed',ended_at:now(),error:null,metadata:{...root.metadata,execution_plan_id:planId,final_message_id:message.id,long_running:true}});
