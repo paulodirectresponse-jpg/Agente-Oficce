@@ -31,7 +31,9 @@
     "assets:gate": "npm run assets:validate",
     "assets:typecheck": "tsc -p tsconfig.assets.json",
     "assets:import:lennox": "tsx scripts/assets/import-lennox-catalog.ts",
-    "assets:catalog": "npm run assets:import:lennox"
+    "assets:catalog": "npm run assets:import:lennox",
+    "assets:validate:lennox": "tsx scripts/assets/validate-lennox-catalog.ts",
+    "assets:catalog:gate": "npm run assets:validate:lennox"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
