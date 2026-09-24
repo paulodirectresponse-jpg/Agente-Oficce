@@ -32,7 +32,7 @@ describe('Development V3 layout',()=>{
   });
 
   it('keeps lounge and meeting areas separate from workstations',()=>{
-    const workstationIds=new Set(DEVELOPMENT_V3_WORKSTATIONS.map(ws=>ws.id));
+    const workstationIds=new Set<string>(DEVELOPMENT_V3_WORKSTATIONS.map(ws=>ws.id));
     expect(DEVELOPMENT_V3_PLACEMENTS.filter(p=>workstationIds.has(p.id)).length).toBe(6);
     expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='lounge-rug')).toBe(true);
     expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='meeting-rug')).toBe(true);
