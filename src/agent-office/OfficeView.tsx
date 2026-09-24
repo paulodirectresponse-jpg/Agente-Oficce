@@ -41,6 +41,7 @@ interface OfficeViewProps {
 
 const STREAM_EVENTS = [
   'run.created',
+  'worker.state',
   'agent.state',
   'response.delta',
   'response.streaming_fallback',
