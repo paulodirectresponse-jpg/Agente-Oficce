@@ -82,6 +82,7 @@ export type CompiledPrefabNode={
   layer:AssetLayer;
   zBias:number;
   scale:number;
+  occlusion:{mode:'none'|'horizontal-split';splitY?:number};
   tags:string[];
 };
 
@@ -162,6 +163,7 @@ export function compilePrefab(
       layer:placement.layerOverride??asset.runtime.layer,
       zBias:placement.zBias+asset.runtime.zBias,
       scale:rect.scale,
+      occlusion:calibration.occlusion,
       tags:[...new Set([...definition.tags,...placement.tags,...instance.tags])],
     });
   }
