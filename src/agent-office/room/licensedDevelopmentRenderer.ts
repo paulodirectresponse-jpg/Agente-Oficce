@@ -73,25 +73,19 @@ function drawIdentity(ctx:CanvasRenderingContext2D,time:number){
   ctx.fillText('</>  DEVELOPMENT',b.x+68,b.y+85);
   ctx.fillStyle=`rgba(91,214,236,${.65+pulse*.35})`;ctx.fillRect(b.x+44,b.y+105,300,4);
 
-  roundedRect(ctx,b.x+765,b.y+42,325,100,10);
-  ctx.fillStyle='rgba(6,29,41,.9)';ctx.fill();
-  ctx.strokeStyle='rgba(91,194,219,.28)';ctx.stroke();
-  ctx.fillStyle='#60d5ec';ctx.fillRect(b.x+792,b.y+70,102,5);ctx.fillRect(b.x+792,b.y+88,165,4);
-  ctx.fillStyle='#6fdda9';
-  for(let i=0;i<8;i++)ctx.fillRect(b.x+940+i*12,b.y+124-(i%5)*8,7,20+(i%5)*8);
 }
 
 function drawLighting(ctx:CanvasRenderingContext2D,time:number){
   const b=DEVELOPMENT_V3_BOUNDS;
   ctx.save();ctx.globalCompositeOperation='screen';
-  const warm=[[b.x+92,b.y+170],[b.x+1020,b.y+175],[b.x+170,b.y+650]];
+  const warm=[[b.x+90,b.y+170],[b.x+1010,b.y+180],[b.x+170,b.y+690],[b.x+930,b.y+690]];
   for(const [x,y] of warm){
     const g=ctx.createRadialGradient(x,y,0,x,y,115);
     g.addColorStop(0,'rgba(255,189,91,.20)');g.addColorStop(1,'rgba(255,189,91,0)');
     ctx.fillStyle=g;ctx.fillRect(x-115,y-115,230,230);
   }
   const p=.08+.02*Math.sin(time/900);
-  const cool=ctx.createRadialGradient(b.x+600,b.y+410,40,b.x+600,b.y+410,500);
+  const cool=ctx.createRadialGradient(b.x+650,b.y+420,40,b.x+650,b.y+420,520);
   cool.addColorStop(0,`rgba(47,193,224,${p})`);cool.addColorStop(1,'rgba(47,193,224,0)');
   ctx.fillStyle=cool;ctx.fillRect(b.x+60,b.y+30,1080,760);
   ctx.restore();
