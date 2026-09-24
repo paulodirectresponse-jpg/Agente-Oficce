@@ -17,8 +17,9 @@ export const DEVELOPMENT_V3_ASSETS={
   floor:'floor.architecture.001.floor.wood.plank.tile.3957bd6a02',
   meetingRug:'rug.055.p03.18.blue.executive.office.rug.4d633abdd4',
   loungeRug:'rug.prop.011.lounge.rug.744e8a1f81',
-  wallLong:'architecture.architecture.003.wall.horizontal.long.7deb52d0a2',
-  wallV:'architecture.architecture.005.wall.vertical.medium.f0f38f205f',
+  wallH:'architecture.architecture.005.outer.wall.horizontal.482ac5b7cd',
+  wallV:'architecture.architecture.006.outer.wall.vertical.d1e5aa3c68',
+  wallCorner:'architecture.architecture.009.structural.corner.post.d13add17d9',
   glassLong:'glass.architecture.009.glass.horizontal.long.5327be0d0f',
   glassV:'glass.architecture.011.glass.vertical.medium.6e8366883b',
   meetingGlassH:'glass.architecture.013.glass.partition.horizontal.8c253f3341',
@@ -32,7 +33,8 @@ export const DEVELOPMENT_V3_ASSETS={
   conferenceChairSouth:'chair.furniture.010.conference.chair.south.39b5b2d98e',
   conferenceChairRight:'chair.furniture.012.conference.chair.right.a62ae2fd1e',
   conferenceChairLeft:'chair.furniture.011.conference.chair.left.ee6b8f37d1',
-  sofa:'seating.07.l.shaped.sectional.sofa.ed4291caaa',
+  sofa:'seating.prop.028.teal.lounge.sofa.e10cd9310c',
+  loungeArmchair:'seating.012.p01.12.teal.lounge.armchair.9440121898',
   loungeTable:'coffee.010.round.lounge.coffee.table.4ec13eb00f',
   bookcase:'storage.prop.016.tall.bookcase.141dcb5f7a',
   documentCabinet:'storage.prop.017.document.cabinet.d8643d2784',
@@ -87,13 +89,24 @@ export const DEVELOPMENT_V3_BEHAVIOR={
 } as const;
 
 export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
-  // Architectural shell. The entrance exists only in a real bottom wall opening.
-  {id:'top-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:470,y:150,scale:1.18,layer:'wall_back'},
-  {id:'top-wall-b',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:1045,y:150,scale:1.18,layer:'wall_back'},
-  {id:'left-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallV,x:235,y:430,scale:1.34,layer:'wall_back'},
-  {id:'right-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallV,x:1435,y:430,scale:1.34,layer:'wall_back'},
-  {id:'bottom-wall-left',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:525,y:870,scale:1.15,layer:'wall_front'},
-  {id:'bottom-wall-right',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:1155,y:870,scale:1.15,layer:'wall_front'},
+  // Thin modular shell: real perimeter, real opening, no decorative wall blocks covering furniture.
+  ...[274,402,530,658,786,914,1042,1170,1298,1426].map((x,index)=>({
+    id:`top-wall-${index+1}`,assetId:DEVELOPMENT_V3_ASSETS.wallH,x,y:86,scale:1,layer:'wall_back' as const,
+  })),
+  ...[274,402,530,658].map((x,index)=>({
+    id:`bottom-wall-left-${index+1}`,assetId:DEVELOPMENT_V3_ASSETS.wallH,x,y:904,scale:1,layer:'wall_front' as const,
+  })),
+  ...[1022,1150,1278,1406].map((x,index)=>({
+    id:`bottom-wall-right-${index+1}`,assetId:DEVELOPMENT_V3_ASSETS.wallH,x,y:904,scale:1,layer:'wall_front' as const,
+  })),
+  ...[182,310,438,566,694,822].map((y,index)=>({
+    id:`left-wall-${index+1}`,assetId:DEVELOPMENT_V3_ASSETS.wallV,x:226,y,scale:1,layer:'wall_back' as const,
+  })),
+  ...[182,310,438,566,694,822].map((y,index)=>({
+    id:`right-wall-${index+1}`,assetId:DEVELOPMENT_V3_ASSETS.wallV,x:1454,y,scale:1,layer:'wall_back' as const,
+  })),
+  {id:'corner-top-left',assetId:DEVELOPMENT_V3_ASSETS.wallCorner,x:226,y:86,scale:1,layer:'wall_back'},
+  {id:'corner-top-right',assetId:DEVELOPMENT_V3_ASSETS.wallCorner,x:1454,y:86,scale:1,layer:'wall_back'},
 
   // Upper glass/planning wall, flush with architecture.
   {id:'glass-planning-a',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:650,y:188,scale:1.04,layer:'wall_back'},
@@ -135,9 +148,10 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
 
   // Lounge: rug owns the entire lounge footprint; no desk may cross it.
   {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.loungeRug,x:425,y:770,scale:1.02,layer:'floor',alpha:.96},
-  {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:365,y:795,scale:.52,layer:'furniture_back',shadow:true},
-  {id:'lounge-table',assetId:DEVELOPMENT_V3_ASSETS.loungeTable,x:500,y:790,scale:.52,layer:'furniture_back',shadow:true},
-  {id:'lounge-lamp',assetId:DEVELOPMENT_V3_ASSETS.floorLamp,x:285,y:760,scale:.70,layer:'furniture_back'},
+  {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:355,y:805,scale:.67,layer:'furniture_back',shadow:true},
+  {id:'lounge-armchair',assetId:DEVELOPMENT_V3_ASSETS.loungeArmchair,x:515,y:810,scale:.46,layer:'furniture_front',shadow:true},
+  {id:'lounge-table',assetId:DEVELOPMENT_V3_ASSETS.loungeTable,x:455,y:795,scale:.48,layer:'furniture_back',shadow:true},
+  {id:'lounge-lamp',assetId:DEVELOPMENT_V3_ASSETS.floorLamp,x:280,y:755,scale:.70,layer:'furniture_back'},
 
   // Intentional greenery. Plants support zones; they are not random fillers.
   {id:'plant-top-left',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:330,y:220,scale:.58,layer:'furniture_front',shadow:true},
@@ -208,14 +222,15 @@ export function validateDevelopmentV3Composition(){
     if(pointInsideZone(ws.x,ws.y,DEVELOPMENT_V3_ZONES.lounge))errors.push(`workstation-overlaps-lounge:${ws.id}`);
     if(pointInsideZone(ws.x,ws.y,DEVELOPMENT_V3_ZONES.meeting))errors.push(`workstation-overlaps-meeting:${ws.id}`);
   }
-  for(const id of ['lounge-rug','lounge-sofa','lounge-table','lounge-lamp']){
+  for(const id of ['lounge-rug','lounge-sofa','lounge-armchair','lounge-table','lounge-lamp']){
     const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.lounge))errors.push(`lounge-item-outside-zone:${id}`);
   }
   for(const id of ['meeting-rug','meeting-table','meeting-chair-north','meeting-chair-south','meeting-chair-west','meeting-chair-east']){
     const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.meeting))errors.push(`meeting-item-outside-zone:${id}`);
   }
   // Entrance is intentionally an open passage in the bottom wall, matching the approved reference.
-  const leftWall=byId.get('bottom-wall-left'),rightWall=byId.get('bottom-wall-right');
+  const leftWall=DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id.startsWith('bottom-wall-left-'));
+  const rightWall=DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id.startsWith('bottom-wall-right-'));
   if(!leftWall||!rightWall)errors.push('entry-wall-segments-missing');
   if(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='entrance'))errors.push('unexpected-door-in-open-passage');
   const storageIds=['storage-bookcase','storage-cabinet'];
