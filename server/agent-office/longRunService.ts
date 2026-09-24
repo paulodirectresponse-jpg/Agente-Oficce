@@ -149,6 +149,21 @@ class ChatStepExecutor implements StepExecutor{
     private readonly signal?:AbortSignal,
   ){this.runs=new ChatRunRepository(db)}
 
+  private emitStep(event:string,input:{plan_id:string;step_id:string;step_key:string},payload:Record<string,unknown>={}){
+    const step=this.db.prepare('SELECT title FROM execution_steps WHERE id=?').get(input.step_id) as {title?:string}|undefined;
+    const data={execution_plan_id:input.plan_id,execution_step_id:input.step_id,step_key:input.step_key,step_title:step?.title??input.step_key,...payload};
+    const type='execution.step.'+event;
+    this.db.prepare(`INSERT INTO activity_events(id,project_id,conversation_id,run_id,agent_id,type,severity,title,detail,payload_json,created_at)
+      VALUES(lower(hex(randomblob(16))),?,?,?,?,?,'info',?,?,?,?)`).run(this.projectId,this.conversationId,this.rootRunId,null,type,step?.title??input.step_key,typeof payload.message==='string'?payload.message:'',JSON.stringify(data),now());
+    chatEventHub.publish(this.rootRunId,type,data);
+  }
+
+  private toolAudit(runId:string){
+    return (this.db.prepare(`SELECT tool_name,status,input_json,result_json,started_at,ended_at FROM tool_audit_events
+      WHERE run_id=? OR run_id IN (SELECT id FROM chat_runs WHERE parent_run_id=?) ORDER BY started_at`).all(runId,runId) as any[])
+      .map(row=>({...row,input:json<any>(row.input_json,{}),result:json<any>(row.result_json,{})}));
+  }
+
   private evidence(planId:string){
     const rows=this.db.prepare('SELECT type,payload_json FROM execution_artifacts WHERE plan_id=? ORDER BY created_at').all(planId) as any[];
     return rows.slice(-12).map(row=>({type:row.type,payload:json(row.payload_json,{})}));
@@ -169,6 +184,8 @@ class ChatStepExecutor implements StepExecutor{
 
   async execute(input:{plan_id:string;step_id:string;step_key:string;agent_id:string|null;subagent_id?:string|null;worker_kind?:'agent'|'subagent'|null;team_id?:string|null;goal:string;timeout_ms:number;work_packet?:WorkPacket}){
     if(this.signal?.aborted)throw new Error('CHAT_RUN_CANCELLED');
+    const stepStartedAt=Date.now();
+    this.emitStep('started',input,{message:'Etapa iniciada'});
     const workspace=new WorkspaceService(this.db);
     const before=workspace.gitStatus(this.projectId);
     const stepRow=this.db.prepare('SELECT title,success_criteria_json,expected_outputs_json FROM execution_steps WHERE id=?').get(input.step_id) as any;
@@ -210,14 +227,57 @@ class ChatStepExecutor implements StepExecutor{
     });
     await service.execute(prepared,this.signal);
     const finished=this.runs.get(prepared.run.id);
-    if(!finished||finished.status!=='completed')throw new Error(finished?.error?.message?String(finished.error.message):'EXECUTION_INTERNAL_RUN_FAILED');
+    if(!finished||finished.status!=='completed'){
+      this.emitStep('failed',input,{message:finished?.error?.message?String(finished.error.message):'EXECUTION_INTERNAL_RUN_FAILED',duration_ms:Date.now()-stepStartedAt});
+      throw new Error(finished?.error?.message?String(finished.error.message):'EXECUTION_INTERNAL_RUN_FAILED');
+    }
     const finalId=typeof finished.metadata?.final_message_id==='string'?finished.metadata.final_message_id:null;
     const msg=finalId?this.db.prepare('SELECT content FROM messages WHERE id=?').get(finalId) as {content:string}|undefined:undefined;
     const text=msg?.content?.trim()||'';
     const after=workspace.gitStatus(this.projectId);
     const diff=workspace.gitDiff(this.projectId);
+    const audits=this.toolAudit(prepared.run.id);
+    const successfulAudits=audits.filter(item=>item.status==='completed'||item.status==='success'||item.result?.ok===true);
+    const software=/\b(site|app|aplicativo|sistema|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|software|landing\s?page|p[aá]gina\s?de\s?venda|dashboard)\b/i.test(this.contract.objective);
+    const webBuild=/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(this.contract.objective);
+    const writeEvidence=successfulAudits.some(item=>['fs_write_any','fs_copy','fs_move','fs_create_directory'].includes(item.tool_name))
+      ||after.files.some(item=>!before.files.some(prev=>prev.path===item.path&&prev.status===item.status))
+      ||diff.additions+diff.deletions>0;
+    if(input.step_key==='02_implement'&&software&&!writeEvidence){
+      this.emitStep('failed',input,{message:'Nenhuma alteração real de arquivo foi comprovada.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_IMPLEMENTATION_NO_FILE_EVIDENCE');
+    }
+    if(input.step_key==='03_review_fix'&&software&&successfulAudits.length===0){
+      this.emitStep('failed',input,{message:'A revisão não inspecionou o projeto com ferramentas.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_REVIEW_NO_TOOL_EVIDENCE');
+    }
+    if(input.step_key==='04_validate'&&software){
+      const validated=successfulAudits.some(item=>{
+        if(!['shell_command','process_start','process_status','git_command'].includes(item.tool_name))return false;
+        const command=String(item.input?.command??(Array.isArray(item.input?.args)?item.input.args.join(' '):'')).toLowerCase();
+        return /\b(test|build|typecheck|tsc|lint|check|vitest|jest|playwright|cargo\s+(test|check|build)|npm\s+run|pnpm\s+run|yarn\s+)\b/.test(command);
+      });
+      if(!validated){
+        this.emitStep('failed',input,{message:'Nenhuma validação executável (build/test/typecheck/lint) foi comprovada.',duration_ms:Date.now()-stepStartedAt});
+        throw new Error('EXECUTION_VALIDATION_NO_COMMAND_EVIDENCE');
+      }
+      if(webBuild){
+        try{
+          const preview=await new PreviewService(this.db).start(this.projectId,{chat_run_id:this.rootRunId});
+          if(preview.status!=='healthy'||!preview.url)throw new Error('PREVIEW_NOT_HEALTHY');
+          this.emitStep('telemetry',input,{message:'Preview iniciado e validado',operation:'Preview saudável',target:preview.url});
+        }catch(error){
+          this.emitStep('failed',input,{message:error instanceof Error?error.message:'PREVIEW_REQUIRED_FAILED',duration_ms:Date.now()-stepStartedAt});
+          throw new Error('EXECUTION_REQUIRED_PREVIEW_FAILED');
+        }
+      }
+    }
     const gate=/^(04_validate|05_final_audit)$/.test(input.step_key);
-    if(gate&&!/QUALITY_GATE:\s*PASS\b/i.test(text))throw new Error('EXECUTION_QUALITY_GATE_FAILED');
+    if(gate&&!/QUALITY_GATE:\s*PASS\b/i.test(text)){
+      this.emitStep('failed',input,{message:'Quality Gate não foi aprovado.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_QUALITY_GATE_FAILED');
+    }
+    this.emitStep('completed',input,{message:'Etapa concluída com evidências',duration_ms:Date.now()-stepStartedAt,tool_calls:successfulAudits.length,changed_files:after.files.slice(0,30).map(item=>item.path),diff_additions:diff.additions,diff_deletions:diff.deletions});
     return{
       summary:text.slice(0,12000),
       artifacts:[{
