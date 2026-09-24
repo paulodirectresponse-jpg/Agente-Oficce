@@ -11,12 +11,28 @@ import { applyComposerSuggestion, composerSuggestions, parseComposerInput } from
 
 type ActiveAction='orient'|'enqueue'|'interrupt';
 type WorkMode='conversation'|'sala';
-const EVENTS=['run.created','worker.state','agent.state','response.delta','response.streaming_fallback','response.completed','handoff.created','usage.updated','tool.started','tool.completed','tool.approval_required','run.oriented','run.completed','run.failed','run.cancelled'];
+const EVENTS=['run.created','worker.state','agent.state','response.delta','response.streaming_fallback','response.completed','handoff.created','usage.updated','tool.started','tool.completed','tool.approval_required','run.oriented','execution.step.started','execution.step.telemetry','execution.step.completed','execution.step.failed','run.completed','run.failed','run.cancelled'];
 
 function terminal(status?:string){return status==='completed'||status==='failed'||status==='cancelled'}
 function humanError(value:unknown){const text=value instanceof Error?value.message:String(value||'Falha na execução.');return text.replace(/^CHAT_/,'').replace(/_/g,' ').toLowerCase()}
 function workerKey(data:Record<string,unknown>){if(typeof data.subagent_id==='string')return 'subagent:'+data.subagent_id;if(typeof data.agent_id==='string')return 'agent:'+data.agent_id;return 'system'}
 function shortTime(value:string){return new Date(value).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+function formatElapsed(ms:number){
+  const total=Math.max(0,Math.floor(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;
+  return h>0?`${h}h ${String(m).padStart(2,'0')}m`:m>0?`${m}m ${String(sec).padStart(2,'0')}s`:`${sec}s`;
+}
+function telemetrySummary(event:ChatStreamEnvelope){
+  const data=event.data,operation=typeof data.operation==='string'?data.operation:'',target=typeof data.target==='string'?data.target:'',tool=typeof data.tool_name==='string'?data.tool_name:'';
+  if(event.event==='execution.step.started')return 'Etapa iniciada';
+  if(event.event==='execution.step.completed')return 'Etapa validada';
+  if(event.event==='execution.step.failed')return typeof data.message==='string'?data.message:'Etapa precisa de correção';
+  if(event.event==='execution.step.telemetry')return typeof data.message==='string'?data.message:operation||'Validação';
+  if(event.event==='tool.started')return operation+(target?' · '+target:'');
+  if(event.event==='tool.completed')return (operation||('Concluiu '+tool))+(target?' · '+target:'');
+  if(event.event==='handoff.created')return 'Handoff entre recursos';
+  if(event.event==='worker.state')return typeof data.activity==='string'?data.activity:'Estado atualizado';
+  return eventLabel(event.event);
+}
 function stateLabel(status?:string){
   if(status==='running')return'Trabalhando';
   if(status==='completed')return'Concluído';
@@ -59,6 +75,7 @@ export function TrabalhoView({project}:{project:Project|null}){
   const [resolvingApproval,setResolvingApproval]=useState<string|null>(null);
   const [jumpVisible,setJumpVisible]=useState(false);
   const [planExpanded,setPlanExpanded]=useState(false);
+  const [clock,setClock]=useState(Date.now());
   const sourceRef=useRef<EventSource|null>(null);
   const connectedRunRef=useRef<string|null>(null);
   const lastSequenceRef=useRef<Record<string,number>>({});
@@ -74,6 +91,10 @@ export function TrabalhoView({project}:{project:Project|null}){
   const activeSteps=snapshot?.active_plan?.steps??[];
   const completedSteps=activeSteps.filter(step=>step.status==='completed').length;
   const previewUseful=Boolean(snapshot?.preview?.url||snapshot?.preview?.status==='healthy'||snapshot?.git?.files?.length);
+  const telemetryEvents=useMemo(()=>liveEvents.filter(event=>['tool.started','tool.completed','execution.step.started','execution.step.telemetry','execution.step.completed','execution.step.failed','handoff.created','worker.state'].includes(event.event)),[liveEvents]);
+  const toolCount=liveEvents.filter(event=>event.event==='tool.completed'&&event.data.ok!==false).length;
+  const touchedTargets=useMemo(()=>[...new Set(liveEvents.map(event=>typeof event.data.target==='string'?event.data.target:'').filter(Boolean))],[liveEvents]);
+  const runElapsed=activeRun?.started_at?formatElapsed(clock-new Date(activeRun.started_at).getTime()):'0s';
 
   const refresh=useCallback(async()=>{
     if(!project)return;
@@ -135,6 +156,7 @@ export function TrabalhoView({project}:{project:Project|null}){
   },[mode,snapshot?.preview?.id,snapshot?.preview?.status,snapshot?.preview?.url,snapshot?.preview?.updated_at]);
 
   useEffect(()=>{if(activeRun?.id)void connect(activeRun.id)},[activeRun?.id,connect]);
+  useEffect(()=>{if(!isRunning)return;setClock(Date.now());const timer=window.setInterval(()=>setClock(Date.now()),1000);return()=>window.clearInterval(timer)},[isRunning,activeRun?.id]);
   useEffect(()=>{if(!project)return;const timer=window.setInterval(()=>void refresh(),2500);return()=>window.clearInterval(timer)},[project?.id,refresh]);
 
   useEffect(()=>{
@@ -258,13 +280,20 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <span className="work-v2-live-dot" aria-hidden="true"/>
                 <div className="work-v2-goal-copy">
                   <strong>{snapshot?.active_plan?.goal||'Goal em execução'}</strong>
-                  <span>{activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||(isRunning?'Executando':'Concluído')}</span>
+                  <span>{telemetryEvents[0]?telemetrySummary(telemetryEvents[0]):activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||(isRunning?'Executando':'Concluído')}</span>
                 </div>
+                <div className="work-v2-goal-stats"><span>{runElapsed}</span><span>{toolCount} ações</span>{touchedTargets.length>0&&<span>{touchedTargets.length} alvos</span>}</div>
                 <span className="work-v2-goal-progress">{completedSteps}/{activeSteps.length||1}</span>
                 <span className="work-v2-goal-caret">{planExpanded?'⌃':'⌄'}</span>
               </button>
+              {telemetryEvents.length>0&&<div className="work-v2-live-trace">{telemetryEvents.slice(0,4).map(event=><div key={event.run_id+':'+event.sequence} className={'trace-row '+event.event.replaceAll('.','-')}><span className="trace-dot"/><div><strong>{telemetrySummary(event)}</strong><small>{shortTime(event.timestamp)}{typeof event.data.duration_ms==='number'?' · '+formatElapsed(event.data.duration_ms):''}</small></div></div>)}</div>}
               {planExpanded&&<div className="work-v2-goal-details">
-                <div className="work-v2-goal-steps">{activeSteps.map(step=><div key={step.id} className={'goal-step '+step.status}><span>{step.status==='completed'?'✓':step.status==='running'?'●':step.status==='failed'?'!':'○'}</span><div><strong>{step.title||step.key}</strong><small>{step.status==='completed'?'Concluído':step.status==='running'?'Em andamento':step.status==='failed'?'Falhou':'Pendente'}</small></div></div>)}</div>
+                <div className="work-v2-goal-steps">{activeSteps.map(step=>{
+                  const events=liveEvents.filter(event=>event.data.execution_step_id===step.id&&event.event!=='response.delta').slice(0,4);
+                  const attempt=(snapshot?.active_plan?.attempts??[]).filter((item:any)=>item.step_id===step.id).at(-1) as any;
+                  const elapsed=attempt?.started_at?formatElapsed((attempt.ended_at?new Date(attempt.ended_at).getTime():clock)-new Date(attempt.started_at).getTime()):null;
+                  return <div key={step.id} className={'goal-step-card '+step.status}><div className="goal-step"><span>{step.status==='completed'?'✓':step.status==='running'?'●':step.status==='failed'?'!':'○'}</span><div><strong>{step.title||step.key}</strong><small>{step.status==='completed'?'Concluído':step.status==='running'?'Em andamento':step.status==='failed'?'Falhou':'Pendente'}{elapsed?' · '+elapsed:''}</small></div></div>{events.length>0&&<div className="goal-step-events">{events.map(event=><div key={event.run_id+':'+event.sequence}><span>›</span><div><strong>{telemetrySummary(event)}</strong><small>{shortTime(event.timestamp)}{typeof event.data.duration_ms==='number'?' · '+formatElapsed(event.data.duration_ms):''}</small></div></div>)}</div>}</div>
+                })}</div>
                 <button type="button" className="work-v2-goal-activity" onClick={()=>setActivityOpen(true)}>Abrir atividade detalhada →</button>
               </div>}
             </section>}
