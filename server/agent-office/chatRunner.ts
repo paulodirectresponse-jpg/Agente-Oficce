@@ -212,6 +212,27 @@ function sumUsage(values: Array<UniversalUsage | undefined>): UniversalUsage {
   };
 }
 
+
+function compactTelemetryValue(value:unknown,max=180):string{
+  if(typeof value==='string')return value.replace(/\s+/g,' ').trim().slice(0,max);
+  if(Array.isArray(value))return value.map(item=>String(item)).join(' ').slice(0,max);
+  return '';
+}
+function toolTelemetry(name:string,args:Record<string,unknown>){
+  const pathValue=compactTelemetryValue(args.path??args.to??args.from??args.cwd??args.url??args.selector,220);
+  const command=compactTelemetryValue(args.command??args.args??args.javascript,220);
+  const actionMap:Record<string,string>={
+    fs_read_any:'Lendo arquivo',fs_write_any:'Escrevendo arquivo',fs_create_directory:'Criando pasta',
+    fs_copy:'Copiando arquivo',fs_move:'Movendo arquivo',fs_delete:'Excluindo arquivo',
+    shell_command:'Executando comando',process_start:'Iniciando processo',process_status:'Verificando processo',process_stop:'Parando processo',
+    git_command:'Executando Git',github_command:'Executando GitHub',browser_open:'Abrindo navegador',browser_eval:'Executando no navegador',
+    browser_click:'Clicando no navegador',browser_type:'Digitando no navegador',browser_text:'Lendo página',
+    browser_upload:'Enviando arquivo',browser_download:'Baixando arquivo',browser_screenshot:'Capturando navegador',
+    computer_screenshot:'Capturando tela',computer_click:'Clicando no computador',computer_type:'Digitando no computador',
+    computer_hotkey:'Usando atalho',computer_scroll:'Rolando tela',deploy_command:'Publicando',http_request:'Chamando API',runtime_health:'Verificando runtime'
+  };
+  return{operation:actionMap[name]??'Executando '+name,target:pathValue||null,command:command||null};
+}
 export class ChatRunnerService {
   private readonly conversations: ConversationRepository;
   private readonly messages: MessageRepository;
@@ -1075,12 +1096,15 @@ export class ChatRunnerService {
           `Usando ${call.name}`,
           Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
         );
+        const toolStartedAt=Date.now();
+        const telemetry=toolTelemetry(call.name,call.arguments as Record<string,unknown>);
         this.emit(rootRun, 'tool.started', `${binding.agent.name} iniciou ${call.name}`, {
           ...this.workerPayload(binding),
           child_run_id: childRun.id,
           tool_name: call.name,
           tool_call_id: call.id,
           step: toolSteps,
+          ...telemetry,
         });
 
         const toolContext = {
@@ -1160,6 +1184,8 @@ export class ChatRunnerService {
             ok: toolResult.ok,
             error: toolResult.error ?? null,
             audit_id: toolResult.audit_id,
+            duration_ms: Date.now()-toolStartedAt,
+            ...telemetry,
           },
           toolResult.ok ? 'info' : 'warning',
         );
@@ -1440,17 +1466,22 @@ export class ChatRunnerService {
     payload: Record<string, unknown>,
     severity: 'debug' | 'info' | 'warning' | 'error' = 'info',
   ): void {
+    const enriched={
+      ...payload,
+      execution_plan_id:payload.execution_plan_id??run.metadata?.execution_plan_id??null,
+      execution_step_id:payload.execution_step_id??run.metadata?.execution_step_id??null,
+    };
     this.activity.append({
       project_id: run.project_id,
       conversation_id: run.conversation_id,
       run_id: run.id,
-      agent_id: typeof payload.agent_id === 'string' ? payload.agent_id : null,
+      agent_id: typeof enriched.agent_id === 'string' ? enriched.agent_id : null,
       type: event,
       severity,
       title,
-      detail: typeof payload.message === 'string' ? payload.message : '',
-      payload,
+      detail: typeof enriched.message === 'string' ? enriched.message : '',
+      payload:enriched,
     });
-    this.hub.publish(run.id, event, payload);
+    this.hub.publish(run.id, event, enriched);
   }
 }
