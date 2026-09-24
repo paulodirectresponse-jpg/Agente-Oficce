@@ -22,13 +22,13 @@ function formatElapsed(ms:number){
   return h>0?`${h}h ${String(m).padStart(2,'0')}m`:m>0?`${m}m ${String(sec).padStart(2,'0')}s`:`${sec}s`;
 }
 function telemetrySummary(event:ChatStreamEnvelope){
-  const data=event.data,operation=typeof data.operation==='string'?data.operation:'',target=typeof data.target==='string'?data.target:'',tool=typeof data.tool_name==='string'?data.tool_name:'';
+  const data=event.data,operation=typeof data.operation==='string'?data.operation:'',target=typeof data.target==='string'?data.target:'',command=typeof data.command==='string'?data.command:'',tool=typeof data.tool_name==='string'?data.tool_name:'';
   if(event.event==='execution.step.started')return 'Etapa iniciada';
   if(event.event==='execution.step.completed')return 'Etapa validada';
   if(event.event==='execution.step.failed')return typeof data.message==='string'?data.message:'Etapa precisa de correção';
   if(event.event==='execution.step.telemetry')return typeof data.message==='string'?data.message:operation||'Validação';
-  if(event.event==='tool.started')return operation+(target?' · '+target:'');
-  if(event.event==='tool.completed')return (operation||('Concluiu '+tool))+(target?' · '+target:'');
+  if(event.event==='tool.started')return operation+(target?' · '+target:command?' · '+command:'');
+  if(event.event==='tool.completed')return (operation||('Concluiu '+tool))+(target?' · '+target:command?' · '+command:'');
   if(event.event==='handoff.created')return 'Handoff entre recursos';
   if(event.event==='worker.state')return typeof data.activity==='string'?data.activity:'Estado atualizado';
   return eventLabel(event.event);
