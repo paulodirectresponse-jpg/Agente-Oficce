@@ -36,7 +36,8 @@ describe('Development V3 layout',()=>{
     expect(DEVELOPMENT_V3_PLACEMENTS.filter(p=>workstationIds.has(p.id)).length).toBe(6);
     expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='lounge-rug')).toBe(true);
     expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='meeting-rug')).toBe(true);
-    expect(DEVELOPMENT_V3_PLACEMENTS.find(p=>p.id==='entrance')?.layer).toBe('wall_front');
+    expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='entrance')).toBe(false);
+    expect(DEVELOPMENT_V3_PLACEMENTS.filter(p=>p.id.startsWith('bottom-wall-')).length).toBe(2);
   });
 
   it('declares every licensed asset dependency explicitly',()=>{
@@ -44,6 +45,8 @@ describe('Development V3 layout',()=>{
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toContain(DEVELOPMENT_V3_ASSETS.floor);
     expect(ids).toContain(DEVELOPMENT_V3_ASSETS.workstation);
+    expect(ids).toContain(DEVELOPMENT_V3_ASSETS.loungeTable);
+    expect(ids).toContain(DEVELOPMENT_V3_ASSETS.meetingGlassV);
   });
 
   it('fails safely when a private licensed asset is unavailable',()=>{
