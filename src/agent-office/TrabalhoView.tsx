@@ -286,7 +286,7 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <span className="work-v2-goal-progress">{completedSteps}/{activeSteps.length||1}</span>
                 <span className="work-v2-goal-caret">{planExpanded?'⌃':'⌄'}</span>
               </button>
-              {telemetryEvents.length>0&&<div className="work-v2-live-trace">{telemetryEvents.slice(0,4).map(event=><div key={event.run_id+':'+event.sequence} className={'trace-row '+event.event.replaceAll('.','-')}><span className="trace-dot"/><div><strong>{telemetrySummary(event)}</strong><small>{shortTime(event.timestamp)}{typeof event.data.duration_ms==='number'?' · '+formatElapsed(event.data.duration_ms):''}</small></div></div>)}</div>}
+              {telemetryEvents.length>0&&<div className="work-v2-live-trace">{telemetryEvents.slice(0,4).map(event=><div key={event.run_id+':'+event.sequence} className={'trace-row '+event.event.replace(/\./g,'-')}><span className="trace-dot"/><div><strong>{telemetrySummary(event)}</strong><small>{shortTime(event.timestamp)}{typeof event.data.duration_ms==='number'?' · '+formatElapsed(event.data.duration_ms):''}</small></div></div>)}</div>}
               {planExpanded&&<div className="work-v2-goal-details">
                 <div className="work-v2-goal-steps">{activeSteps.map(step=>{
                   const events=liveEvents.filter(event=>event.data.execution_step_id===step.id&&event.event!=='response.delta').slice(0,4);
