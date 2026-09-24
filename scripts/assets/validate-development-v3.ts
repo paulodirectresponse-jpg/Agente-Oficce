@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { DEVELOPMENT_V3_AGENT_SPRITES, DEVELOPMENT_V3_PLACEMENTS, requiredDevelopmentV3AssetIds } from '../../src/agent-office/room/developmentV3.js';
+import { DEVELOPMENT_V3_AGENT_SPRITES, DEVELOPMENT_V3_PLACEMENTS, requiredDevelopmentV3AssetIds, validateDevelopmentV3Composition } from '../../src/agent-office/room/developmentV3.js';
 import { AssetRegistry } from '../../src/agent-office/assets/assetRegistry.js';
 import { validateRoomLayoutAssets } from '../../src/agent-office/assets/officeSpec.js';
 import { DEVELOPMENT_V3_ROOM_LAYOUT } from '../../src/agent-office/room/developmentV3.js';
@@ -28,6 +28,8 @@ if(!layoutGate.valid){
 
 if(DEVELOPMENT_V3_PLACEMENTS.filter(p=>p.assetId.includes('workstation')).length!==6)errors.push('workstation-count');
 if(DEVELOPMENT_V3_AGENT_SPRITES.length<6)errors.push('character-variants');
+const composition=validateDevelopmentV3Composition();
+errors.push(...composition.errors.map(error=>`composition:${error}`));
 
 console.log(JSON.stringify({
   ok:errors.length===0,
