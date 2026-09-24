@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomAgentView, StationKind } from './roomTypes.js';
 import type { AssetRecord } from '../assets/assetRegistry.js';
+import { api } from '../api.js';
 import {
   DEVELOPMENT_V3_AGENT_SPRITES,
   DEVELOPMENT_V3_BEHAVIOR,
@@ -305,24 +306,30 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
     let cancelled=false;
     const load=async()=>{
       try{
-        const response=await fetch('/office-assets/licensed/registry.json',{cache:'no-store'});
-        if(!response.ok)return;
-        const data=await response.json() as {assets?:AssetRecord[]};
+        let data:{assets?:AssetRecord[]}|null=null;
+        try{
+          data=await api.getRoomAssetRegistry() as {assets?:AssetRecord[]};
+        }catch{
+          const response=await fetch('/office-assets/licensed/registry.json',{cache:'no-store'});
+          if(response.ok)data=await response.json() as {assets?:AssetRecord[]};
+        }
+        if(!data)return;
         const registry=new Map<string,AssetRecord>((data.assets??[]).map(asset=>[asset.id,asset]));
         const gate=validateDevelopmentV3Registry(registry);
         if(!gate.ok)return;
         const images=new Map<string,HTMLImageElement>();
         const ids=requiredDevelopmentV3AssetIds();
+        let loaded=0;
         await Promise.all(ids.map(id=>new Promise<void>(resolve=>{
           const asset=registry.get(id);if(!asset){resolve();return}
           const img=new Image();images.set(id,img);
-          img.onload=()=>resolve();img.onerror=()=>resolve();img.src=asset.runtime.uri;
+          img.onload=()=>{loaded++;resolve()};img.onerror=()=>resolve();img.src=asset.runtime.uri;
         })));
-        if(cancelled)return;
+        if(cancelled||loaded!==ids.length)return;
         licensedRuntimeRef.current={registry,images};
         setV3Ready(true);
       }catch{
-        // Licensed art is intentionally optional in public-source builds.
+        // Licensed art is optional in public-source builds and loaded from app data in desktop runtime.
       }
     };
     void load();
