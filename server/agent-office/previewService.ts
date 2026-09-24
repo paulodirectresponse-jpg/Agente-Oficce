@@ -4,6 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import type { Database } from 'better-sqlite3';
+import { getAgentOfficeConfig } from './config.js';
 
 const MAX_LOG=256*1024;
 interface ActivePreview{child:ChildProcess;projectId:string;sessionId:string;port:number;url:string;stdout:string;stderr:string;exitCode:number|null}
@@ -14,13 +15,30 @@ const now=()=>new Date().toISOString();
 async function freePort():Promise<number>{
   return await new Promise((resolve,reject)=>{const s=net.createServer();s.unref();s.on('error',reject);s.listen(0,'127.0.0.1',()=>{const a=s.address();const p=typeof a==='object'&&a?a.port:0;s.close(()=>p?resolve(p):reject(new Error('PREVIEW_PORT_UNAVAILABLE')))})});
 }
+function ensureStaticServerScript(){
+  const dir=path.join(getAgentOfficeConfig().dataDir,'preview-runtime');fs.mkdirSync(dir,{recursive:true});
+  const file=path.join(dir,'static-server.cjs');
+  if(!fs.existsSync(file))fs.writeFileSync(file,`const http=require('http'),fs=require('fs'),path=require('path');const root=path.resolve(process.argv[2]),port=Number(process.argv[3]);const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.gif':'image/gif','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2'};http.createServer((req,res)=>{try{const raw=decodeURIComponent((req.url||'/').split('?')[0]);let target=path.resolve(root,'.'+raw);if(!target.startsWith(root)){res.writeHead(403);return res.end('Forbidden')}if(fs.existsSync(target)&&fs.statSync(target).isDirectory())target=path.join(target,'index.html');if(!fs.existsSync(target)){const fallback=path.join(root,'index.html');if(fs.existsSync(fallback)&&!path.extname(raw))target=fallback;else{res.writeHead(404);return res.end('Not found')}}res.setHeader('Content-Type',types[path.extname(target).toLowerCase()]||'application/octet-stream');res.setHeader('Cache-Control','no-store');fs.createReadStream(target).pipe(res)}catch(e){res.writeHead(500);res.end(String(e))}}).listen(port,'127.0.0.1');`);
+  return file;
+}
 function detect(root:string,port:number){
-  const pkg=path.join(root,'package.json');if(!fs.existsSync(pkg))throw new Error('PREVIEW_PACKAGE_JSON_REQUIRED');
+  const pkg=path.join(root,'package.json');
+  if(!fs.existsSync(pkg)){
+    if(fs.existsSync(path.join(root,'index.html'))){
+      const server=ensureStaticServerScript();
+      return{command:`node "${server}" "${root}" ${port}`,script:'static'};
+    }
+    throw new Error('PREVIEW_ENTRYPOINT_REQUIRED');
+  }
   let json:any={};try{json=JSON.parse(fs.readFileSync(pkg,'utf8'))}catch{throw new Error('PREVIEW_PACKAGE_JSON_INVALID')}
   const scripts=json.scripts??{};
   if(scripts.dev)return{command:`npm run dev -- --host 127.0.0.1 --port ${port}`,script:'dev'};
   if(scripts.preview)return{command:`npm run preview -- --host 127.0.0.1 --port ${port}`,script:'preview'};
   if(scripts.start)return{command:'npm start',script:'start'};
+  if(fs.existsSync(path.join(root,'index.html'))){
+    const server=ensureStaticServerScript();
+    return{command:`node "${server}" "${root}" ${port}`,script:'static'};
+  }
   throw new Error('PREVIEW_SCRIPT_NOT_FOUND');
 }
 async function waitHealth(url:string,child:ChildProcess){
