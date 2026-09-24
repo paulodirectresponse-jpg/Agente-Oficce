@@ -91,6 +91,8 @@ export type CompiledPrefabSocket=PrefabSocket & {
   prefabInstanceId:string;
   x:number;
   y:number;
+  source:'prefab'|'asset';
+  assetNodeId?:string;
 };
 
 export type CompiledPrefab={
@@ -173,13 +175,40 @@ export function compilePrefab(
     return layerOrder.indexOf(a.layer)-layerOrder.indexOf(b.layer)||a.y-b.y||a.zBias-b.zBias||a.id.localeCompare(b.id);
   });
 
-  const sockets=definition.sockets.map(socket=>({
-    ...socket,
-    id:`${instance.id}:${socket.id}`,
-    prefabInstanceId:instance.id,
-    x:instance.x+socket.x-definition.pivot.x,
-    y:instance.y+socket.y-definition.pivot.y,
-  }));
+  const sockets:CompiledPrefabSocket[]=[
+    ...definition.sockets.map(socket=>({
+      ...socket,
+      id:`${instance.id}:${socket.id}`,
+      prefabInstanceId:instance.id,
+      x:instance.x+socket.x-definition.pivot.x,
+      y:instance.y+socket.y-definition.pivot.y,
+      source:'prefab' as const,
+    })),
+  ];
+
+  for(const placement of definition.placements){
+    if(placement.hidden)continue;
+    const calibration=calibrations.require(placement.assetId);
+    if(!calibration.sockets.length)continue;
+    const worldX=instance.x+placement.x-definition.pivot.x;
+    const worldY=instance.y+placement.y-definition.pivot.y;
+    const scale=calibration.canonicalScale*SCALE_TOKENS[placement.scaleToken as ScaleToken];
+    for(const socket of calibration.sockets){
+      sockets.push({
+        id:`${instance.id}:${placement.id}:${socket.id}`,
+        prefabInstanceId:instance.id,
+        assetNodeId:`${instance.id}:${placement.id}`,
+        source:'asset',
+        kind:socket.kind,
+        x:worldX+(socket.x-calibration.visualAnchorPx.x)*scale,
+        y:worldY+(socket.y-calibration.visualAnchorPx.y)*scale,
+        facing:socket.facing,
+        pose:socket.pose,
+        capacity:1,
+        tags:[...new Set([...definition.tags,...placement.tags,`asset-socket:${socket.id}`])],
+      });
+    }
+  }
 
   const translate=(rect:{x:number;y:number;width:number;height:number})=>({
     x:instance.x+rect.x-definition.pivot.x,
