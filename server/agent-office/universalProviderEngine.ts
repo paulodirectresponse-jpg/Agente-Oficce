@@ -1171,10 +1171,13 @@ export class UniversalProviderEngine {
       const modelRow=this.providers.listModels(candidateProvider.id,false).find(item=>item.model_id===candidateModel);
       const caps=modelRow?.capabilities??{};
       const protocol=candidateProvider.protocol_driver;
+      const modelName=candidateModel.toLowerCase();
+      const imageHeuristic=/(gpt-4o|gpt-4\.1|gpt-5|gpt-6|vision|vl\b|qwen.*vl|llava|gemma-3|grok.*vision)/i.test(modelName);
       for(const modality of modalities){
         if(caps[modality]===false)return false;
         if(caps[modality]===true)continue;
-        if(modality==='image'&&['openai_chat','openai_compatible','openai_responses','anthropic_messages','google_gemini'].includes(protocol))continue;
+        if(modality==='image'&&['openai_responses','anthropic_messages','google_gemini'].includes(protocol))continue;
+        if(modality==='image'&&protocol==='openai_chat'&&imageHeuristic)continue;
         if(modality==='pdf'&&['openai_responses','anthropic_messages','google_gemini'].includes(protocol))continue;
         if((modality==='audio'||modality==='video')&&protocol==='google_gemini')continue;
         return false;
