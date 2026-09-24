@@ -1,4 +1,6 @@
 import type { AssetLayer, AssetRecord } from '../assets/assetRegistry.js';
+import type { RoomLayout } from '../assets/officeSpec.js';
+import { DEVELOPMENT_ROOM_TEMPLATE } from '../assets/roomSpec.js';
 
 export const DEVELOPMENT_V3_BOUNDS={x:245,y:75,width:1190,height:790};
 
@@ -108,3 +110,27 @@ export function validateDevelopmentV3Registry(registry:Map<string,AssetRecord>){
   const missing=requiredDevelopmentV3AssetIds().filter(id=>!registry.has(id));
   return{ok:missing.length===0,missing};
 }
+
+
+export const DEVELOPMENT_V3_ROOM_LAYOUT:RoomLayout={
+  schemaVersion:1,
+  room:{
+    id:'development.v3',
+    spec:DEVELOPMENT_ROOM_TEMPLATE,
+    origin:{x:DEVELOPMENT_V3_BOUNDS.x,y:DEVELOPMENT_V3_BOUNDS.y},
+  },
+  placements:DEVELOPMENT_V3_PLACEMENTS.map(p=>({
+    id:p.id,assetId:p.assetId,x:p.x,y:p.y,rotation:'none',scale:p.scale,layerOverride:p.layer,zBias:0,metadata:{shadow:Boolean(p.shadow),alpha:p.alpha??1},
+  })),
+  walkable:[],
+  blocked:[],
+  interactions:[
+    ...DEVELOPMENT_V3_WORKSTATIONS.map((ws,index)=>({
+      id:`development.workstation.${index+1}`,kind:'workstation',x:ws.agentX,y:ws.agentY,capacity:1,assetPlacementId:ws.id,tags:['development','work','coding'],
+    })),
+    {id:'development.whiteboard',kind:'whiteboard',x:1185,y:490,capacity:3,assetPlacementId:'whiteboard',tags:['planning','review']},
+    {id:'development.meeting',kind:'meeting',x:1190,y:650,capacity:4,assetPlacementId:'meeting-table',tags:['meeting','review']},
+    {id:'development.lounge',kind:'seat',x:430,y:745,capacity:3,assetPlacementId:'lounge-sofa',tags:['rest','waiting']},
+    {id:'development.entry',kind:'door',x:1290,y:810,capacity:1,assetPlacementId:'entrance',tags:['entry']},
+  ],
+};
