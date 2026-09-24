@@ -103,9 +103,6 @@ function cropAsset(ctx:CanvasRenderingContext2D,img:HTMLImageElement|undefined,s
   if(!img?.complete||!img.naturalWidth)return;
   ctx.drawImage(img,sx,sy,sw,sh,x,y,sw*(TILE/16)*scale,sh*(TILE/16)*scale);
 }
-function label(ctx:CanvasRenderingContext2D,text:string,x:number,y:number){
-  ctx.fillStyle='rgba(39,56,61,.42)';ctx.font='700 12px ui-monospace,monospace';ctx.fillText(text.toUpperCase(),x,y);
-}
 function plant(ctx:CanvasRenderingContext2D,x:number,y:number){
   ctx.fillStyle='#755744';ctx.fillRect(x-8,y+12,16,19);ctx.fillStyle='#4c8d63';
   for(const [dx,dy,r] of [[-9,0,11],[5,-6,12],[14,6,10],[-2,10,12]] as const){ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill()}
