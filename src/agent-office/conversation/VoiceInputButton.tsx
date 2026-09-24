@@ -2,15 +2,30 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import type { VoiceStatus } from '../types.js';
 
+function monoSamples(chunks:Float32Array[]){
+  const length=chunks.reduce((sum,chunk)=>sum+chunk.length,0),merged=new Float32Array(length);let offset=0;
+  for(const chunk of chunks){merged.set(chunk,offset);offset+=chunk.length}
+  return merged;
+}
+function resample(samples:Float32Array,sourceRate:number,targetRate=16000){
+  if(sourceRate===targetRate)return samples;
+  const ratio=sourceRate/targetRate,out=new Float32Array(Math.max(1,Math.floor(samples.length/ratio)));
+  for(let i=0;i<out.length;i++){
+    const start=Math.floor(i*ratio),end=Math.min(samples.length,Math.floor((i+1)*ratio));
+    let sum=0,count=0;for(let j=start;j<Math.max(start+1,end);j++){sum+=samples[j]??0;count++}
+    out[i]=count?sum/count:0;
+  }
+  return out;
+}
 function wavBlob(chunks:Float32Array[],sampleRate:number){
-  const length=chunks.reduce((sum,chunk)=>sum+chunk.length,0);
+  const samples=resample(monoSamples(chunks),sampleRate,16000),rate=16000,length=samples.length;
   const buffer=new ArrayBuffer(44+length*2),view=new DataView(buffer);
   const write=(offset:number,value:string)=>{for(let i=0;i<value.length;i++)view.setUint8(offset+i,value.charCodeAt(i))};
   write(0,'RIFF');view.setUint32(4,36+length*2,true);write(8,'WAVE');write(12,'fmt ');
-  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,sampleRate,true);
-  view.setUint32(28,sampleRate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,length*2,true);
+  view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);
+  view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,length*2,true);
   let offset=44;
-  for(const chunk of chunks)for(let i=0;i<chunk.length;i++,offset+=2){const sample=Math.max(-1,Math.min(1,chunk[i]));view.setInt16(offset,sample<0?sample*0x8000:sample*0x7fff,true)}
+  for(let i=0;i<samples.length;i++,offset+=2){const sample=Math.max(-1,Math.min(1,samples[i]));view.setInt16(offset,sample<0?sample*0x8000:sample*0x7fff,true)}
   return new Blob([buffer],{type:'audio/wav'});
 }
 
@@ -78,8 +93,12 @@ export function VoiceInputButton({onTranscript,disabled=false}:{onTranscript:(te
     }catch(reason){
       const message=reason instanceof Error?reason.message:'VOICE_TRANSCRIPTION_FAILED';
       setError(message==='VOICE_TRANSCRIPTION_UNAVAILABLE'
-        ?'Transcrição indisponível. Configure whisper.cpp local ou um provider compatível.'
-        :message==='VOICE_AUDIO_EMPTY'?'Não detectei áudio suficiente.':'Falha ao transcrever a gravação.');
+        ?'Transcrição indisponível. O runtime de voz não pôde ser preparado.'
+        :message==='VOICE_AUDIO_EMPTY'?'Não detectei áudio suficiente.'
+        :message.includes('VOICE_RUNTIME_DOWNLOAD_FAILED')?'Não foi possível baixar o mecanismo de voz. Verifique a internet e tente novamente.'
+        :message.includes('VOICE_RUNTIME')?'Não foi possível preparar o Whisper local.'
+        :message.includes('VOICE_PROVIDER')?'O provider de transcrição recusou a gravação.'
+        :'Falha ao transcrever a gravação.');
     }finally{setState('idle')}
   }
 
