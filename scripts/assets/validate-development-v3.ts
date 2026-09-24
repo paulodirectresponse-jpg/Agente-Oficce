@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { DEVELOPMENT_V3_AGENT_SPRITES, DEVELOPMENT_V3_PLACEMENTS, requiredDevelopmentV3AssetIds, validateDevelopmentV3Composition } from '../../src/agent-office/room/developmentV3.js';
+import { DEVELOPMENT_V3_AGENT_SPRITES, DEVELOPMENT_V3_APPROVED_BACKGROUND_ID, DEVELOPMENT_V3_PLACEMENTS, requiredDevelopmentV3AssetIds, validateDevelopmentV3Composition } from '../../src/agent-office/room/developmentV3.js';
 import { AssetRegistry } from '../../src/agent-office/assets/assetRegistry.js';
 import { validateRoomLayoutAssets } from '../../src/agent-office/assets/officeSpec.js';
 import { DEVELOPMENT_V3_ROOM_LAYOUT } from '../../src/agent-office/room/developmentV3.js';
@@ -18,6 +18,14 @@ for(const id of required){
   const file=join(root,'files',basename(asset.runtime.uri));
   if(!existsSync(file)){errors.push(`missing-file:${id}`);continue}
   if(statSync(file).size<=0)errors.push(`empty-file:${id}`);
+}
+
+
+const approvedBackdrop=registry.get(DEVELOPMENT_V3_APPROVED_BACKGROUND_ID);
+if(!approvedBackdrop)errors.push('approved-backdrop:missing');
+else{
+  if(approvedBackdrop.runtime.widthPx!==1448||approvedBackdrop.runtime.heightPx!==1086)errors.push('approved-backdrop:dimensions');
+  if(approvedBackdrop.source.pack!=='agent-office-generated-art')errors.push('approved-backdrop:source');
 }
 
 const layoutGate=validateRoomLayoutAssets(registry,DEVELOPMENT_V3_ROOM_LAYOUT);
@@ -64,6 +72,7 @@ console.log(JSON.stringify({
   requiredAssets:required.length,
   placements:DEVELOPMENT_V3_PLACEMENTS.length,
   characterSets:DEVELOPMENT_V3_AGENT_SPRITES.length,
+  approvedBackdrop:approvedBackdrop?{width:approvedBackdrop.runtime.widthPx,height:approvedBackdrop.runtime.heightPx}:null,
   interactions:DEVELOPMENT_V3_ROOM_LAYOUT.interactions.length,
   compositionChecks:composition.errors.length===0,
   majorFurnitureChecked:majorFurniture.length,
