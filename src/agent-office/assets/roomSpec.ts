@@ -104,7 +104,7 @@ export function resolveRoomAssets(registry:AssetRegistry,input:unknown):RoomAsse
   for(const zone of spec.zones){
     const cats=zone.requiredCategories.filter((v):v is AssetCategory=>[
       'architecture','door','window','glass','floor','rug','desk','table','chair','seating','monitor','computer',
-      'electronics','server','storage','whiteboard','lighting','plant','decor','kitchen','coffee','signage','character','vehicle','misc',
+      'electronics','server','storage','whiteboard','lighting','plant','decor','kitchen','coffee','signage','tool','supply','appliance','access_control','character','vehicle','misc',
     ].includes(v));
     const ints=zone.requiredInteractions.filter((v):v is AssetInteraction=>[
       'none','workstation','seat','meeting','whiteboard','server','coffee','storage','display','door','reception',
