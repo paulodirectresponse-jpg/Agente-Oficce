@@ -43,6 +43,10 @@ export interface PrepareChatRunInput {
   routing_level?: string;
   routing_decision?: Record<string, unknown>;
   attachment_ids?: string[];
+  internal?: boolean;
+  parent_run_id?: string | null;
+  execution_plan_id?: string | null;
+  execution_step_id?: string | null;
 }
 
 export interface PreparedChatRun {
@@ -287,6 +291,9 @@ export class ChatRunnerService {
         target,
         tools_enabled: toolsEnabled,
         attachment_ids: attachmentIds,
+        hidden: input.internal === true,
+        execution_plan_id: input.execution_plan_id ?? null,
+        execution_step_id: input.execution_step_id ?? null,
       },
     });
     resources.linkMessage(userMessage.id,attachmentIds);
@@ -302,6 +309,7 @@ export class ChatRunnerService {
       model_id: mode === 'single' ? this.resolveModel(first, input.model_override).id : null,
       status: 'running',
       mode,
+      parent_run_id: input.parent_run_id ?? null,
       metadata: {
         source: 'chat_v2',
         target,
@@ -315,6 +323,9 @@ export class ChatRunnerService {
         orchestration_run_id: input.orchestration_run_id ?? null,
         routing_level: input.routing_level ?? null,
         routing_decision: input.routing_decision ?? null,
+        hidden: input.internal === true,
+        execution_plan_id: input.execution_plan_id ?? null,
+        execution_step_id: input.execution_step_id ?? null,
       },
     });
 
@@ -1331,6 +1342,9 @@ export class ChatRunnerService {
         final: isFinal,
         tools_enabled: toolsEnabled,
         tool_steps: toolSteps,
+        hidden: rootRun.metadata?.hidden === true,
+        execution_plan_id: rootRun.metadata?.execution_plan_id ?? null,
+        execution_step_id: rootRun.metadata?.execution_step_id ?? null,
       },
     });
 
