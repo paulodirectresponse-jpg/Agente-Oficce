@@ -46,7 +46,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
     setViewportSize({width:rect.width,height:rect.height});
     const zoom=clamp(Math.min((rect.width-20)/WORLD_W,(rect.height-20)/WORLD_H),MIN_ZOOM,1);
     setCamera({zoom,x:(rect.width-WORLD_W*zoom)/2,y:(rect.height-WORLD_H*zoom)/2});
-  },[constrain]);
+  },[]);
   useEffect(()=>{const el=viewportRef.current;if(!el)return;const ro=new ResizeObserver(fit);ro.observe(el);fit();return()=>ro.disconnect()},[fit]);
 
   const zoomAt=useCallback((nextZoom:number,clientX?:number,clientY?:number)=>{
@@ -58,7 +58,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
       const wx=(px-current.x)/current.zoom,wy=(py-current.y)/current.zoom;
       return constrain({zoom:z,x:px-wx*z,y:py-wy*z});
     });
-  },[]);
+  },[constrain]);
   const onWheel=(event:React.WheelEvent<HTMLDivElement>)=>{event.preventDefault();zoomAt(camera.zoom*(event.deltaY>0?.9:1.1),event.clientX,event.clientY)};
   const onPointerDown=(event:React.PointerEvent<HTMLDivElement>)=>{
     if((event.target as HTMLElement).closest('button,.room-map-controls'))return;
