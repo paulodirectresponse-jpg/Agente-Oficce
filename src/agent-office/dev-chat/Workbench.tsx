@@ -19,6 +19,7 @@ export function Workbench({project,snapshot,runId,liveEvents,contextual=false}:{
   const [previewLogs,setPreviewLogs]=useState<{stdout?:string;stderr?:string;command?:string;url?:string|null}|null>(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null);
+  const [autoPreviewKey,setAutoPreviewKey]=useState('');
 
   const refresh=useCallback(async()=>{
     try{
@@ -34,6 +35,7 @@ export function Workbench({project,snapshot,runId,liveEvents,contextual=false}:{
   useEffect(()=>{setDir('.');setFile(null);setInspection(null);void refresh();const timer=window.setInterval(()=>void refresh(),3000);return()=>window.clearInterval(timer)},[refresh]);
   useEffect(()=>{void api.listWorkspaceFilesV3(project.id,dir).then(setEntries).catch(e=>setError(e instanceof Error?e.message:'Falha ao listar arquivos.'))},[project.id,dir]);
   useEffect(()=>{if(tab==='preview')void api.getPreviewLogsV3(project.id).then(setPreviewLogs).catch(()=>undefined)},[tab,project.id,preview?.updated_at]);
+  useEffect(()=>{const key=preview?.status==='healthy'&&preview.url?preview.id+':'+preview.updated_at:'';if(contextual&&key&&key!==autoPreviewKey){setAutoPreviewKey(key);setTab('preview')}},[contextual,preview?.id,preview?.status,preview?.url,preview?.updated_at,autoPreviewKey]);
 
   const tests=useMemo(()=>(inspection?.tools??[]).filter(x=>/test|build/i.test(x.tool_name)),[inspection]);
   const terminal=useMemo(()=>(inspection?.tools??[]).filter(x=>/shell|command|npm|node|git|deploy|process/i.test(x.tool_name)),[inspection]);
