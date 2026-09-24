@@ -5393,3 +5393,10 @@ textarea {
   .room-map-controls button.wide{display:none}
   .room-navigation-hint{display:none}
 }
+
+
+.room-minimap{position:absolute;z-index:21;right:12px;bottom:12px;width:148px;height:87px;overflow:hidden;border:1px solid rgba(120,170,205,.2);border-radius:8px;background:#c9b79f;box-shadow:0 7px 22px rgba(0,0,0,.22);cursor:crosshair;opacity:.88;transition:opacity 120ms ease,border-color 120ms ease}
+.room-minimap:hover{opacity:1;border-color:rgba(91,190,236,.36)}
+.room-minimap .office-tile-canvas{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;pointer-events:none}
+.room-minimap-viewport{position:absolute;border:1px solid #60c9ee;background:rgba(60,190,230,.08);box-shadow:0 0 0 1px rgba(5,21,31,.35) inset;pointer-events:none}
+@media(max-width:900px){.room-minimap{display:none}}
