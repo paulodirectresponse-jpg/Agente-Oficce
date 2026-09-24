@@ -5400,3 +5400,58 @@ textarea {
 .room-minimap .office-tile-canvas{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;pointer-events:none}
 .room-minimap-viewport{position:absolute;border:1px solid #60c9ee;background:rgba(60,190,230,.08);box-shadow:0 0 0 1px rgba(5,21,31,.35) inset;pointer-events:none}
 @media(max-width:900px){.room-minimap{display:none}}
+
+
+/* =========================================================
+   Block B — navigable Gather-like office polish
+   ========================================================= */
+.room-viewport-shell{cursor:grab!important;touch-action:none;outline:none;background:#b9aa94!important}
+.room-viewport-shell:focus-visible{box-shadow:inset 0 0 0 2px rgba(86,180,231,.34)}
+.room-camera-layer{background:#cbbba4;overflow:hidden}
+.room-camera-layer .office-tile-canvas{z-index:1}
+.room-camera-layer .positioned-stations{position:absolute!important;inset:0!important;display:block!important;z-index:6!important;pointer-events:none!important}
+.room-agent-anchor{position:absolute;width:210px;height:165px;transform:translate(-50%,-50%);pointer-events:auto}
+.room-agent-anchor .room-station{width:100%;height:100%;min-height:0!important;transform:scale(.82);transform-origin:center bottom}
+.room-agent-anchor.anchor-development .room-station{transform:scale(.8)}
+.room-agent-anchor.anchor-operations .room-station{transform:scale(.78)}
+.room-agent-anchor.anchor-research .room-station{transform:scale(.76)}
+.room-agent-anchor.anchor-lead .room-station{transform:scale(.82)}
+.room-agent-anchor .room-status-card{width:178px!important;min-height:39px!important;padding:6px 8px!important}
+.room-agent-anchor .room-status-card strong{font-size:8px!important}.room-agent-anchor .room-status-card small{font-size:7px!important}
+.room-agent-anchor .room-nameplate{width:176px!important;padding:4px 6px!important}.room-agent-anchor .room-nameplate strong{font-size:8px!important}.room-agent-anchor .room-nameplate span{font-size:7px!important}
+.room-agent-anchor .room-desk{height:72px!important}.room-agent-anchor .room-avatar{transform-origin:center bottom}
+.room-agent-anchor .room-station.selected{filter:drop-shadow(0 0 10px rgba(70,200,225,.42)) drop-shadow(0 7px 10px rgba(0,0,0,.18))}
+.room-agent-anchor .room-station:hover{transform:scale(.86)}
+.room-agent-anchor.anchor-research .room-station:hover,.room-agent-anchor.anchor-operations .room-station:hover{transform:scale(.82)}
+.room-agent-anchor .room-station.state-responding .room-status-card,
+.room-agent-anchor .room-station.state-coding .room-status-card,
+.room-agent-anchor .room-station.state-testing .room-status-card,
+.room-agent-anchor .room-station.state-reviewing .room-status-card{
+  border-color:rgba(74,198,224,.34)!important;
+  box-shadow:0 5px 18px rgba(0,0,0,.18),0 0 0 1px rgba(72,194,220,.07)!important
+}
+.room-agent-anchor .room-station.state-error .room-status-card,
+.room-agent-anchor .room-station.state-blocked .room-status-card{border-color:rgba(255,109,130,.42)!important}
+
+.room-map-controls{top:14px!important;right:14px!important;border-color:rgba(110,164,198,.24)!important;background:rgba(5,16,25,.78)!important}
+.room-map-controls button{transition:transform 110ms ease,background 110ms ease,border-color 110ms ease}.room-map-controls button:active{transform:scale(.95)}
+.room-navigation-hint{left:14px!important;bottom:14px!important;background:rgba(5,16,25,.62)!important;color:#7896aa!important}
+.room-minimap{right:14px!important;bottom:14px!important;width:166px!important;height:96px!important;border-color:rgba(108,171,205,.28)!important;background:#cbbba4!important}
+.room-minimap:before{content:"MAPA";position:absolute;z-index:3;left:5px;top:4px;padding:2px 4px;border-radius:3px;background:rgba(8,25,35,.68);color:#9ec4d3;font:700 6px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em}
+.room-minimap-viewport{border-color:#56cdf3!important;background:rgba(65,190,228,.12)!important;box-shadow:0 0 0 1px rgba(4,19,28,.38) inset,0 0 10px rgba(66,197,236,.22)!important}
+
+.room-map{background:#0a151e!important}
+.room-wall{background:linear-gradient(180deg,#1b3144,#102534)!important;border-bottom-color:#35566d!important}
+.room-wall:after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:linear-gradient(90deg,transparent,rgba(102,181,217,.35),transparent)}
+.room-brand strong{letter-spacing:.16em!important}.room-brand span{letter-spacing:.19em!important}
+.room-handoff{min-width:235px!important;justify-content:center!important;border-radius:999px!important;background:rgba(7,24,32,.72)!important}
+
+/* Keep navigation controls above the glass chat, while the office remains the visual focus. */
+.work-v2-sala .room-mode .room-map-controls{z-index:46!important}
+.work-v2-sala .room-mode .room-minimap{z-index:44!important}
+.work-v2-sala .room-mode .room-navigation-hint{z-index:44!important}
+.work-v2-sala .room-mode .office-chat-card{z-index:48!important}
+@media(max-width:1100px){
+  .room-agent-anchor{transform:translate(-50%,-50%) scale(.92)}
+  .room-minimap{width:135px!important;height:78px!important}
+}
