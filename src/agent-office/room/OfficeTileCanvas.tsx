@@ -16,6 +16,21 @@ function tileTexture(ctx:CanvasRenderingContext2D,img:HTMLImageElement|null,t:nu
   }
   ctx.restore();
 }
+function pixelPlant(ctx:CanvasRenderingContext2D,a:OfficeAssets,t:number,x:number,y:number,small=false){
+  if(!crop(ctx,a.decor,small?32:48,48,16,32,t,x,y,1.35))plant(ctx,t,x,y);
+}
+function pixelBookshelf(ctx:CanvasRenderingContext2D,a:OfficeAssets,t:number,x:number,y:number,scale=1){
+  if(!crop(ctx,a.cabinets,0,0,48,64,t,x,y,scale))bookshelf(ctx,t,x,y,3*scale,4*scale);
+}
+function pixelLamp(ctx:CanvasRenderingContext2D,a:OfficeAssets,t:number,x:number,y:number){
+  if(!crop(ctx,a.decor,0,0,16,48,t,x,y,1.18))floorLamp(ctx,t,x,y);
+}
+function pixelPainting(ctx:CanvasRenderingContext2D,a:OfficeAssets,t:number,x:number,y:number){
+  if(!crop(ctx,a.decor,96,48,48,32,t,x,y,1.08))artWall(ctx,t,x,y);
+}
+function pixelClock(ctx:CanvasRenderingContext2D,a:OfficeAssets,t:number,x:number,y:number){
+  crop(ctx,a.decor,0,96,16,16,t,x,y,1.15);
+}
 const COLS=64,ROWS=38;
 function room(ctx:CanvasRenderingContext2D,t:number,r:Rect,fill:string,label:string){
   ctx.fillStyle=fill;ctx.fillRect(r.x*t,r.y*t,r.w*t,r.h*t);
