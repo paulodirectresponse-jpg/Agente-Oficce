@@ -1,5 +1,6 @@
 import type { AssetLayer, AssetRecord } from '../assets/assetRegistry.js';
 import {
+  DEVELOPMENT_V3_APPROVED_BACKGROUND_ID,
   DEVELOPMENT_V3_ASSETS,
   DEVELOPMENT_V3_BOUNDS,
   DEVELOPMENT_V3_LAYER_ORDER,
@@ -19,6 +20,18 @@ function roundedRect(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:n
 
 function assetImage(runtime:LicensedDevelopmentRuntime,id:string){
   return runtime.images.get(id);
+}
+
+function drawApprovedBackdrop(ctx:CanvasRenderingContext2D,runtime:LicensedDevelopmentRuntime){
+  const img=assetImage(runtime,DEVELOPMENT_V3_APPROVED_BACKGROUND_ID);
+  if(!img?.complete||!img.naturalWidth)return false;
+  const b=DEVELOPMENT_V3_BOUNDS;
+  ctx.fillStyle='#061722';ctx.fillRect(0,0,1680,980);
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(img,b.x,b.y,b.width,b.height);
+  ctx.restore();
+  return true;
 }
 
 function drawShadow(ctx:CanvasRenderingContext2D,p:DevelopmentV3Placement,img:HTMLImageElement){
@@ -101,6 +114,7 @@ export function drawDevelopmentV3Layer(
 }
 
 export function drawDevelopmentV3Back(ctx:CanvasRenderingContext2D,runtime:LicensedDevelopmentRuntime,time:number){
+  if(drawApprovedBackdrop(ctx,runtime))return;
   for(const layer of DEVELOPMENT_V3_LAYER_ORDER){
     if(layer==='character'||layer==='furniture_front'||layer==='wall_front'||layer==='fx'||layer==='overlay')continue;
     drawDevelopmentV3Layer(ctx,runtime,layer);
@@ -109,6 +123,7 @@ export function drawDevelopmentV3Back(ctx:CanvasRenderingContext2D,runtime:Licen
 }
 
 export function drawDevelopmentV3Front(ctx:CanvasRenderingContext2D,runtime:LicensedDevelopmentRuntime,time:number){
+  if(assetImage(runtime,DEVELOPMENT_V3_APPROVED_BACKGROUND_ID)?.complete)return;
   drawDevelopmentV3Layer(ctx,runtime,'furniture_front');
   drawDevelopmentV3Layer(ctx,runtime,'wall_front');
   drawLighting(ctx,time);
