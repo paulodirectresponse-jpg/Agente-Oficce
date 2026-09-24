@@ -45,3 +45,11 @@ coverage/
 *.temp
 .tmp/
 .temp/
+
+# Licensed/private office art pipeline
+# Source ZIPs and generated runtime PNGs must never enter the public repository.
+.private-assets/
+licensed-assets/
+public/office-assets/licensed/
+.agent-office/assets/
+.agent-office/asset-import/
