@@ -242,7 +242,7 @@ function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAg
   if(img?.complete&&img.naturalWidth){
     ctx.imageSmoothingEnabled=false;
     if(singleSprite){
-      const targetH=working&&!walking?64:70;
+      const targetH=working&&!walking?50:56;
       const scale=targetH/img.naturalHeight;
       const targetW=img.naturalWidth*scale;
       ctx.drawImage(img,-targetW/2,-targetH+14,targetW,targetH);
