@@ -155,11 +155,20 @@ export function validateDevelopmentV3Registry(registry:Map<string,AssetRecord>){
 }
 
 
+export const DEVELOPMENT_V3_ROOM_SPEC={
+  ...DEVELOPMENT_ROOM_TEMPLATE,
+  id:'development.v3',
+  name:'Development',
+  capacity:6,
+  dimensions:{widthTiles:40,heightTiles:27,tileSize:32},
+  style:{...DEVELOPMENT_ROOM_TEMPLATE.style,theme:'agent-office-premium',accent:'cyan',material:'warm-wood',density:'dense' as const},
+};
+
 export const DEVELOPMENT_V3_ROOM_LAYOUT:RoomLayout={
   schemaVersion:1,
   room:{
     id:'development.v3',
-    spec:DEVELOPMENT_ROOM_TEMPLATE,
+    spec:DEVELOPMENT_V3_ROOM_SPEC,
     origin:{x:DEVELOPMENT_V3_BOUNDS.x,y:DEVELOPMENT_V3_BOUNDS.y},
   },
   placements:DEVELOPMENT_V3_PLACEMENTS.map(p=>({
