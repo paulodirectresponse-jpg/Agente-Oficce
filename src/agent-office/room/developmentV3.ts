@@ -2,7 +2,8 @@ import type { AssetLayer, AssetRecord } from '../assets/assetRegistry.js';
 import type { RoomLayout } from '../assets/officeSpec.js';
 import { DEVELOPMENT_ROOM_TEMPLATE } from '../assets/roomSpec.js';
 
-export const DEVELOPMENT_V3_BOUNDS={x:210,y:54,width:1260,height:850};
+export const DEVELOPMENT_V3_APPROVED_BACKGROUND_ID='scene.development.approved.v1';
+export const DEVELOPMENT_V3_BOUNDS={x:236,y:36,width:1188,height:891};
 
 export const DEVELOPMENT_V3_AGENT_SPRITES=[
   {idle:'character.01.manager.navy.front.idle.c6dc34cd78',working:'character.01.manager.navy.right.seated.working.646715397d'},
@@ -73,21 +74,22 @@ export const DEVELOPMENT_V3_ZONES={
   circulation:{x:570,y:665,width:420,height:160},
 } as const;
 
+// Coordinates are pinned to the approved 1448x1086 art, scaled into the runtime world.
 export const DEVELOPMENT_V3_WORKSTATIONS=[
-  {id:'ws-1',x:585,y:405,agentX:585,agentY:438},
-  {id:'ws-2',x:755,y:405,agentX:755,agentY:438},
-  {id:'ws-3',x:925,y:405,agentX:925,agentY:438},
-  {id:'ws-4',x:585,y:580,agentX:585,agentY:613},
-  {id:'ws-5',x:755,y:580,agentX:755,agentY:613},
-  {id:'ws-6',x:925,y:580,agentX:925,agentY:613},
+  {id:'ws-1',x:683,y:326,agentX:683,agentY:334},
+  {id:'ws-2',x:826,y:326,agentX:826,agentY:334},
+  {id:'ws-3',x:966,y:326,agentX:966,agentY:334},
+  {id:'ws-4',x:683,y:552,agentX:683,agentY:558},
+  {id:'ws-5',x:826,y:552,agentX:826,agentY:558},
+  {id:'ws-6',x:966,y:552,agentX:966,agentY:558},
 ] as const;
 
 export const DEVELOPMENT_V3_BEHAVIOR={
-  planning:{x:1120,y:310},
-  review:{x:1165,y:575},
-  waiting:{x:430,y:735},
-  lounge:{x:455,y:770},
-  entry:{x:840,y:845},
+  planning:{x:900,y:245},
+  review:{x:1190,y:545},
+  waiting:{x:474,y:716},
+  lounge:{x:488,y:748},
+  entry:{x:977,y:818},
 } as const;
 
 export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
@@ -170,7 +172,12 @@ export const DEVELOPMENT_V3_LAYER_ORDER:AssetLayer[]=[
 ];
 
 export function requiredDevelopmentV3AssetIds(){
-  return [...new Set([...DEVELOPMENT_V3_PLACEMENTS.map(p=>p.assetId),DEVELOPMENT_V3_ASSETS.floor,...DEVELOPMENT_V3_AGENT_SPRITES.flatMap(s=>[s.idle,s.working])])];
+  return [...new Set([
+    DEVELOPMENT_V3_APPROVED_BACKGROUND_ID,
+    ...DEVELOPMENT_V3_PLACEMENTS.map(p=>p.assetId),
+    DEVELOPMENT_V3_ASSETS.floor,
+    ...DEVELOPMENT_V3_AGENT_SPRITES.flatMap(s=>[s.idle,s.working]),
+  ])];
 }
 
 export function validateDevelopmentV3Registry(registry:Map<string,AssetRecord>){
@@ -184,7 +191,7 @@ export const DEVELOPMENT_V3_ROOM_SPEC={
   id:'development.v3',
   name:'Development',
   capacity:6,
-  dimensions:{widthTiles:40,heightTiles:27,tileSize:32},
+  dimensions:{widthTiles:38,heightTiles:28,tileSize:32},
   style:{...DEVELOPMENT_ROOM_TEMPLATE.style,theme:'agent-office-premium',accent:'cyan',material:'warm-wood',density:'dense' as const},
 };
 
