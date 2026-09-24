@@ -15,14 +15,15 @@ roomAssetRouter.get('/room-assets/status',(_req,res)=>{
   const root=assetRoot();
   const registry=path.join(root,'registry.json');
   const files=path.join(root,'files');
+  const calibration=path.join(root,'calibration.json');
   res.json({
     ok:true,
     data:{
-      installed:fs.existsSync(registry)&&fs.existsSync(files),
+      installed:fs.existsSync(registry)&&fs.existsSync(files)&&fs.existsSync(calibration),
       root,
       registry_exists:fs.existsSync(registry),
       files_exists:fs.existsSync(files),
-      calibration_exists:fs.existsSync(path.join(root,'calibration.json')),
+      calibration_exists:fs.existsSync(calibration),
     },
   });
 });
