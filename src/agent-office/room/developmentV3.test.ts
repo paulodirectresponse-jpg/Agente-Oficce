@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AssetRecord } from '../assets/assetRegistry.js';
 import {
+  DEVELOPMENT_V3_APPROVED_BACKGROUND_ID,
   DEVELOPMENT_V3_ASSETS,
+  DEVELOPMENT_V3_BOUNDS,
   DEVELOPMENT_V3_PLACEMENTS,
   DEVELOPMENT_V3_WORKSTATIONS,
   requiredDevelopmentV3AssetIds,
@@ -43,13 +45,18 @@ describe('Development V3 layout',()=>{
   it('declares every licensed asset dependency explicitly',()=>{
     const ids=requiredDevelopmentV3AssetIds();
     expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain(DEVELOPMENT_V3_APPROVED_BACKGROUND_ID);
     expect(ids).toContain(DEVELOPMENT_V3_ASSETS.floor);
     expect(ids).toContain(DEVELOPMENT_V3_ASSETS.workstation);
     expect(ids).toContain(DEVELOPMENT_V3_ASSETS.loungeTable);
     expect(ids).toContain(DEVELOPMENT_V3_ASSETS.meetingGlassV);
   });
 
-  it('fails safely when a private licensed asset is unavailable',()=>{
+  it('pins the runtime to the approved 4:3 composition without distortion',()=>{
+    expect(DEVELOPMENT_V3_BOUNDS.width/DEVELOPMENT_V3_BOUNDS.height).toBeCloseTo(1448/1086,3);
+  });
+
+  it('fails safely when the approved backdrop or a licensed asset is unavailable',()=>{
     const ids=requiredDevelopmentV3AssetIds();
     const registry=new Map(ids.slice(1).map(id=>[id,record(id)]));
     const gate=validateDevelopmentV3Registry(registry);
