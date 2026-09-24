@@ -1,5 +1,6 @@
 import type { AgentProfile, AgentState, UniversalProvider } from '../types.js';
 import { AgentStation } from './AgentStation.js';
+import { OfficeTileCanvas } from './OfficeTileCanvas.js';
 import type { RoomAgentView, RoomVisualState, StationKind } from './roomTypes.js';
 
 const STATE_LABELS:Record<RoomVisualState,string>={offline:'Offline',idle:'Disponível',resting:'Em espera',thinking:'Pensando',planning:'Planejando',responding:'Respondendo',coding:'Programando',testing:'Testando',reviewing:'Revisando',waiting:'Aguardando',blocked:'Bloqueado',error:'Erro',paused:'Pausado',completed:'Concluído recentemente'};
@@ -16,64 +17,12 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
       <div className="room-brand"><strong>AGENT OFFICE</strong><span>operational workspace</span></div>
       <div className="room-clock">AO</div>
     </div>
-    <div className="room-floor">
-      <div className="room-wall-segment wall-left"/>
-      <div className="room-wall-segment wall-top-left"/>
-      <div className="room-wall-segment wall-top-right"/>
-      <div className="room-wall-segment wall-right"/>
-      <div className="room-corridor"><span>main corridor</span></div>
-
-      <div className="room-zone zone-project">
-        <span className="room-zone-label">Projeto</span>
-        <div className="project-board"><i/><i/><i/></div>
-        <div className="project-table"><span/><span/><span/></div>
-        <div className="room-pinboard"><i/><i/><i/><i/></div>
-      </div>
-
-      <div className="room-zone zone-kitchen">
-        <span className="room-zone-label">Café</span>
-        <div className="room-counter"><i/><i/><i/></div>
-        <div className="room-fridge"/>
-        <div className="room-coffee"><span/></div>
-        <div className="room-bar-stools"><i/><i/></div>
-      </div>
-
-      <div className="room-zone zone-meeting">
-        <span className="room-zone-label">Reunião</span>
-        <div className="meeting-table"><i/><i/><i/><i/></div>
-        <div className="room-tv"><i/></div>
-      </div>
-
-      <div className="room-zone zone-lounge">
-        <span className="room-zone-label">Lounge</span>
-        <div className="lounge-sofa"><i/><i/><i/></div>
-        <div className="lounge-rug"/>
-        <div className="coffee-table"/>
-        <div className="room-floor-lamp"/>
-      </div>
-
-      <div className="room-zone zone-library">
-        <span className="room-zone-label">Pesquisa</span>
-        <div className="room-bookshelf">{Array.from({length:12}).map((_,i)=><i key={i}/>)}</div>
-        <div className="room-reading-chair"/>
-        <div className="room-side-table"/>
-      </div>
-
-      <div className="room-zone zone-server">
-        <span className="room-zone-label">Infra</span>
-        <div className="room-server-rack"><i/><i/><i/><i/></div>
-        <div className="room-server-rack second"><i/><i/><i/><i/></div>
-      </div>
-
-      <div className="room-ops-board"><strong>Operações</strong><span/><span/><span/></div>
-      <div className="room-plant plant-left"/><div className="room-plant plant-mid"/><div className="room-plant plant-right"/>
-      <div className="room-rug-openoffice"/>
-
-      <div className={'room-stations count-'+Math.min(views.length,12)}>
+    <div className="room-floor room-canvas-floor">
+      <OfficeTileCanvas/>
+      <div className={'room-stations canvas-stations count-'+Math.min(views.length,12)}>
         {views.map(agent=><AgentStation key={agent.id} agent={agent} onSelect={()=>onTarget(agent.selected?'auto':agent.id)}/>)}
         {!views.length&&<div className="room-empty"><strong>Nenhum Agent disponível</strong><span>Crie ou habilite um Agent para ocupar o escritório.</span></div>}
       </div>
-
       <div className="room-handoff">{lastHandoff?<><span>{lastHandoff.from}</span><i>→</i><span>{lastHandoff.to}</span></>:<><b/><span>Contexto compartilhado e handoffs ao vivo</span></>}</div>
     </div>
   </div>;
