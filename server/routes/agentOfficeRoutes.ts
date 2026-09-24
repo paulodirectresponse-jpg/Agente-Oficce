@@ -27,6 +27,7 @@ import { v3IntegrationRouter } from './v3IntegrationRoutes.js';
 import { resourceRouter } from './resourceRoutes.js';
 import { ResourceService } from '../agent-office/resourceService.js';
 import { voiceRouter } from './voiceRoutes.js';
+import { roomAssetRouter } from './roomAssetRoutes.js';
 
 export const agentOfficeRouter = Router();
 
@@ -46,6 +47,7 @@ agentOfficeRouter.use('/agent-office/v3', v3IntegrationRouter);
 agentOfficeRouter.use('/agent-office/chat', chatRouter);
 agentOfficeRouter.use('/agent-office', resourceRouter);
 agentOfficeRouter.use('/agent-office', voiceRouter);
+agentOfficeRouter.use('/agent-office', roomAssetRouter);
 
 // Health check - validates local SQLite foundation
 agentOfficeRouter.get('/agent-office/health', (_request, response) => {
