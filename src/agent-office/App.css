@@ -5064,3 +5064,119 @@ textarea {
 .voice-input-error{position:absolute;right:0;bottom:44px;z-index:20;width:280px;padding:8px 10px;border:1px solid rgba(174,57,57,.2);border-radius:10px;background:#fff8f7;color:#8b2929;font-size:11px;box-shadow:0 8px 28px rgba(22,24,29,.12)}
 @keyframes voicePulse{0%,100%{transform:scale(.85);opacity:.5}50%{transform:scale(1.3);opacity:1}}
 @keyframes voiceSpin{to{transform:rotate(360deg)}}
+
+
+/* =========================================================
+   Release polish — unified palette, command UX and rich room
+   ========================================================= */
+:root{
+  --ao-bg:#071019;
+  --ao-bg-soft:#091521;
+  --ao-surface:#0b1622;
+  --ao-surface-2:#0f1d2b;
+  --ao-surface-3:#132436;
+  --ao-border:rgba(127,165,202,.17);
+  --ao-border-strong:rgba(92,176,255,.31);
+  --ao-text:#edf7ff;
+  --ao-text-soft:#b8c8d9;
+  --ao-muted:#7189a2;
+  --ao-accent:#3aa8ff;
+  --ao-accent-2:#43d7c8;
+}
+.work-v2-shell,.team-v2-shell,.settings-v2-shell,.connections-v2-shell{background:var(--ao-bg);color:var(--ao-text)}
+.work-v2-header,.work-v2-composer,.work-v2-inspector,.v2-drawer,.knowledge-list>div,.team-v2-callout{border-color:var(--ao-border)!important}
+.work-v2-conversation,.work-v2-inspector,.work-v2-inspector .dev-workbench-tabs,.work-v2-composer{background:var(--ao-bg-soft)!important}
+.work-v2-message-body,.work-v2-queued,.work-v2-step,.work-v2-worker-list>div,.work-v2-run-list button{background:var(--ao-surface)!important;border-color:var(--ao-border)!important}
+.work-v2-message.user .work-v2-message-body{background:rgba(31,91,151,.15)!important;border-color:rgba(58,168,255,.22)!important}
+.work-v2-file-button,.voice-input-button,.v2-quiet-button,.work-v2-composer-actions select{background:var(--ao-surface-2)!important;border-color:var(--ao-border)!important;color:var(--ao-text-soft)!important}
+.work-v2-error,.office-inline-error{background:rgba(120,30,45,.2)!important;border-color:rgba(255,109,130,.28)!important}
+
+.composer-input-wrap{position:relative;min-width:0;width:100%}
+.composer-input-wrap>textarea{display:block}
+.composer-command-hints{position:absolute;z-index:80;left:6px;bottom:calc(100% + 6px);width:min(420px,calc(100% - 12px));padding:5px;border:1px solid var(--ao-border-strong);border-radius:10px;background:rgba(8,18,29,.97);box-shadow:0 18px 46px rgba(0,0,0,.38);backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:3px}
+.composer-command-hints button{min-height:38px;border:0;border-radius:7px;background:transparent;color:var(--ao-text);display:grid;grid-template-columns:110px minmax(0,1fr);align-items:center;gap:9px;padding:5px 8px;text-align:left;cursor:pointer}
+.composer-command-hints button:hover{background:rgba(58,168,255,.1)}
+.composer-command-hints strong{color:#8fd0ff;font-size:10px}.composer-command-hints span{color:var(--ao-muted);font-size:9px}
+
+.work-v2-inline-plan{margin:9px 0 11px;padding:9px 10px;border:1px solid var(--ao-border);border-radius:10px;background:linear-gradient(180deg,rgba(16,34,51,.9),rgba(9,20,31,.92))}
+.work-v2-inline-plan-head{display:flex;align-items:center;justify-content:space-between;color:var(--ao-muted);font-size:9px;margin-bottom:7px}.work-v2-inline-plan-head strong{color:var(--ao-text-soft);font-size:10px}
+.work-v2-inline-plan-steps{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.inline-step{min-width:118px;max-width:180px;display:flex;align-items:center;gap:6px;padding:6px 7px;border:1px solid rgba(128,160,192,.12);border-radius:7px;background:rgba(255,255,255,.018);color:#6f879f}
+.inline-step span{color:#617b92}.inline-step strong{font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inline-step.completed{color:#8bbda8;border-color:rgba(77,231,157,.18);background:rgba(77,231,157,.045)}.inline-step.completed span{color:var(--ao-green)}
+.inline-step.running{color:#b9ddff;border-color:rgba(58,168,255,.32);background:rgba(58,168,255,.08)}.inline-step.running span{color:var(--ao-accent);animation:ao-pulse-dot 1.5s ease-in-out infinite}
+.inline-step.failed,.inline-step.blocked{border-color:rgba(255,109,130,.3);color:#e49aa6}.inline-step.failed span,.inline-step.blocked span{color:var(--ao-danger)}
+.room-inline-plan{margin:0 10px 6px;padding:7px 9px;border:1px solid var(--ao-border);border-radius:8px;background:rgba(8,18,28,.78);display:grid;grid-template-columns:auto minmax(110px,1fr) auto;align-items:center;gap:9px}
+.room-inline-plan>div:first-child{display:flex;align-items:center;gap:7px;font-size:8px}.room-inline-plan>div:first-child strong{font-size:9px}.room-inline-plan>div:first-child span,.room-inline-plan small{color:var(--ao-muted);font-size:8px}
+.room-inline-plan-track{display:flex;gap:4px;align-items:center}.room-inline-plan-track span{width:18px;height:18px;display:grid;place-items:center;border-radius:50%;border:1px solid rgba(127,165,202,.18);color:#60778e;background:#101d29;font-size:8px}.room-inline-plan-track span.completed{color:#71e0aa;border-color:rgba(77,231,157,.25);background:rgba(77,231,157,.08)}.room-inline-plan-track span.running{color:#82caff;border-color:rgba(58,168,255,.36);background:rgba(58,168,255,.1)}
+
+/* Rich 2D office: multi-room, denser and more Gather-like */
+.room-map{height:100%;min-height:430px;grid-template-rows:64px minmax(0,1fr);border-color:rgba(77,125,168,.34);border-radius:12px;background:#0e1822;box-shadow:0 20px 55px rgba(0,0,0,.28)}
+.room-wall{background:linear-gradient(180deg,#172a3d,#102131);border-bottom:5px solid #28445d}
+.room-brand strong{color:#e5f4ff;font-size:12px}.room-brand span{color:#6f96b5}
+.room-window{left:18px;top:11px;width:106px;height:37px;border-color:#37556e;background:#08131c}.room-window span{background:linear-gradient(180deg,#71b4cf,#2c617b)}
+.room-clock{right:20px;top:13px;border-color:#56768a;background:#d9e1df;color:#324b5c}
+.room-floor{background:
+  linear-gradient(rgba(13,36,52,.035),rgba(13,36,52,.035)),
+  repeating-linear-gradient(90deg,rgba(83,74,65,.12) 0 1px,transparent 1px 34px),
+  repeating-linear-gradient(0deg,rgba(83,74,65,.1) 0 1px,transparent 1px 34px),
+  #c9b69e;
+}
+.room-floor:after{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(49,43,38,.05));z-index:0}
+.room-wall-segment{position:absolute;z-index:2;background:#344a59;box-shadow:0 3px 0 #233845,inset 0 1px rgba(255,255,255,.12)}
+.wall-left{left:20.7%;top:0;bottom:0;width:7px}.wall-right{right:20.7%;top:0;bottom:0;width:7px}
+.wall-top-left{left:0;top:31.5%;width:20.8%;height:7px}.wall-top-right{right:0;top:30%;width:20.8%;height:7px}
+.room-corridor{position:absolute;z-index:1;left:21.2%;right:21.2%;bottom:0;height:10%;border-top:2px solid rgba(63,82,94,.18);background:repeating-linear-gradient(90deg,rgba(69,92,105,.06) 0 30px,rgba(255,255,255,.04) 30px 31px)}
+.room-corridor span{position:absolute;right:9px;bottom:6px;color:rgba(53,73,85,.42);font-size:6px;letter-spacing:.16em;text-transform:uppercase}
+.room-zone{border:1px solid rgba(49,68,78,.22);border-radius:5px;background:rgba(238,229,214,.28);box-shadow:0 5px 14px rgba(47,35,26,.06);overflow:hidden}
+.room-zone-label{top:6px;left:7px;color:rgba(44,61,69,.58);font-size:6px;letter-spacing:.11em}
+.zone-project{left:1.4%;top:2.5%;width:18.5%;height:27%}
+.zone-kitchen{left:1.4%;bottom:2.4%;width:18.5%;height:29%;background:rgba(203,219,211,.31)}
+.zone-meeting{right:1.4%;top:2.5%;width:18.5%;height:26%;background:rgba(188,211,220,.26)}
+.zone-lounge{right:1.4%;bottom:2.4%;width:18.5%;height:32%;background:rgba(201,190,211,.25)}
+.zone-library{left:22.4%;bottom:2.7%;width:13.8%;height:20%;background:rgba(190,205,193,.28)}
+.zone-server{right:22.4%;top:2.7%;width:10.5%;height:19%;background:rgba(166,191,205,.22)}
+.project-board{left:10%;top:22%;width:80%;height:34%;border:4px solid #6c5848;background:#e0ddd2;padding:6px}
+.project-board i{background:#ddb85e;box-shadow:17px 10px 0 #91b9c8}
+.project-table{left:25%;bottom:8%;width:50%;height:27%;background:#806149}
+.room-pinboard{position:absolute;right:6%;bottom:8%;width:23%;height:26%;display:grid;grid-template-columns:repeat(2,1fr);gap:2px;padding:3px;background:#baa27f;border:2px solid #765f47}.room-pinboard i{background:#e5c466}.room-pinboard i:nth-child(2n){background:#8bb7c7}.room-pinboard i:nth-child(3n){background:#d98f7e}
+.room-counter{position:absolute;left:9%;right:9%;bottom:15%;height:19%;background:#698481;border-top:5px solid #8da59d;display:flex;gap:8px;padding:4px 9px}.room-counter i{flex:1;background:#4f6968;border-radius:2px}
+.room-fridge{position:absolute;left:9%;top:22%;width:28%;height:37%;background:#9bb2b0;border:3px solid #5f7677;box-shadow:inset 0 -17px rgba(255,255,255,.08)}.room-fridge:after{content:"";position:absolute;left:4px;right:4px;top:47%;height:2px;background:#657c7d}
+.room-coffee{position:absolute;right:13%;top:28%;width:24%;height:25%;background:#2d4650;border-radius:3px}.room-coffee:before{content:"";position:absolute;left:21%;right:21%;top:20%;height:28%;background:#89c5cc}.room-coffee span{position:absolute;left:35%;bottom:-8px;width:30%;height:9px;border-radius:0 0 4px 4px;background:#d7d0bd}
+.room-bar-stools i{position:absolute;bottom:4%;width:17px;height:17px;border-radius:50%;background:#587279;box-shadow:0 5px 0 #354b53}.room-bar-stools i:first-child{left:34%}.room-bar-stools i:last-child{right:28%}
+.meeting-table{left:20%;top:26%;width:60%;height:45%;background:#6e5848}.meeting-table i{background:#294858}
+.room-tv{position:absolute;right:5%;top:9%;width:29%;height:17%;border:3px solid #3a505d;background:#17384b}.room-tv i{position:absolute;left:8%;right:8%;top:25%;height:2px;background:#5ec1d2;box-shadow:0 6px 0 #416a8c}
+.lounge-sofa{left:10%;top:25%;width:78%;height:30%;background:#3d5874}.lounge-sofa i{background:#587797}.lounge-rug{left:14%;bottom:7%;width:70%;height:34%;background:repeating-linear-gradient(90deg,#69657a 0 8px,#77748a 8px 16px)}.coffee-table{background:#8b6b50}
+.room-floor-lamp{position:absolute;right:8%;top:21%;width:5px;height:44%;background:#5b5b55}.room-floor-lamp:before{content:"";position:absolute;left:-9px;top:-8px;width:23px;height:14px;border-radius:50% 50% 3px 3px;background:#c9ad6a}
+.room-bookshelf{position:absolute;left:7%;top:21%;width:45%;height:60%;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:2px;padding:5px;border:4px solid #695741;background:#8c7457}.room-bookshelf i{background:#507c7d}.room-bookshelf i:nth-child(3n){background:#c69158}.room-bookshelf i:nth-child(4n){background:#8a5861}
+.room-reading-chair{position:absolute;right:10%;bottom:18%;width:34%;height:35%;border-radius:10px 10px 4px 4px;background:#566f75;box-shadow:0 5px 0 #3b5057}.room-side-table{position:absolute;right:4%;bottom:8%;width:22%;height:11%;border-radius:50%;background:#84674d}
+.room-server-rack{position:absolute;left:9%;top:23%;width:35%;height:61%;padding:5px;background:#243744;border:3px solid #425b69;display:flex;flex-direction:column;gap:4px}.room-server-rack.second{left:auto;right:9%}.room-server-rack i{flex:1;background:linear-gradient(90deg,#284e62,#162c38);border:1px solid #496d7d}.room-server-rack i:after{content:"";float:right;width:4px;height:4px;margin:4px;border-radius:50%;background:#5be0a1}
+.room-ops-board{left:22.6%;top:3%;bottom:auto;width:13%;height:17%;padding:8px;border:4px solid #3e5562;background:#142b3a}.room-ops-board strong{color:#9dd6e8}.room-ops-board span{height:5px;margin:4px 0;background:linear-gradient(90deg,#48a9c7 0 70%,transparent 70%)}
+.room-rug-openoffice{position:absolute;z-index:1;left:38%;right:35%;top:13%;bottom:18%;border-radius:8px;background:repeating-linear-gradient(45deg,rgba(68,112,132,.08) 0 12px,rgba(255,255,255,.035) 12px 24px)}
+.plant-left{left:19.8%;top:37%}.plant-mid{left:36.5%;bottom:5%}.plant-right{right:19.8%;bottom:39%}
+.room-stations{left:36.5%;right:33.5%;top:6%;bottom:11%;grid-template-columns:repeat(2,minmax(145px,1fr));grid-auto-rows:minmax(155px,1fr);gap:12px;align-content:center}
+.room-stations.count-1{left:41%;right:38%;top:23%;bottom:24%;grid-template-columns:1fr}
+.room-stations.count-2{left:37%;right:34%;top:18%;bottom:20%;grid-template-columns:repeat(2,1fr)}
+.room-stations.count-3{left:36%;right:33%;grid-template-columns:repeat(2,1fr)}
+.room-stations.count-4{grid-template-columns:repeat(2,1fr)}
+.room-stations.count-5,.room-stations.count-6{left:35%;right:32%;grid-template-columns:repeat(3,minmax(105px,1fr));grid-auto-rows:1fr}
+.room-station{min-height:135px;padding-top:25px}
+.room-status-card{width:min(165px,96%);background:rgba(236,243,241,.96);border-color:rgba(39,77,92,.2);box-shadow:0 4px 10px rgba(52,43,34,.13)}
+.room-desk{bottom:17px;height:81px}.room-desk-top{background:#725840;box-shadow:0 5px 0 #513d2e,0 10px 15px rgba(57,40,25,.2)}
+.room-monitor{border-color:#263d49;background:#14394a}.room-monitor i{background:repeating-linear-gradient(0deg,#4ab4c9 0 2px,transparent 2px 6px)}
+.room-nameplate{background:rgba(34,51,59,.88)!important;border-color:rgba(255,255,255,.1)!important}.room-nameplate strong{color:#e4eef0!important}.room-nameplate span{color:#9db0b7!important}
+.room-handoff{z-index:10;bottom:1.6%;background:rgba(15,35,46,.82);border:1px solid rgba(68,184,194,.22);color:#9bc4cc;backdrop-filter:blur(9px)}
+
+/* Sala uses the office as the canvas and floats the chat over it */
+.work-v2-sala{padding:0!important;overflow:hidden!important;background:var(--ao-bg)!important}
+.work-v2-sala>.office-page{max-width:none!important;width:100%;height:100%;margin:0!important}
+.work-v2-sala .experience-grid.room-mode{position:relative!important;display:block!important;width:100%;height:100%;min-height:0;background:var(--ao-bg)!important}
+.work-v2-sala .room-mode .experience-center{position:relative;width:100%;height:100%;padding:0!important;border:0!important;overflow:hidden!important}
+.work-v2-sala .room-mode .office-topbar{position:absolute;z-index:45;top:12px;left:50%;transform:translateX(-50%);width:min(860px,calc(100% - 36px));min-height:48px;margin:0;padding:5px 10px;border:1px solid rgba(127,165,202,.16);border-radius:11px;background:rgba(7,17,27,.72);backdrop-filter:blur(15px);box-shadow:0 12px 34px rgba(0,0,0,.24)}
+.work-v2-sala .room-mode .office-topbar h1{font-size:13px}.work-v2-sala .room-mode .office-topbar p{display:none}.work-v2-sala .room-mode .office-kicker{font-size:7px}
+.work-v2-sala .room-mode .room-map{position:absolute;inset:0;border:0;border-radius:0;min-height:0}
+.work-v2-sala .room-mode .office-chat-card{position:absolute;z-index:50;left:50%;bottom:14px;transform:translateX(-50%);width:min(820px,calc(100% - 34px));margin:0;border-color:rgba(120,176,220,.23);background:linear-gradient(180deg,rgba(8,19,30,.76),rgba(6,15,24,.83));backdrop-filter:blur(18px) saturate(125%);box-shadow:0 18px 48px rgba(0,0,0,.32)}
+.work-v2-sala .room-mode .chat-header{min-height:36px;background:rgba(8,18,29,.3)}.work-v2-sala .room-mode .chat-transcript{min-height:42px;max-height:145px;background:transparent}.work-v2-sala .room-mode .chat-composer{background:rgba(5,14,23,.24)}
+.work-v2-sala .room-mode .chat-message-body{background:rgba(9,23,35,.64);backdrop-filter:blur(8px)}
+.work-v2-sala .room-mode .chat-composer textarea{background:rgba(7,18,29,.72)}
+.work-v2-sala .room-mode .activity-rail{display:none!important}
