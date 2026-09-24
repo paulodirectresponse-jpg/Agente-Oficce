@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomAgentView, StationKind } from './roomTypes.js';
 import type { AssetRecord } from '../assets/assetRegistry.js';
 import {
+  DEVELOPMENT_V3_AGENT_SPRITES,
   DEVELOPMENT_V3_BEHAVIOR,
   DEVELOPMENT_V3_BOUNDS,
   DEVELOPMENT_V3_WORKSTATIONS,
@@ -227,7 +228,7 @@ function drawWorld(ctx:CanvasRenderingContext2D,time:number,images?:Map<string,H
     cropAsset(ctx,decor,0,96,16,16,330,34,1.2);
   }
 }
-function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAgent,img:HTMLImageElement|undefined,time:number,selected:boolean){
+function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAgent,img:HTMLImageElement|undefined,time:number,selected:boolean,singleSprite=false){
   const working=isWorking(agent.state),walking=Math.hypot(rt.tx-rt.x,rt.ty-rt.y)>3;
   const bob=walking?Math.sin(time/95+rt.phase)*3:working?Math.sin(time/180+rt.phase)*1.5:Math.sin(time/420+rt.phase)*.8;
   ctx.save();ctx.translate(rt.x,rt.y+bob);
@@ -238,10 +239,17 @@ function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAg
   if(selected){ctx.strokeStyle='#69d4e7';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(0,14,24,12,0,0,Math.PI*2);ctx.stroke()}
 
   if(img?.complete&&img.naturalWidth){
-    const frames=Math.max(1,Math.floor(img.naturalWidth/32));
-    const frame=walking?Math.floor(time/110+rt.phase)%Math.min(frames,6):Math.floor(time/420+rt.phase)%Math.min(frames,6);
     ctx.imageSmoothingEnabled=false;
-    ctx.drawImage(img,frame*32,0,32,32,-24,-42,48,48);
+    if(singleSprite){
+      const targetH=working&&!walking?64:70;
+      const scale=targetH/img.naturalHeight;
+      const targetW=img.naturalWidth*scale;
+      ctx.drawImage(img,-targetW/2,-targetH+14,targetW,targetH);
+    }else{
+      const frames=Math.max(1,Math.floor(img.naturalWidth/32));
+      const frame=walking?Math.floor(time/110+rt.phase)%Math.min(frames,6):Math.floor(time/420+rt.phase)%Math.min(frames,6);
+      ctx.drawImage(img,frame*32,0,32,32,-24,-42,48,48);
+    }
   }else{
     ctx.fillStyle='#385e78';ctx.fillRect(-12,-29,24,32);ctx.fillStyle='#d3b18d';ctx.beginPath();ctx.arc(0,-35,10,0,Math.PI*2);ctx.fill();
   }
@@ -391,7 +399,14 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
         const agent=byId.get(rt.id);if(!agent)continue;
         const dx=rt.tx-rt.x,dy=rt.ty-rt.y,dist=Math.hypot(dx,dy);
         if(dist>1){const speed=agent.state==='offline'?80:190;const step=Math.min(dist,speed*dt);rt.x+=dx/dist*step;rt.y+=dy/dist*step;if(dist<5)rt.spawnDone=true}
-        drawAgent(ctx,agent,rt,imagesRef.current.get(agent.station),time,agent.selected);
+        let agentImage=imagesRef.current.get(agent.station),singleSprite=false;
+        if(v3Ready&&licensed&&agent.station==='development'){
+          const sprite=DEVELOPMENT_V3_AGENT_SPRITES[hash(agent.id)%DEVELOPMENT_V3_AGENT_SPRITES.length];
+          const spriteId=isWorking(agent.state)?sprite.working:sprite.idle;
+          agentImage=licensed.images.get(spriteId)??agentImage;
+          singleSprite=Boolean(licensed.images.get(spriteId));
+        }
+        drawAgent(ctx,agent,rt,agentImage,time,agent.selected,singleSprite);
       }
       if(v3Ready&&licensed)drawDevelopmentV3Front(ctx,licensed,time);
 
