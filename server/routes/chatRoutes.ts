@@ -10,6 +10,7 @@ import { OrchestratorGateway } from '../agent-office/orchestratorGateway.js';
 import { UniversalOrchestratorLLM } from '../agent-office/orchestratorRuntime.js';
 import { TeamService } from '../agent-office/teamService.js';
 import { WorkspaceService } from '../agent-office/workspaceService.js';
+import { LongRunService, shouldUseLongRun } from '../agent-office/longRunService.js';
 
 export const chatRouter = Router();
 
@@ -103,6 +104,28 @@ chatRouter.post('/runs', async (request, response) => {
     const workforceId = decision.target_mode === 'dynamic_team' ? decision.target_team_id : undefined;
     if (workforceId) new TeamService(database.connection).bindWorkforceToChat(workforceId, prepared.run.id);
     const signal = chatRunControls.register(prepared.run.id);
+    const longRunning = shouldUseLongRun(message, decision);
+    if (longRunning) {
+      const durable = new LongRunService(database.connection);
+      const created = durable.create(prepared, orchestration, message);
+      void durable.run(created.plan.id, prepared.run.id, signal)
+        .catch(() => undefined)
+        .finally(() => {
+          try {
+            if (workforceId) {
+              const run = new ChatRunRepository(database.connection).get(prepared.run.id);
+              const terminal = run?.status === 'completed' ? 'completed' : run?.status === 'cancelled' ? 'cancelled' : 'failed';
+              new TeamService(database.connection).finishWorkforce(workforceId, terminal);
+            }
+          } finally {
+            chatRunControls.finish(prepared.run.id);
+            database.connection.close();
+          }
+        });
+      response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id, execution_plan_id: created.plan.id, long_running: true } });
+      return;
+    }
+
     void service.execute(prepared, signal)
       .catch(() => undefined)
       .finally(() => {
@@ -118,7 +141,7 @@ chatRouter.post('/runs', async (request, response) => {
         }
       });
 
-    response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id } });
+    response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id, long_running: false } });
   } catch (error) {
     database.connection.close();
     const code = codeOf(error, 'CHAT_RUN_START_FAILED');
