@@ -4,7 +4,19 @@ import { AgentStation } from './AgentStation.js';
 import { OfficeTileCanvas } from './OfficeTileCanvas.js';
 import type { RoomAgentView, RoomVisualState, StationKind } from './roomTypes.js';
 
-const WORLD_W=1680,WORLD_H=980,MIN_ZOOM=.42,MAX_ZOOM=1.7;
+const WORLD_W=1680,WORLD_H=980,MIN_ZOOM=.42,MAX_ZOOM=1.9;
+const STATION_POSITIONS:Record<StationKind,Array<[number,number]>>={
+  development:[[690,300],[930,300],[690,465],[930,465],[810,382]],
+  operations:[[1160,350],[1160,500],[1040,420],[1270,430]],
+  research:[[410,700],[540,700],[470,815]],
+  lead:[[900,690],[1040,690],[970,815]],
+};
+function stationPosition(agent:RoomAgentView,index:number){
+  const positions=STATION_POSITIONS[agent.station]??STATION_POSITIONS.operations;
+  const base=positions[index%positions.length];
+  const cycle=Math.floor(index/positions.length);
+  return{x:base[0]+cycle*34,y:base[1]+cycle*28};
+}
 const STATE_LABELS:Record<RoomVisualState,string>={offline:'Offline',idle:'Disponível',resting:'Em espera',thinking:'Pensando',planning:'Planejando',responding:'Respondendo',coding:'Programando',testing:'Testando',reviewing:'Revisando',waiting:'Aguardando',blocked:'Bloqueado',error:'Erro',paused:'Pausado',completed:'Concluído recentemente'};
 function normalized(value:string):RoomVisualState{if(['offline','idle','resting','thinking','planning','responding','coding','testing','reviewing','waiting','blocked','error','paused','completed'].includes(value))return value as RoomVisualState;if(value==='running'||value==='working')return'responding';return'idle'}
 function stationFor(agent:AgentProfile):StationKind{const text=(agent.role+' '+agent.description+' '+agent.name).toLowerCase();if(/review|research|pesquis|qa|test|auditor/.test(text))return'research';if(/lead|manager|gestor|orchestr|chief|coord/.test(text))return'lead';if(/develop|builder|code|codex|engineer|program/.test(text))return'development';return'operations'}
@@ -14,6 +26,8 @@ function clamp(value:number,min:number,max:number){return Math.min(max,Math.max(
 export function OfficeMap({agents,providers,states,liveStates,target,onTarget,lastHandoff}:{agents:AgentProfile[];providers:UniversalProvider[];states:AgentState[];liveStates:Record<string,{state:string;activity:string;updated_at:string}>;target:string;onTarget:(value:string)=>void;lastHandoff:{from:string;to:string}|null}){
   const stateById=new Map(states.map(x=>[x.agent_id,x]));
   const views:RoomAgentView[]=agents.map(agent=>{const state=viewState(agent,stateById.get(agent.id),liveStates[agent.id],providers);return{id:agent.id,name:agent.name,role:agent.role,state,activity:liveStates[agent.id]?.activity||stateById.get(agent.id)?.activity||STATE_LABELS[state],progress:stateById.get(agent.id)?.progress??null,station:stationFor(agent),selected:target===agent.id||target===agent.slug,disabled:state==='offline'}});
+  const stationCounters:Record<StationKind,number>={development:0,operations:0,research:0,lead:0};
+  const positionedViews=views.map(agent=>({agent,pos:stationPosition(agent,stationCounters[agent.station]++)}));
   const viewportRef=useRef<HTMLDivElement|null>(null);
   const dragRef=useRef<{pointerId:number;x:number;y:number;panX:number;panY:number}|null>(null);
   const [camera,setCamera]=useState({x:0,y:0,zoom:.7});
@@ -82,8 +96,8 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
     <div ref={viewportRef} className={'room-floor room-canvas-floor room-viewport-shell'+(dragging?' dragging':'')} tabIndex={0} onKeyDown={onKeyDown} onDoubleClick={fit} onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
       <div className="room-camera-layer" style={{width:WORLD_W,height:WORLD_H,transform:`translate3d(${camera.x}px,${camera.y}px,0) scale(${camera.zoom})`}}>
         <OfficeTileCanvas/>
-        <div className={'room-stations canvas-stations count-'+Math.min(views.length,12)}>
-          {views.map(agent=><AgentStation key={agent.id} agent={agent} onSelect={()=>onTarget(agent.selected?'auto':agent.id)}/>)}
+        <div className={'room-stations canvas-stations positioned-stations count-'+Math.min(views.length,12)}>
+          {positionedViews.map(({agent,pos})=><div key={agent.id} className={'room-agent-anchor anchor-'+agent.station} style={{left:pos.x,top:pos.y}}><AgentStation agent={agent} onSelect={()=>onTarget(agent.selected?'auto':agent.id)}/></div>)}
           {!views.length&&<div className="room-empty"><strong>Nenhum Agent disponível</strong><span>Crie ou habilite um Agent para ocupar o escritório.</span></div>}
         </div>
         <div className="room-handoff">{lastHandoff?<><span>{lastHandoff.from}</span><i>→</i><span>{lastHandoff.to}</span></>:<><b/><span>Contexto compartilhado e handoffs ao vivo</span></>}</div>
