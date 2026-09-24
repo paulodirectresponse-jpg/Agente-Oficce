@@ -33,6 +33,12 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
   const [camera,setCamera]=useState({x:0,y:0,zoom:.7});
   const [viewportSize,setViewportSize]=useState({width:1,height:1});
   const [dragging,setDragging]=useState(false);
+  const constrain=useCallback((next:{x:number;y:number;zoom:number})=>{
+    const margin=90,scaledW=WORLD_W*next.zoom,scaledH=WORLD_H*next.zoom;
+    const x=scaledW<=viewportSize.width?(viewportSize.width-scaledW)/2:clamp(next.x,viewportSize.width-scaledW-margin,margin);
+    const y=scaledH<=viewportSize.height?(viewportSize.height-scaledH)/2:clamp(next.y,viewportSize.height-scaledH-margin,margin);
+    return{...next,x,y};
+  },[viewportSize]);
 
   const fit=useCallback(()=>{
     const el=viewportRef.current;if(!el)return;
@@ -40,7 +46,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
     setViewportSize({width:rect.width,height:rect.height});
     const zoom=clamp(Math.min((rect.width-20)/WORLD_W,(rect.height-20)/WORLD_H),MIN_ZOOM,1);
     setCamera({zoom,x:(rect.width-WORLD_W*zoom)/2,y:(rect.height-WORLD_H*zoom)/2});
-  },[]);
+  },[constrain]);
   useEffect(()=>{const el=viewportRef.current;if(!el)return;const ro=new ResizeObserver(fit);ro.observe(el);fit();return()=>ro.disconnect()},[fit]);
 
   const zoomAt=useCallback((nextZoom:number,clientX?:number,clientY?:number)=>{
@@ -50,7 +56,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
       const z=clamp(nextZoom,MIN_ZOOM,MAX_ZOOM);
       const px=(clientX??(rect.left+rect.width/2))-rect.left,py=(clientY??(rect.top+rect.height/2))-rect.top;
       const wx=(px-current.x)/current.zoom,wy=(py-current.y)/current.zoom;
-      return{zoom:z,x:px-wx*z,y:py-wy*z};
+      return constrain({zoom:z,x:px-wx*z,y:py-wy*z});
     });
   },[]);
   const onWheel=(event:React.WheelEvent<HTMLDivElement>)=>{event.preventDefault();zoomAt(camera.zoom*(event.deltaY>0?.9:1.1),event.clientX,event.clientY)};
@@ -60,7 +66,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
   };
   const onPointerMove=(event:React.PointerEvent<HTMLDivElement>)=>{
     const drag=dragRef.current;if(!drag||drag.pointerId!==event.pointerId)return;
-    setCamera(current=>({...current,x:drag.panX+(event.clientX-drag.x),y:drag.panY+(event.clientY-drag.y)}));
+    setCamera(current=>constrain({...current,x:drag.panX+(event.clientX-drag.x),y:drag.panY+(event.clientY-drag.y)}));
   };
   const endDrag=(event:React.PointerEvent<HTMLDivElement>)=>{if(dragRef.current?.pointerId===event.pointerId)dragRef.current=null;setDragging(false)};
   const onKeyDown=(event:React.KeyboardEvent<HTMLDivElement>)=>{
@@ -68,10 +74,10 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
     if(event.key==='+'||event.key==='='){event.preventDefault();zoomAt(camera.zoom*1.14)}
     else if(event.key==='-'){event.preventDefault();zoomAt(camera.zoom/1.14)}
     else if(event.key==='0'){event.preventDefault();fit()}
-    else if(event.key==='ArrowLeft'){event.preventDefault();setCamera(current=>({...current,x:current.x+step}))}
-    else if(event.key==='ArrowRight'){event.preventDefault();setCamera(current=>({...current,x:current.x-step}))}
-    else if(event.key==='ArrowUp'){event.preventDefault();setCamera(current=>({...current,y:current.y+step}))}
-    else if(event.key==='ArrowDown'){event.preventDefault();setCamera(current=>({...current,y:current.y-step}))}
+    else if(event.key==='ArrowLeft'||event.key.toLowerCase()==='a'){event.preventDefault();setCamera(current=>constrain({...current,x:current.x+step}))}
+    else if(event.key==='ArrowRight'||event.key.toLowerCase()==='d'){event.preventDefault();setCamera(current=>constrain({...current,x:current.x-step}))}
+    else if(event.key==='ArrowUp'||event.key.toLowerCase()==='w'){event.preventDefault();setCamera(current=>constrain({...current,y:current.y+step}))}
+    else if(event.key==='ArrowDown'||event.key.toLowerCase()==='s'){event.preventDefault();setCamera(current=>constrain({...current,y:current.y-step}))}
   };
   const miniLeft=clamp((-camera.x/camera.zoom)/WORLD_W*100,0,100);
   const miniTop=clamp((-camera.y/camera.zoom)/WORLD_H*100,0,100);
@@ -79,12 +85,12 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
   const miniHeight=clamp((viewportSize.height/camera.zoom)/WORLD_H*100,3,100);
   const centerFromMinimap=(event:React.MouseEvent<HTMLDivElement>)=>{
     const rect=event.currentTarget.getBoundingClientRect(),wx=((event.clientX-rect.left)/rect.width)*WORLD_W,wy=((event.clientY-rect.top)/rect.height)*WORLD_H;
-    setCamera(current=>({...current,x:viewportSize.width/2-wx*current.zoom,y:viewportSize.height/2-wy*current.zoom}));
+    setCamera(current=>constrain({...current,x:viewportSize.width/2-wx*current.zoom,y:viewportSize.height/2-wy*current.zoom}));
   };
 
   const focusAgents=()=>{
     const el=viewportRef.current;if(!el)return;const rect=el.getBoundingClientRect(),z=clamp(Math.max(camera.zoom,.82),MIN_ZOOM,MAX_ZOOM);
-    const worldX=WORLD_W*.51,worldY=WORLD_H*.52;setCamera({zoom:z,x:rect.width/2-worldX*z,y:rect.height/2-worldY*z});
+    const worldX=WORLD_W*.51,worldY=WORLD_H*.52;setCamera(constrain({zoom:z,x:rect.width/2-worldX*z,y:rect.height/2-worldY*z}));
   };
 
   return <div className="room-map" aria-label="Escritório operacional dos Agents">
@@ -114,7 +120,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
         <OfficeTileCanvas/>
         <span className="room-minimap-viewport" style={{left:miniLeft+'%',top:miniTop+'%',width:Math.min(miniWidth,100-miniLeft)+'%',height:Math.min(miniHeight,100-miniTop)+'%'}}/>
       </div>
-      <div className="room-navigation-hint">Arraste para passear · Scroll para zoom · Duplo clique para visão geral</div>
+      <div className="room-navigation-hint">Arraste ou use WASD/setas para passear · Scroll para zoom · Duplo clique para visão geral</div>
     </div>
   </div>;
 }
