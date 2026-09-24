@@ -558,6 +558,9 @@ export interface ChatRunReceipt {
   mode: 'single' | 'team';
   status: 'running';
   tools_enabled: boolean;
+  orchestration_run_id?: string;
+  execution_plan_id?: string;
+  long_running?: boolean;
 }
 
 export interface ChatStartInput {
@@ -567,6 +570,9 @@ export interface ChatStartInput {
   target?: 'auto' | 'team' | string;
   model_override?: string;
   attachment_ids?: string[];
+  execution_policy?: 'auto'|'plan'|'research'|'build'|'review'|'test'|'until_done';
+  tool_hint?: string;
+  directives?: string[];
 }
 
 export interface ChatStreamEnvelope {
