@@ -5264,51 +5264,51 @@ textarea {
 .room-canvas-floor .room-stations.count-5,.room-canvas-floor .room-stations.count-6{left:34.7%!important;right:31.8%!important}
 
 /* Force remaining legacy surfaces onto the Agent Office palette. */
-.agent-office-app .resource-card,
-.agent-office-app .resource-preview,
-.agent-office-app .stored-attachment-card,
-.agent-office-app .pending-attachment-card,
-.agent-office-app .knowledge-list>div,
-.agent-office-app .team-v2-card,
-.agent-office-app .team-v2-panel,
-.agent-office-app .settings-card,
-.agent-office-app .connection-card,
-.agent-office-app .provider-card,
-.agent-office-app .v2-empty-state,
-.agent-office-app .v2-drawer,
-.agent-office-app .v2-drawer-body{
+.app-shell .resource-card,
+.app-shell .resource-preview,
+.app-shell .stored-attachment-card,
+.app-shell .pending-attachment-card,
+.app-shell .knowledge-list>div,
+.app-shell .team-v2-card,
+.app-shell .team-v2-panel,
+.app-shell .settings-card,
+.app-shell .connection-card,
+.app-shell .provider-card,
+.app-shell .v2-empty-state,
+.app-shell .v2-drawer,
+.app-shell .v2-drawer-body{
   background:#0b1722!important;
   border-color:rgba(127,165,202,.15)!important;
   color:#c9d8e4!important;
 }
-.agent-office-app .v2-empty-state strong,
-.agent-office-app .resource-card strong,
-.agent-office-app .stored-attachment-card strong,
-.agent-office-app .pending-attachment-card strong,
-.agent-office-app .team-v2-card strong,
-.agent-office-app .settings-card strong,
-.agent-office-app .connection-card strong,
-.agent-office-app .provider-card strong{color:#dce9f3!important}
-.agent-office-app .v2-empty-state p,
-.agent-office-app .resource-card small,
-.agent-office-app .stored-attachment-card small,
-.agent-office-app .pending-attachment-card small,
-.agent-office-app .team-v2-card small,
-.agent-office-app .settings-card small,
-.agent-office-app .connection-card small,
-.agent-office-app .provider-card small{color:#71899f!important}
-.agent-office-app input,
-.agent-office-app textarea,
-.agent-office-app select{color-scheme:dark}
-.agent-office-app input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
-.agent-office-app textarea,
-.agent-office-app select{
+.app-shell .v2-empty-state strong,
+.app-shell .resource-card strong,
+.app-shell .stored-attachment-card strong,
+.app-shell .pending-attachment-card strong,
+.app-shell .team-v2-card strong,
+.app-shell .settings-card strong,
+.app-shell .connection-card strong,
+.app-shell .provider-card strong{color:#dce9f3!important}
+.app-shell .v2-empty-state p,
+.app-shell .resource-card small,
+.app-shell .stored-attachment-card small,
+.app-shell .pending-attachment-card small,
+.app-shell .team-v2-card small,
+.app-shell .settings-card small,
+.app-shell .connection-card small,
+.app-shell .provider-card small{color:#71899f!important}
+.app-shell input,
+.app-shell textarea,
+.app-shell select{color-scheme:dark}
+.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.app-shell textarea,
+.app-shell select{
   background:#0a1722!important;
   border-color:rgba(127,165,202,.18)!important;
   color:#dce8f2!important;
 }
-.agent-office-app input::placeholder,.agent-office-app textarea::placeholder{color:#607a91!important}
-.agent-office-app button:disabled{opacity:.48}
+.app-shell input::placeholder,.app-shell textarea::placeholder{color:#607a91!important}
+.app-shell button:disabled{opacity:.48}
 
 /* Never let generic light empty states leak into drawers. */
 .work-v2-knowledge-drawer *,
