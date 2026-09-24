@@ -38,7 +38,7 @@ export function shouldUseLongRun(message:string,decision:RoutingDecision):boolea
 }
 
 function goalContract(message:string):GoalContract{
-  const software=/\b(site|app|aplicativo|sistema|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|software)\b/i.test(message);
+  const software=/\b(site|app|aplicativo|sistema|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|software|landing\s?page|p[aá]gina\s?de\s?venda|dashboard|web\s?app)\b/i.test(message);
   const done=[
     'O objetivo original foi atendido integralmente, sem trocar o escopo por uma solução parcial.',
     'Nenhum erro crítico conhecido permanece sem tratamento.',
@@ -219,6 +219,11 @@ class ChatStepExecutor implements StepExecutor{
       orientations.messages.length?'\nUSER ORIENTATIONS RECEIVED DURING EXECUTION:\n'+orientations.messages.map(x=>'- '+x).join('\n'):'',
       orientations.attachment_ids.length?'\nNew media/files were attached with the user orientation. Inspect the attached files directly; do not rely on path text alone.':'',
       '',
+      input.step_key==='01_inspect_plan'?'EVIDENCE REQUIREMENT: inspect the real workspace with tools before planning. Do not plan from assumptions.':'',
+      input.step_key==='02_implement'?'EVIDENCE REQUIREMENT: make real file/project changes. A text-only answer is a failed implementation.':'',
+      input.step_key==='03_review_fix'?'EVIDENCE REQUIREMENT: inspect current files/diff with tools, challenge the implementation, and fix defects you can prove.':'',
+      input.step_key==='04_validate'?'EVIDENCE REQUIREMENT: execute build/test/typecheck/lint or equivalent validation commands and inspect their real output.':'',
+      input.step_key==='05_final_audit'?'EVIDENCE REQUIREMENT: independently inspect the final project state with tools before approving the original objective.':'',
       'Rules: inspect actual state, use tools when needed, persist real changes, verify claims, and continue until this step is genuinely complete.',
     ].filter(Boolean).join('\n');
 
@@ -253,6 +258,10 @@ class ChatStepExecutor implements StepExecutor{
     const writeEvidence=successfulAudits.some(item=>['fs_write_any','fs_copy','fs_move','fs_create_directory'].includes(item.tool_name))
       ||after.files.some(item=>!before.files.some(prev=>prev.path===item.path&&prev.status===item.status))
       ||diff.additions+diff.deletions>0;
+    if(input.step_key==='01_inspect_plan'&&software&&successfulAudits.length===0){
+      this.emitStep('failed',input,{message:'O planejamento não inspecionou o workspace real.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_PLAN_NO_TOOL_EVIDENCE');
+    }
     if(input.step_key==='02_implement'&&software&&!writeEvidence){
       this.emitStep('failed',input,{message:'Nenhuma alteração real de arquivo foi comprovada.',duration_ms:Date.now()-stepStartedAt});
       throw new Error('EXECUTION_IMPLEMENTATION_NO_FILE_EVIDENCE');
@@ -281,6 +290,10 @@ class ChatStepExecutor implements StepExecutor{
           throw new Error('EXECUTION_REQUIRED_PREVIEW_FAILED');
         }
       }
+    }
+    if(input.step_key==='05_final_audit'&&software&&successfulAudits.length===0){
+      this.emitStep('failed',input,{message:'A auditoria final não inspecionou o estado real do projeto.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_AUDIT_NO_TOOL_EVIDENCE');
     }
     const gate=/^(04_validate|05_final_audit)$/.test(input.step_key);
     if(gate&&!/QUALITY_GATE:\s*PASS\b/i.test(text)){
