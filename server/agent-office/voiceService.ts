@@ -7,6 +7,11 @@ import { getAgentOfficeConfig } from './config.js';
 import { DevelopmentSecretStore } from './secretStore.js';
 import { ProviderRepositoryV2, type Provider } from './v2DataModel.js';
 
+const WHISPER_RELEASE='v1.9.4';
+const WHISPER_ZIP_URL=`https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_RELEASE}/whisper-bin-x64.zip`;
+const WHISPER_MODEL_URL='https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin?download=true';
+let bootstrapPromise:Promise<void>|null=null;
+
 export interface VoiceStatus {
   local_ready:boolean;
   local_binary:string|null;
@@ -42,6 +47,47 @@ function localRuntime(){
   return{binary,model};
 }
 function trimSlash(value:string){return value.replace(/\/+$/,'')}
+async function downloadFile(url:string,dest:string){
+  const response=await fetch(url,{redirect:'follow',signal:AbortSignal.timeout(180000)});
+  if(!response.ok||!response.body)throw new Error('VOICE_RUNTIME_DOWNLOAD_FAILED');
+  fs.mkdirSync(path.dirname(dest),{recursive:true});
+  const bytes=Buffer.from(await response.arrayBuffer());
+  fs.writeFileSync(dest,bytes);
+}
+function findRecursive(root:string,name:string):string|null{
+  if(!fs.existsSync(root))return null;
+  for(const entry of fs.readdirSync(root,{withFileTypes:true})){
+    const full=path.join(root,entry.name);
+    if(entry.isDirectory()){const nested=findRecursive(full,name);if(nested)return nested}
+    else if(entry.name.toLowerCase()===name.toLowerCase())return full;
+  }
+  return null;
+}
+async function bootstrapLocalRuntime(){
+  if(process.platform!=='win32')return;
+  if(localRuntime().binary&&localRuntime().model)return;
+  if(bootstrapPromise)return bootstrapPromise;
+  bootstrapPromise=(async()=>{
+    const dataDir=getAgentOfficeConfig().dataDir,voiceDir=path.join(dataDir,'voice'),modelDir=path.join(voiceDir,'models');
+    fs.mkdirSync(modelDir,{recursive:true});
+    if(!localRuntime().binary){
+      const zip=path.join(voiceDir,'whisper-bin-x64.zip'),unpack=path.join(voiceDir,'runtime');
+      await downloadFile(WHISPER_ZIP_URL,zip);
+      fs.rmSync(unpack,{recursive:true,force:true});
+      const script=`Expand-Archive -LiteralPath '${zip.replace(/'/g,"''")}' -DestinationPath '${unpack.replace(/'/g,"''")}' -Force`;
+      const run=spawnSync('powershell.exe',['-NoLogo','-NoProfile','-NonInteractive','-Command',script],{encoding:'utf8',windowsHide:true,timeout:120000});
+      if(run.status!==0)throw new Error('VOICE_RUNTIME_EXTRACT_FAILED');
+      const cli=findRecursive(unpack,'whisper-cli.exe');if(!cli)throw new Error('VOICE_RUNTIME_BINARY_MISSING');
+      const sourceDir=path.dirname(cli);
+      for(const entry of fs.readdirSync(sourceDir,{withFileTypes:true})){if(!entry.isFile())continue;fs.copyFileSync(path.join(sourceDir,entry.name),path.join(voiceDir,entry.name))}
+      try{fs.rmSync(zip,{force:true});fs.rmSync(unpack,{recursive:true,force:true})}catch{}
+    }
+    const modelPath=path.join(modelDir,'ggml-base-q5_1.bin');
+    if(!fs.existsSync(modelPath))await downloadFile(WHISPER_MODEL_URL,modelPath);
+    const ready=localRuntime();if(!ready.binary||!ready.model)throw new Error('VOICE_RUNTIME_BOOTSTRAP_FAILED');
+  })().finally(()=>{bootstrapPromise=null});
+  return bootstrapPromise;
+}
 function cloudProvider(db:Database):Provider|null{
   const providers=new ProviderRepositoryV2(db).list().filter(p=>p.enabled&&p.secret_ref&&/^https?:\/\//i.test(p.base_url));
   return providers.find(p=>typeof p.protocol_config.transcription_path==='string')
@@ -107,7 +153,10 @@ export class VoiceService{
   async transcribe(buffer:Buffer,language='pt'){
     if(!buffer.length)throw new Error('VOICE_AUDIO_EMPTY');
     if(buffer.length>25*1024*1024)throw new Error('VOICE_AUDIO_TOO_LARGE');
-    const status=this.status();
+    let status=this.status();
+    if(!status.local_ready&&process.platform==='win32'){
+      try{await bootstrapLocalRuntime();status=this.status()}catch(error){if(!status.cloud_ready)throw error}
+    }
     if(status.local_ready){try{return await Promise.resolve(this.localTranscribe(buffer,language))}catch(error){if(!status.cloud_ready)throw error}}
     if(status.cloud_ready)return this.cloudTranscribe(buffer,language);
     throw new Error('VOICE_TRANSCRIPTION_UNAVAILABLE');
