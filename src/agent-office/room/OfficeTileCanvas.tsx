@@ -1,6 +1,21 @@
 import { useEffect, useRef } from 'react';
 
 type Rect={x:number;y:number;w:number;h:number};
+type OfficeAssets={floors:HTMLImageElement|null,cabinets:HTMLImageElement|null,decor:HTMLImageElement|null,kitchen:HTMLImageElement|null,living:HTMLImageElement|null};
+function crop(ctx:CanvasRenderingContext2D,img:HTMLImageElement|null,sx:number,sy:number,sw:number,sh:number,t:number,x:number,y:number,scale=1){
+  if(!img||!img.complete||!img.naturalWidth)return false;
+  const unit=t/16;ctx.drawImage(img,sx,sy,sw,sh,x*t,y*t,sw*unit*scale,sh*unit*scale);return true;
+}
+function tileTexture(ctx:CanvasRenderingContext2D,img:HTMLImageElement|null,t:number,r:Rect,row:number,colBase=0,alpha=.42){
+  if(!img||!img.complete||!img.naturalWidth)return;
+  ctx.save();ctx.globalAlpha=alpha;
+  const cols=Math.ceil(r.w),rows=Math.ceil(r.h),sheetCols=14;
+  for(let yy=0;yy<rows;yy++)for(let xx=0;xx<cols;xx++){
+    const sx=((colBase+(xx%4))%sheetCols)*16,sy=(row+(yy%2))*16;
+    ctx.drawImage(img,sx,sy,16,16,(r.x+xx)*t,(r.y+yy)*t,t,t);
+  }
+  ctx.restore();
+}
 const COLS=64,ROWS=38;
 function room(ctx:CanvasRenderingContext2D,t:number,r:Rect,fill:string,label:string){
   ctx.fillStyle=fill;ctx.fillRect(r.x*t,r.y*t,r.w*t,r.h*t);
