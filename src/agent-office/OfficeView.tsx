@@ -467,6 +467,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
 
     const text = message.trim() || 'Analise os arquivos anexados.';
     const files = pendingFiles.slice();
+    const optimisticId=`optimistic-${Date.now()}`;
     setMessage('');
     setPendingFiles([]);
     setSending(true);
@@ -475,9 +476,14 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     setStreamingByAgent({});
     setLiveEvents([]);
     setLastHandoff(null);
+    setConversation((current) => current ? {
+      ...current,
+      messages:[...current.messages,{id:optimisticId,role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{pending:true,pending_file_names:files.map(file=>file.name)}}],
+    }:current);
 
     try {
       const uploaded: ResourceFile[] = files.length ? await Promise.all(files.map((file) => api.uploadResource(project.id, file, 'chat'))) : [];
+      setConversation(current=>current?{...current,messages:current.messages.map(item=>item.id===optimisticId?{...item,metadata:{...item.metadata,pending:false,attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}:item)}:current);
       const receipt = await api.startChatRun({
         project_id: project.id,
         conversation_id: conversation?.conversation_id,
@@ -486,24 +492,9 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         attachment_ids: uploaded.map((file) => file.id),
       });
       setCurrentRun(receipt);
-      setConversation((current) => current
-        ? {
-          ...current,
-          messages: [
-            ...current.messages,
-            {
-              id: `optimistic-${Date.now()}`,
-              role: 'user',
-              agent_id: null,
-              content: text,
-              created_at: new Date().toISOString(),
-              metadata: { attachments: uploaded, attachment_ids: uploaded.map((file) => file.id) },
-            },
-          ],
-        }
-        : current);
       await connectRunStream(receipt);
     } catch (reason) {
+      setConversation(current=>current?{...current,messages:current.messages.filter(item=>item.id!==optimisticId)}:current);
       setSending(false);
       setRunStatus('failed');
       setError(reason instanceof Error ? reason.message : 'Falha ao iniciar o chat.');
