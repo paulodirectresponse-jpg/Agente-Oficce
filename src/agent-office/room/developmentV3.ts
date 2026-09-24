@@ -4,6 +4,15 @@ import { DEVELOPMENT_ROOM_TEMPLATE } from '../assets/roomSpec.js';
 
 export const DEVELOPMENT_V3_BOUNDS={x:245,y:75,width:1190,height:790};
 
+export const DEVELOPMENT_V3_AGENT_SPRITES=[
+  {idle:'character.01.manager.navy.front.idle.c6dc34cd78',working:'character.01.manager.navy.right.seated.working.646715397d'},
+  {idle:'character.02.worker.orange.yellow.front.idle.0c6c38f3e5',working:'character.02.worker.orange.yellow.right.seated.working.d89cdb7c93'},
+  {idle:'character.03.worker.dark.purple.front.idle.b0ecf8e174',working:'character.03.worker.dark.purple.right.seated.working.c2f29f1c67'},
+  {idle:'character.04.worker.brown.green.front.idle.0053fa062f',working:'character.04.worker.brown.green.right.seated.working.c7fa72d8b7'},
+  {idle:'character.05.worker.black.charcoal.front.idle.a7a88018af',working:'character.05.worker.black.charcoal.right.seated.working.07399caf29'},
+  {idle:'character.06.worker.blond.blue.front.idle.cf5be32a0f',working:'character.06.worker.blond.blue.right.seated.working.7890eb657a'},
+] as const;
+
 export const DEVELOPMENT_V3_ASSETS={
   floor:'floor.architecture.001.floor.wood.plank.tile.3957bd6a02',
   rug:'rug.055.p03.18.blue.executive.office.rug.4d633abdd4',
@@ -103,7 +112,7 @@ export const DEVELOPMENT_V3_LAYER_ORDER:AssetLayer[]=[
 ];
 
 export function requiredDevelopmentV3AssetIds(){
-  return [...new Set(DEVELOPMENT_V3_PLACEMENTS.map(p=>p.assetId).concat(DEVELOPMENT_V3_ASSETS.floor))];
+  return [...new Set([...DEVELOPMENT_V3_PLACEMENTS.map(p=>p.assetId),DEVELOPMENT_V3_ASSETS.floor,...DEVELOPMENT_V3_AGENT_SPRITES.flatMap(s=>[s.idle,s.working])])];
 }
 
 export function validateDevelopmentV3Registry(registry:Map<string,AssetRecord>){
