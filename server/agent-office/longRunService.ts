@@ -205,7 +205,7 @@ class ChatStepExecutor implements StepExecutor{
       selected_subagent_ids:chosenSubs.length?chosenSubs:undefined,
       model_override:(chosenAgents.length+chosenSubs.length)===1?this.modelOverride:undefined,
       attachment_ids:[...new Set([...this.attachmentIds,...orientations.attachment_ids])],
-      required_tools:this.requiredTools,
+      required_tools:input.step_key==='01_inspect_plan'?this.requiredTools:[],
       internal:true,parent_run_id:this.rootRunId,execution_plan_id:input.plan_id,execution_step_id:input.step_id,
     });
     await service.execute(prepared,this.signal);
