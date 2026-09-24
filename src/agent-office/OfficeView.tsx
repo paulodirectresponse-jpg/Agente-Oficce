@@ -529,7 +529,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   }
 
   return (
-    <div className={`experience-grid ${focus === 'chat' ? 'chat-emphasis' : ''}`}>
+    <div className={`experience-grid ${focus === 'chat' ? 'chat-emphasis' : 'room-mode'}`}>
       <section className="experience-center">
         <header className="office-topbar">
           <div>
