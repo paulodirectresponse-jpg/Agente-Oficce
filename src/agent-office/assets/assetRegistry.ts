@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const AssetCategorySchema=z.enum([
   'architecture','door','window','glass','floor','rug','desk','table','chair','seating',
   'monitor','computer','electronics','server','storage','whiteboard','lighting','plant',
-  'decor','kitchen','coffee','signage','character','vehicle','misc',
+  'decor','kitchen','coffee','signage','tool','supply','appliance','access_control','character','vehicle','misc',
 ]);
 export type AssetCategory=z.infer<typeof AssetCategorySchema>;
 
