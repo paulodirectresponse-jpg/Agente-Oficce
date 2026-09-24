@@ -187,7 +187,20 @@ A socket contains:
 
 This is the basis for Stage 6 pathfinding and correct seated/working character placement.
 
-## 6. Prefab Room Blueprint
+## 6. Character calibration
+
+Agent scale is now derived from a canonical physical target instead of a hardcoded runtime height.
+
+The default Agent Office profile is:
+
+- standing: 1.50 tiles = 48 px at a 32 px tile;
+- seated / working: 1.08 tiles = 34.56 px.
+
+A 93 px-tall source character is therefore scaled from its calibrated visible height, rather than being forced to approximately 70 px as in the failed Stage 5 runtime.
+
+Character placement uses prefab sockets, so the character scale and the chair/workstation position are governed by the same coordinate system.
+
+## 7. Prefab Room Blueprint
 
 Rooms can now be defined as prefab instances rather than hundreds of loose asset placements.
 
@@ -213,7 +226,7 @@ Development Blueprint
   └─ Open Entrance
 ```
 
-## 7. Protected zones
+## 8. Protected zones
 
 A room can reserve areas such as:
 
@@ -227,7 +240,7 @@ Prefab collision geometry is checked against those zones.
 
 This prevents visually "nice" but functionally impossible room compositions.
 
-## 8. Calibrated renderer contract
+## 9. Calibrated renderer contract
 
 Compiled prefab nodes carry:
 
@@ -242,7 +255,7 @@ The prefab renderer draws only the visible calibrated region of each PNG.
 
 Therefore transparent padding can no longer shift an object away from its intended blueprint coordinate.
 
-## 9. What Stage 5.2A intentionally does not do
+## 10. What Stage 5.2A intentionally does not do
 
 It does **not** rebuild the Development runtime yet.
 
