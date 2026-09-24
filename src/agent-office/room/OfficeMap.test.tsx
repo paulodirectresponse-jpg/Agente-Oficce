@@ -8,17 +8,23 @@ function agent(overrides:Partial<AgentProfile>={}):AgentProfile{
 }
 const provider:UniversalProvider={id:'p1',name:'Provider',protocol_driver:'openai',base_url:'',auth_driver:'bearer',secret_ref:null,headers:{},query:{},auth_config:{},protocol_config:{},timeout_ms:30000,enabled:true,health_status:'healthy',last_health_at:null,last_health_error:null,created_at:'',updated_at:''};
 
-describe('OfficeMap',()=>{
-  it('uses real agent identity and a development station',()=>{
+describe('OfficeMap game renderer',()=>{
+  it('keeps the real agent identity exposed while the room is canvas-rendered',()=>{
     const html=renderToStaticMarkup(<OfficeMap agents={[agent()]} providers={[provider]} states={[]} liveStates={{}} target="auto" onTarget={()=>undefined} lastHandoff={null}/>);
-    expect(html).toContain('Builder muito longo');
-    expect(html).toContain('station-development');
-    expect(html).toContain('Contexto compartilhado');
+    expect(html).toContain('room-map-game');
+    expect(html).toContain('Sala 2D operacional');
+    expect(html).toContain('Builder muito longo para validar truncamento');
+    expect(html).toContain('Disponível');
   });
 
-  it('represents paused and disconnected agents without mocks',()=>{
+  it('represents paused and disconnected agents in the accessibility mirror',()=>{
     const html=renderToStaticMarkup(<OfficeMap agents={[agent({paused:true}),agent({id:'a2',slug:'offline',name:'Offline',provider_id:null,model_id:null})]} providers={[provider]} states={[]} liveStates={{}} target="auto" onTarget={()=>undefined} lastHandoff={null}/>);
-    expect(html).toContain('state-paused');
-    expect(html).toContain('state-offline');
+    expect(html).toContain('Pausado');
+    expect(html).toContain('Offline');
+  });
+
+  it('exposes handoff information without relying on DOM-drawn room entities',()=>{
+    const html=renderToStaticMarkup(<OfficeMap agents={[agent()]} providers={[provider]} states={[]} liveStates={{}} target="auto" onTarget={()=>undefined} lastHandoff={{from:'Builder',to:'Reviewer'}}/>);
+    expect(html).toContain('Handoff: Builder para Reviewer');
   });
 });
