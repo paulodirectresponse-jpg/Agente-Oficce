@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomAgentView, StationKind } from './roomTypes.js';
+import type { AssetRecord } from '../assets/assetRegistry.js';
+import {
+  DEVELOPMENT_V3_BEHAVIOR,
+  DEVELOPMENT_V3_BOUNDS,
+  DEVELOPMENT_V3_WORKSTATIONS,
+  requiredDevelopmentV3AssetIds,
+  validateDevelopmentV3Registry,
+} from './developmentV3.js';
+import {
+  drawDevelopmentV3Back,
+  drawDevelopmentV3Front,
+  drawDevelopmentV3Mini,
+  type LicensedDevelopmentRuntime,
+} from './licensedDevelopmentRenderer.js';
 import './room-game.css';
 
 const WORLD_W=1680;
@@ -77,8 +91,15 @@ function stationPosition(agent:RoomAgentView,index:number){
   const cycle=Math.floor(index/list.length);
   return{x:base.x+cycle*34,y:base.y+cycle*26};
 }
-function behaviorPosition(agent:RoomAgentView,home:Vec,index:number):Vec{
+function behaviorPosition(agent:RoomAgentView,home:Vec,index:number,useDevelopmentV3=false):Vec{
   const lane=(hash(agent.id)%5)-2;
+  if(useDevelopmentV3&&agent.station==='development'){
+    if(agent.state==='thinking'||agent.state==='planning')return{x:DEVELOPMENT_V3_BEHAVIOR.planning.x+lane*18,y:DEVELOPMENT_V3_BEHAVIOR.planning.y+(index%2)*16};
+    if(agent.state==='testing'||agent.state==='reviewing')return{x:DEVELOPMENT_V3_BEHAVIOR.review.x+lane*18,y:DEVELOPMENT_V3_BEHAVIOR.review.y+(index%2)*16};
+    if(agent.state==='waiting'||agent.state==='paused')return{x:DEVELOPMENT_V3_BEHAVIOR.waiting.x+lane*16,y:DEVELOPMENT_V3_BEHAVIOR.waiting.y+(index%2)*14};
+    if(agent.state==='resting'||agent.state==='completed')return{x:DEVELOPMENT_V3_BEHAVIOR.lounge.x+lane*16,y:DEVELOPMENT_V3_BEHAVIOR.lounge.y+(index%2)*14};
+    return home;
+  }
   if(agent.state==='thinking'||agent.state==='planning')return{x:165+lane*34,y:185+(index%2)*22};
   if(agent.state==='testing'||agent.state==='reviewing')return{x:935+lane*38,y:845+(index%2)*28};
   if(agent.state==='waiting')return{x:180+lane*34,y:880+(index%2)*24};
@@ -257,14 +278,48 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
   const [dragging,setDragging]=useState(false);
   const [ready,setReady]=useState(false);
   const imagesRef=useRef(new Map<string,HTMLImageElement>());
+  const licensedRuntimeRef=useRef<LicensedDevelopmentRuntime|null>(null);
+  const [v3Ready,setV3Ready]=useState(false);
 
   const positioned=useMemo(()=>{
     const count:Record<StationKind,number>={development:0,research:0,lead:0,operations:0};
     return agents.map((agent,index)=>{
-      const home=stationPosition(agent,count[agent.station]++);
-      return{agent,pos:behaviorPosition(agent,home,index)};
+      const stationIndex=count[agent.station]++;
+      const v3Home=v3Ready&&agent.station==='development'
+        ? DEVELOPMENT_V3_WORKSTATIONS[stationIndex%DEVELOPMENT_V3_WORKSTATIONS.length]
+        : null;
+      const home=v3Home?{x:v3Home.agentX,y:v3Home.agentY}:stationPosition(agent,stationIndex);
+      return{agent,pos:behaviorPosition(agent,home,index,v3Ready)};
     });
-  },[agents]);
+  },[agents,v3Ready]);
+
+  useEffect(()=>{
+    let cancelled=false;
+    const load=async()=>{
+      try{
+        const response=await fetch('/office-assets/licensed/registry.json',{cache:'no-store'});
+        if(!response.ok)return;
+        const data=await response.json() as {assets?:AssetRecord[]};
+        const registry=new Map<string,AssetRecord>((data.assets??[]).map(asset=>[asset.id,asset]));
+        const gate=validateDevelopmentV3Registry(registry);
+        if(!gate.ok)return;
+        const images=new Map<string,HTMLImageElement>();
+        const ids=requiredDevelopmentV3AssetIds();
+        await Promise.all(ids.map(id=>new Promise<void>(resolve=>{
+          const asset=registry.get(id);if(!asset){resolve();return}
+          const img=new Image();images.set(id,img);
+          img.onload=()=>resolve();img.onerror=()=>resolve();img.src=asset.runtime.uri;
+        })));
+        if(cancelled)return;
+        licensedRuntimeRef.current={registry,images};
+        setV3Ready(true);
+      }catch{
+        // Licensed art is intentionally optional in public-source builds.
+      }
+    };
+    void load();
+    return()=>{cancelled=true};
+  },[]);
 
   useEffect(()=>{
     const map=imagesRef.current;let pending=0;
@@ -296,10 +351,15 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
 
   const fit=()=>{
     const el=viewportRef.current;if(!el)return;const r=el.getBoundingClientRect();
+    if(v3Ready){
+      const b=DEVELOPMENT_V3_BOUNDS;
+      const z=clamp(Math.min((r.width-54)/b.width,(r.height-54)/b.height),.62,1.16);
+      cameraRef.current={x:r.width/2-(b.x+b.width/2)*z,y:r.height/2-(b.y+b.height/2)*z,zoom:z};setZoom(z);return;
+    }
     const z=clamp(Math.min((r.width-28)/WORLD_W,(r.height-28)/WORLD_H),MIN_ZOOM,1);
     cameraRef.current={x:(r.width-WORLD_W*z)/2,y:(r.height-WORLD_H*z)/2,zoom:z};setZoom(z);
   };
-  useEffect(()=>{const el=viewportRef.current;if(!el)return;const ro=new ResizeObserver(fit);ro.observe(el);fit();return()=>ro.disconnect()},[]);
+  useEffect(()=>{const el=viewportRef.current;if(!el)return;const ro=new ResizeObserver(fit);ro.observe(el);fit();return()=>ro.disconnect()},[v3Ready]);
 
   const constrain=(camera:Camera)=>{
     const el=viewportRef.current;if(!el)return camera;const r=el.getBoundingClientRect(),margin=100;
@@ -322,7 +382,9 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
       const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,rect.width,rect.height);ctx.imageSmoothingEnabled=false;
       const dt=Math.min(.05,(time-last)/1000);last=time;
       const camera=cameraRef.current;ctx.save();ctx.translate(camera.x,camera.y);ctx.scale(camera.zoom,camera.zoom);
-      drawWorld(ctx,time,imagesRef.current);
+      const licensed=licensedRuntimeRef.current;
+      if(v3Ready&&licensed)drawDevelopmentV3Back(ctx,licensed,time);
+      else drawWorld(ctx,time,imagesRef.current);
 
       const byId=new Map(positioned.map(x=>[x.agent.id,x.agent]));
       for(const rt of entitiesRef.current.values()){
@@ -331,6 +393,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
         if(dist>1){const speed=agent.state==='offline'?80:190;const step=Math.min(dist,speed*dt);rt.x+=dx/dist*step;rt.y+=dy/dist*step;if(dist<5)rt.spawnDone=true}
         drawAgent(ctx,agent,rt,imagesRef.current.get(agent.station),time,agent.selected);
       }
+      if(v3Ready&&licensed)drawDevelopmentV3Front(ctx,licensed,time);
 
       if(lastHandoff){
         const from=positioned.find(x=>x.agent.name===lastHandoff.from||x.agent.id===lastHandoff.from);
@@ -341,11 +404,11 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
 
       const mdpr=Math.min(devicePixelRatio||1,2),mw=172,mh=100;
       if(mini.width!==Math.floor(mw*mdpr)||mini.height!==Math.floor(mh*mdpr)){mini.width=Math.floor(mw*mdpr);mini.height=Math.floor(mh*mdpr)}
-      const m=mini.getContext('2d');if(m){m.setTransform(mdpr,0,0,mdpr,0,0);m.clearRect(0,0,mw,mh);m.save();m.scale(mw/WORLD_W,mh/WORLD_H);drawWorld(m,time,imagesRef.current);for(const rt of entitiesRef.current.values()){m.fillStyle='#173c4d';m.fillRect(rt.x-7,rt.y-7,14,14)}m.restore();const vw=rect.width/camera.zoom/WORLD_W*mw,vh=rect.height/camera.zoom/WORLD_H*mh,vx=(-camera.x/camera.zoom)/WORLD_W*mw,vy=(-camera.y/camera.zoom)/WORLD_H*mh;m.strokeStyle='rgba(236,248,251,.82)';m.lineWidth=1.5;m.strokeRect(clamp(vx,0,mw),clamp(vy,0,mh),Math.min(vw,mw),Math.min(vh,mh))}
+      const m=mini.getContext('2d');if(m){m.setTransform(mdpr,0,0,mdpr,0,0);m.clearRect(0,0,mw,mh);m.save();m.scale(mw/WORLD_W,mh/WORLD_H);if(v3Ready&&licensed)drawDevelopmentV3Mini(m,licensed,time);else drawWorld(m,time,imagesRef.current);for(const rt of entitiesRef.current.values()){m.fillStyle='#173c4d';m.fillRect(rt.x-7,rt.y-7,14,14)}m.restore();const vw=rect.width/camera.zoom/WORLD_W*mw,vh=rect.height/camera.zoom/WORLD_H*mh,vx=(-camera.x/camera.zoom)/WORLD_W*mw,vy=(-camera.y/camera.zoom)/WORLD_H*mh;m.strokeStyle='rgba(236,248,251,.82)';m.lineWidth=1.5;m.strokeRect(clamp(vx,0,mw),clamp(vy,0,mh),Math.min(vw,mw),Math.min(vh,mh))}
       raf=requestAnimationFrame(render);
     };
     raf=requestAnimationFrame(render);return()=>cancelAnimationFrame(raf);
-  },[positioned,lastHandoff,ready]);
+  },[positioned,lastHandoff,ready,v3Ready]);
 
   const hit=(clientX:number,clientY:number)=>{
     const el=viewportRef.current;if(!el)return null;const r=el.getBoundingClientRect(),c=cameraRef.current,wx=(clientX-r.left-c.x)/c.zoom,wy=(clientY-r.top-c.y)/c.zoom;
