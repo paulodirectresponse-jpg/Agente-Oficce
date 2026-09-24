@@ -170,6 +170,13 @@ Include full scene/preview images during import:
 npm run assets:import -- --source "D:\AgentOfficeAssets\Lennox" --include-scenes
 ```
 
+Override auto-classification when an asset needs a curated category, layer, interaction, footprint or room/team tag:
+```bash
+npm run assets:import -- --source "D:\\AgentOfficeAssets\\Lennox" --overrides "scripts/assets/asset-overrides.local.json"
+```
+
+A safe public example lives at `scripts/assets/asset-overrides.example.json`. Real curation files may be kept private when they include licensed filenames or internal notes.
+
 Dry-run classification without copying runtime PNGs:
 ```bash
 npm run assets:import -- --source "D:\AgentOfficeAssets\Lennox" --dry-run
