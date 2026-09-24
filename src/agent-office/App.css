@@ -5455,3 +5455,27 @@ textarea {
   .room-agent-anchor{transform:translate(-50%,-50%) scale(.92)}
   .room-minimap{width:135px!important;height:78px!important}
 }
+
+
+/* Block B final — genuine pixel agents and richer Gather-like room */
+.room-pixel-avatar{width:44px!important;height:56px!important;bottom:4px!important;overflow:visible!important}
+.room-pixel-avatar .room-avatar-shadow{left:5px!important;right:5px!important;bottom:0!important;height:8px!important;background:rgba(38,31,27,.24)!important}
+.room-pixel-frame{position:absolute;left:50%;bottom:7px;width:32px;height:32px;overflow:hidden;transform:translateX(-50%) scale(1.35);transform-origin:center bottom;image-rendering:pixelated;image-rendering:crisp-edges;filter:drop-shadow(0 3px 2px rgba(0,0,0,.18))}
+.room-pixel-frame img{display:block;width:auto;height:32px;max-width:none;transform:translateX(var(--sprite-offset));image-rendering:pixelated;image-rendering:crisp-edges;pointer-events:none;user-select:none}
+.room-pixel-avatar.state-responding .room-pixel-frame,
+.room-pixel-avatar.state-coding .room-pixel-frame,
+.room-pixel-avatar.state-testing .room-pixel-frame,
+.room-pixel-avatar.state-reviewing .room-pixel-frame{animation:pixel-agent-working .9s steps(2,end) infinite}
+.room-pixel-avatar.state-thinking .room-pixel-frame,.room-pixel-avatar.state-planning .room-pixel-frame{animation:pixel-agent-thinking 1.3s ease-in-out infinite}
+.room-pixel-avatar.state-resting .room-pixel-frame{filter:grayscale(.12) saturate(.8) drop-shadow(0 3px 2px rgba(0,0,0,.14))}
+.room-pixel-avatar.state-offline .room-pixel-frame{filter:grayscale(.85) opacity(.62)}
+@keyframes pixel-agent-working{0%,100%{transform:translateX(-50%) scale(1.35) translateY(0)}50%{transform:translateX(-50%) scale(1.35) translateY(1px)}}
+@keyframes pixel-agent-thinking{0%,100%{transform:translateX(-50%) scale(1.35)}50%{transform:translateX(-50%) scale(1.35) translateY(-1px)}}
+.room-agent-anchor .room-desk{filter:drop-shadow(0 4px 4px rgba(49,37,29,.16))}
+.room-agent-anchor .room-monitor{box-shadow:0 0 0 1px rgba(71,160,186,.08),0 2px 5px rgba(0,0,0,.18)}
+.room-agent-anchor .room-status-card{background:rgba(238,244,240,.93)!important;border-color:rgba(44,83,96,.2)!important}
+.room-agent-anchor .room-nameplate{background:rgba(22,39,47,.86)!important;backdrop-filter:blur(3px)}
+.room-camera-layer:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:4;background:linear-gradient(180deg,rgba(255,248,226,.025),transparent 18%,transparent 78%,rgba(52,39,29,.045));mix-blend-mode:multiply}
+.room-viewport-shell{background:#17262e!important}
+.room-map-controls,.room-minimap,.room-navigation-hint{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.room-map-controls button.wide{min-width:52px}
