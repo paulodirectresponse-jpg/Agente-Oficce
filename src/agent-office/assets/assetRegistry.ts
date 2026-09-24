@@ -91,6 +91,9 @@ export type AssetQuery={
   categories?:AssetCategory[];
   rooms?:string[];
   teams?:string[];
+  packs?:string[];
+  excludePacks?:string[];
+  styleTags?:string[];
   tags?:string[];
   interactions?:AssetInteraction[];
   requireAllTags?:boolean;
@@ -131,6 +134,9 @@ export class AssetRegistry{
       if(!a.enabled)return false;
       if(q.rooms&&!overlap(q.rooms,a.roomTags))return false;
       if(q.teams&&!overlap(q.teams,a.teamTags))return false;
+      if(q.packs?.length&&!q.packs.includes(a.source.pack))return false;
+      if(q.excludePacks?.length&&q.excludePacks.includes(a.source.pack))return false;
+      if(q.styleTags?.length&&!overlap(q.styleTags,a.styleTags))return false;
       if(q.interactions?.length&&!q.interactions.includes(a.interaction))return false;
       if(q.tags){
         const ok=q.requireAllTags?all(q.tags,a.tags):overlap(q.tags,a.tags);
