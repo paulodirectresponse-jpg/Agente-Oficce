@@ -65,6 +65,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getRoomAssetStatus: () => request<{installed:boolean;root:string;registry_exists:boolean;files_exists:boolean}>('/api/agent-office/room-assets/status'),
+  getRoomAssetRegistry: async () => {
+    const registry=await request<{assets?:Array<{runtime?:{uri?:string};[key:string]:unknown}>}>('/api/agent-office/room-assets/registry');
+    const base=await resolveApiBase();
+    const assets=(registry.assets??[]).map(asset=>{
+      const runtime={...(asset.runtime??{})};
+      const name=typeof runtime.uri==='string'?runtime.uri.split('/').pop():'';
+      if(name)runtime.uri=`${base}/api/agent-office/room-assets/files/${encodeURIComponent(name)}`;
+      return{...asset,runtime};
+    });
+    return{...registry,assets};
+  },
   health: () => request<{ service: string; storage: string }>('/api/agent-office/health'),
   getVoiceStatus: () => request<VoiceStatus>('/api/agent-office/voice/status'),
   transcribeVoice: (wav:Blob,language='pt') => postAudio<VoiceTranscript>(`/api/agent-office/voice/transcribe?language=${encodeURIComponent(language)}`,wav),
