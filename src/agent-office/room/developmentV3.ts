@@ -15,25 +15,32 @@ export const DEVELOPMENT_V3_AGENT_SPRITES=[
 
 export const DEVELOPMENT_V3_ASSETS={
   floor:'floor.architecture.001.floor.wood.plank.tile.3957bd6a02',
-  rug:'rug.055.p03.18.blue.executive.office.rug.4d633abdd4',
+  meetingRug:'rug.055.p03.18.blue.executive.office.rug.4d633abdd4',
+  loungeRug:'rug.prop.011.lounge.rug.744e8a1f81',
   wallLong:'architecture.architecture.003.wall.horizontal.long.7deb52d0a2',
   wallV:'architecture.architecture.005.wall.vertical.medium.f0f38f205f',
   glassLong:'glass.architecture.009.glass.horizontal.long.5327be0d0f',
   glassV:'glass.architecture.011.glass.vertical.medium.6e8366883b',
-  door:'door.architecture.015.wooden.door.hinge.left.1fa3fd1eae',
+  meetingGlassH:'glass.architecture.013.glass.partition.horizontal.8c253f3341',
+  meetingGlassV:'glass.architecture.014.glass.partition.vertical.b89e37da3f',
   workstation:'desk.combination.001.complete.workstation.22f9e85f92',
   wallDisplay:'monitor.prop.015.wall.display.6410060367',
   marketWall:'monitor.tech.007.large.market.video.wall.b3fd1bf0dc',
   whiteboard:'whiteboard.035.p02.17.whiteboard.with.diagrams.5db621d5d2',
   conferenceTable:'table.001.p01.01.large.rectangular.conference.table.9fa0913ec6',
-  conferenceChair:'chair.010.p01.10.blue.conference.chair.b5e08d3b17',
-  sofa:'seating.prop.028.teal.lounge.sofa.e10cd9310c',
+  conferenceChairNorth:'chair.furniture.009.conference.chair.north.2c380d40b7',
+  conferenceChairSouth:'chair.furniture.010.conference.chair.south.39b5b2d98e',
+  conferenceChairRight:'chair.furniture.012.conference.chair.right.a62ae2fd1e',
+  conferenceChairLeft:'chair.furniture.011.conference.chair.left.ee6b8f37d1',
+  sofa:'seating.07.l.shaped.sectional.sofa.ed4291caaa',
+  loungeTable:'coffee.010.round.lounge.coffee.table.4ec13eb00f',
   bookcase:'storage.prop.016.tall.bookcase.141dcb5f7a',
   documentCabinet:'storage.prop.017.document.cabinet.d8643d2784',
   plantLarge:'plant.prop.036.large.round.pot.plant.2ab1c2f413',
   plantMedium:'plant.prop.037.medium.square.planter.plant.212fc9ff2f',
   plantSmall:'plant.prop.039.small.brown.pot.plant.c01b2b0360',
   floorLamp:'lighting.prop.009.floor.lamp.22dbca4e23',
+  printer:'electronics.prop.020.compact.printer.scanner.4611e63027',
   dividerPlanter:'plant.061.p04.04.workstation.divider.planter.888514e87d',
   sideboard:'storage.furniture.005.low.sideboard.df01bea9c3',
 } as const;
@@ -87,7 +94,6 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   {id:'right-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallV,x:1435,y:430,scale:1.34,layer:'wall_back'},
   {id:'bottom-wall-left',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:525,y:870,scale:1.15,layer:'wall_front'},
   {id:'bottom-wall-right',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:1155,y:870,scale:1.15,layer:'wall_front'},
-  {id:'entrance',assetId:DEVELOPMENT_V3_ASSETS.door,x:840,y:874,scale:.90,layer:'wall_front'},
 
   // Upper glass/planning wall, flush with architecture.
   {id:'glass-planning-a',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:650,y:188,scale:1.04,layer:'wall_back'},
@@ -99,6 +105,7 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   // Left storage wall. All storage is flush to the wall and on the floor.
   {id:'storage-bookcase',assetId:DEVELOPMENT_V3_ASSETS.bookcase,x:315,y:455,scale:.72,layer:'furniture_back',shadow:true},
   {id:'storage-cabinet',assetId:DEVELOPMENT_V3_ASSETS.documentCabinet,x:315,y:585,scale:.62,layer:'furniture_back',shadow:true},
+  {id:'storage-printer',assetId:DEVELOPMENT_V3_ASSETS.printer,x:315,y:510,scale:.45,layer:'surface'},
 
   // Six aligned workstations, two rows of three.
   ...DEVELOPMENT_V3_WORKSTATIONS.map(ws=>({
@@ -116,19 +123,20 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   {id:'divider-b',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:840,y:495,scale:.42,layer:'furniture_front',shadow:true},
 
   // Meeting area is a self-contained glass pod on its own rug.
-  {id:'meeting-rug',assetId:DEVELOPMENT_V3_ASSETS.rug,x:1185,y:615,scale:.78,layer:'floor',alpha:.94},
-  {id:'meeting-glass-left',assetId:DEVELOPMENT_V3_ASSETS.glassV,x:1040,y:520,scale:.92,layer:'wall_front'},
-  {id:'meeting-glass-top',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:1185,y:410,scale:.82,layer:'wall_back'},
+  {id:'meeting-rug',assetId:DEVELOPMENT_V3_ASSETS.meetingRug,x:1185,y:620,scale:.72,layer:'floor',alpha:.94},
+  {id:'meeting-glass-left',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassV,x:1043,y:540,scale:1.95,layer:'wall_front'},
+  {id:'meeting-glass-top-a',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassH,x:1120,y:420,scale:1.15,layer:'wall_back'},
+  {id:'meeting-glass-top-b',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassH,x:1240,y:420,scale:1.15,layer:'wall_back'},
   {id:'meeting-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:1185,y:590,scale:.54,layer:'furniture_back',shadow:true},
-  {id:'meeting-chair-north',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1185,y:510,scale:.45,layer:'furniture_back'},
-  {id:'meeting-chair-south',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1185,y:680,scale:.45,layer:'furniture_front'},
-  {id:'meeting-chair-west',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1105,y:590,scale:.45,layer:'furniture_front'},
-  {id:'meeting-chair-east',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1265,y:590,scale:.45,layer:'furniture_front'},
+  {id:'meeting-chair-north',assetId:DEVELOPMENT_V3_ASSETS.conferenceChairNorth,x:1185,y:500,scale:.56,layer:'furniture_back'},
+  {id:'meeting-chair-south',assetId:DEVELOPMENT_V3_ASSETS.conferenceChairSouth,x:1185,y:690,scale:.56,layer:'furniture_front'},
+  {id:'meeting-chair-west',assetId:DEVELOPMENT_V3_ASSETS.conferenceChairLeft,x:1095,y:600,scale:.56,layer:'furniture_front'},
+  {id:'meeting-chair-east',assetId:DEVELOPMENT_V3_ASSETS.conferenceChairRight,x:1275,y:600,scale:.56,layer:'furniture_front'},
 
   // Lounge: rug owns the entire lounge footprint; no desk may cross it.
-  {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.rug,x:425,y:765,scale:.88,layer:'floor',alpha:.94},
-  {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:365,y:780,scale:.64,layer:'furniture_back',shadow:true},
-  {id:'lounge-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:500,y:785,scale:.28,layer:'furniture_back',shadow:true},
+  {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.loungeRug,x:425,y:770,scale:1.02,layer:'floor',alpha:.96},
+  {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:365,y:795,scale:.52,layer:'furniture_back',shadow:true},
+  {id:'lounge-table',assetId:DEVELOPMENT_V3_ASSETS.loungeTable,x:500,y:790,scale:.52,layer:'furniture_back',shadow:true},
   {id:'lounge-lamp',assetId:DEVELOPMENT_V3_ASSETS.floorLamp,x:285,y:760,scale:.70,layer:'furniture_back'},
 
   // Intentional greenery. Plants support zones; they are not random fillers.
@@ -183,7 +191,7 @@ export const DEVELOPMENT_V3_ROOM_LAYOUT:RoomLayout={
     {id:'development.whiteboard',kind:'whiteboard',x:805,y:285,capacity:3,assetPlacementId:'whiteboard',tags:['planning','review']},
     {id:'development.meeting',kind:'meeting',x:1185,y:625,capacity:4,assetPlacementId:'meeting-table',tags:['meeting','review']},
     {id:'development.lounge',kind:'seat',x:420,y:790,capacity:3,assetPlacementId:'lounge-sofa',tags:['rest','waiting']},
-    {id:'development.entry',kind:'door',x:840,y:852,capacity:1,assetPlacementId:'entrance',tags:['entry']},
+    {id:'development.entry',kind:'door',x:840,y:852,capacity:1,tags:['entry','open-passage']},
   ],
 };
 
@@ -206,8 +214,10 @@ export function validateDevelopmentV3Composition(){
   for(const id of ['meeting-rug','meeting-table','meeting-chair-north','meeting-chair-south','meeting-chair-west','meeting-chair-east']){
     const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.meeting))errors.push(`meeting-item-outside-zone:${id}`);
   }
-  const entrance=byId.get('entrance');
-  if(!entrance||!pointInsideZone(entrance.x,entrance.y,DEVELOPMENT_V3_ZONES.entry))errors.push('entrance-outside-real-wall-opening');
+  // Entrance is intentionally an open passage in the bottom wall, matching the approved reference.
+  const leftWall=byId.get('bottom-wall-left'),rightWall=byId.get('bottom-wall-right');
+  if(!leftWall||!rightWall)errors.push('entry-wall-segments-missing');
+  if(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='entrance'))errors.push('unexpected-door-in-open-passage');
   const storageIds=['storage-bookcase','storage-cabinet'];
   for(const id of storageIds){
     const p=byId.get(id);if(!p||!pointInsideZone(p.x,p.y,DEVELOPMENT_V3_ZONES.storage))errors.push(`storage-outside-wall-zone:${id}`);
