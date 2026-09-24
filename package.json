@@ -29,7 +29,9 @@
     "assets:import": "tsx scripts/assets/import-office-assets.ts",
     "assets:validate": "tsx scripts/assets/validate-asset-registry.ts",
     "assets:gate": "npm run assets:validate",
-    "assets:typecheck": "tsc -p tsconfig.assets.json"
+    "assets:typecheck": "tsc -p tsconfig.assets.json",
+    "assets:import:lennox": "tsx scripts/assets/import-lennox-catalog.ts",
+    "assets:catalog": "npm run assets:import:lennox"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
