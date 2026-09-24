@@ -319,7 +319,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
   const pointerUp=(event:React.PointerEvent<HTMLDivElement>)=>{if(dragRef.current?.id===event.pointerId)dragRef.current=null;setDragging(false)};
   const keyDown=(event:React.KeyboardEvent<HTMLDivElement>)=>{const c=cameraRef.current,step=event.shiftKey?110:55;let next=c;if(event.key==='+'||event.key==='='){event.preventDefault();zoomAt(c.zoom*1.14);return}if(event.key==='-'){event.preventDefault();zoomAt(c.zoom/1.14);return}if(event.key==='0'){event.preventDefault();fit();return}if(event.key==='ArrowLeft'||event.key.toLowerCase()==='a')next={...c,x:c.x+step};else if(event.key==='ArrowRight'||event.key.toLowerCase()==='d')next={...c,x:c.x-step};else if(event.key==='ArrowUp'||event.key.toLowerCase()==='w')next={...c,y:c.y+step};else if(event.key==='ArrowDown'||event.key.toLowerCase()==='s')next={...c,y:c.y-step};else return;event.preventDefault();cameraRef.current=constrain(next)};
 
-  return <div ref={viewportRef} className={'room-game-shell'+(dragging?' dragging':'')} tabIndex={0} onKeyDown={keyDown} onWheel={event=>{event.preventDefault();zoomAt(cameraRef.current.zoom*(event.deltaY>0?.9:1.1),event.clientX,event.clientY)}} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
+  return <div ref={viewportRef} className={'room-game-shell'+(dragging?' dragging':'')} tabIndex={0} onKeyDown={keyDown} onWheel={event=>{event.preventDefault();zoomAt(cameraRef.current.zoom*(event.deltaY>0 ? .9 : 1.1),event.clientX,event.clientY)}} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
     <canvas ref={canvasRef} className="room-game-canvas" aria-label="Sala 2D operacional"/>
     <div className="room-game-controls" onPointerDown={event=>event.stopPropagation()}>
       <button type="button" onClick={()=>zoomAt(cameraRef.current.zoom/1.16)} aria-label="Afastar">−</button>
@@ -332,6 +332,10 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
       <canvas ref={miniRef}/>
     </div>
     <div className="room-game-hint">Arraste ou use WASD/setas · Scroll para zoom · Clique em um Agent para selecionar</div>
+    <div className="room-game-a11y" aria-live="polite">
+      {agents.map(agent=><button key={agent.id} type="button" disabled={agent.disabled} onClick={()=>onSelect(agent)}>{agent.name} · {agent.state} · {agent.activity}</button>)}
+      {lastHandoff&&<span>Handoff: {lastHandoff.from} para {lastHandoff.to}</span>}
+    </div>
     {!ready&&<div className="room-game-loading">Preparando sala…</div>}
   </div>;
 }
