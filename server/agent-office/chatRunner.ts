@@ -43,6 +43,7 @@ export interface PrepareChatRunInput {
   routing_level?: string;
   routing_decision?: Record<string, unknown>;
   attachment_ids?: string[];
+  required_tools?: string[];
   internal?: boolean;
   parent_run_id?: string | null;
   execution_plan_id?: string | null;
@@ -291,6 +292,7 @@ export class ChatRunnerService {
         target,
         tools_enabled: toolsEnabled,
         attachment_ids: attachmentIds,
+        required_tools: input.required_tools ?? [],
         hidden: input.internal === true,
         execution_plan_id: input.execution_plan_id ?? null,
         execution_step_id: input.execution_step_id ?? null,
@@ -323,6 +325,7 @@ export class ChatRunnerService {
         orchestration_run_id: input.orchestration_run_id ?? null,
         routing_level: input.routing_level ?? null,
         routing_decision: input.routing_decision ?? null,
+        required_tools: input.required_tools ?? [],
         hidden: input.internal === true,
         execution_plan_id: input.execution_plan_id ?? null,
         execution_step_id: input.execution_step_id ?? null,
@@ -985,6 +988,15 @@ export class ChatRunnerService {
     let toolSteps = 0;
     let effectiveProvider = binding.provider.id;
     let effectiveModel = binding.model.model_id;
+    const requiredTools=new Set<string>(Array.isArray(rootRun.metadata?.required_tools)?rootRun.metadata.required_tools.filter((x:unknown):x is string=>typeof x==='string'):[]);
+    const usedRequiredTools=new Set<string>();
+    let requiredToolReminders=0;
+    if(requiredTools.size){
+      const availableNames=new Set(definitions.map(tool=>tool.name));
+      const unavailable=[...requiredTools].filter(name=>!availableNames.has(name));
+      if(unavailable.length)throw new Error('CHAT_REQUIRED_TOOL_UNAVAILABLE:'+unavailable.join(','));
+      messages.push({role:'system',content:'This run has mandatory tools: '+[...requiredTools].join(', ')+'. You MUST actually call every mandatory tool before giving the final answer. Do not substitute claims or memory for tool evidence.'});
+    }
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
@@ -1016,6 +1028,14 @@ export class ChatRunnerService {
       effectiveModel = result.model_id ?? effectiveModel;
 
       if (!result.tool_calls?.length) {
+        const missing=[...requiredTools].filter(name=>!usedRequiredTools.has(name));
+        if(missing.length){
+          requiredToolReminders+=1;
+          if(requiredToolReminders>2)throw new Error('CHAT_REQUIRED_TOOL_NOT_USED:'+missing.join(','));
+          messages.push({role:'assistant',content:result.text||''});
+          messages.push({role:'system',content:'Mandatory tool requirement not satisfied. Before answering, call: '+missing.join(', ')+'. Use the tool now and ground the response in its actual result.'});
+          continue;
+        }
         if (result.text) {
           this.hub.publish(rootRun.id, 'response.delta', {
             ...this.workerPayload(binding),
@@ -1123,6 +1143,8 @@ export class ChatRunnerService {
             toolResult.audit_id,
           );
         }
+
+        if(toolResult.ok&&requiredTools.has(call.name))usedRequiredTools.add(call.name);
 
         this.emit(
           rootRun,
