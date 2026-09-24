@@ -106,16 +106,6 @@ function cropAsset(ctx:CanvasRenderingContext2D,img:HTMLImageElement|undefined,s
 function label(ctx:CanvasRenderingContext2D,text:string,x:number,y:number){
   ctx.fillStyle='rgba(39,56,61,.42)';ctx.font='700 12px ui-monospace,monospace';ctx.fillText(text.toUpperCase(),x,y);
 }
-function room(ctx:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,fill:string,name:string){
-  ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);ctx.strokeStyle='rgba(53,78,87,.7)';ctx.lineWidth=3;ctx.strokeRect(x,y,w,h);label(ctx,name,x+14,y+22);
-}
-function desk(ctx:CanvasRenderingContext2D,x:number,y:number,w=108){
-  ctx.fillStyle=COLORS.desk;ctx.fillRect(x,y,w,16);
-  ctx.fillStyle='#4f4034';ctx.fillRect(x+9,y+15,8,29);ctx.fillRect(x+w-17,y+15,8,29);
-  ctx.fillStyle=COLORS.screen;ctx.fillRect(x+31,y-34,47,34);ctx.strokeStyle='#557d8c';ctx.strokeRect(x+31,y-34,47,34);
-  ctx.fillStyle=COLORS.cyan;ctx.fillRect(x+38,y-25,31,3);ctx.fillRect(x+38,y-17,23,3);
-  ctx.fillStyle='#2d4650';ctx.fillRect(x+17,y+24,25,17);
-}
 function plant(ctx:CanvasRenderingContext2D,x:number,y:number){
   ctx.fillStyle='#755744';ctx.fillRect(x-8,y+12,16,19);ctx.fillStyle='#4c8d63';
   for(const [dx,dy,r] of [[-9,0,11],[5,-6,12],[14,6,10],[-2,10,12]] as const){ctx.beginPath();ctx.arc(x+dx,y+dy,r,0,Math.PI*2);ctx.fill()}
@@ -127,16 +117,13 @@ function roundTable(ctx:CanvasRenderingContext2D,x:number,y:number,r=38){
   ctx.fillStyle='#89684f';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.fillStyle='#304e5d';
   for(let i=0;i<4;i++){const a=i*Math.PI/2;ctx.fillRect(x+Math.cos(a)*(r+25)-9,y+Math.sin(a)*(r+25)-9,18,18)}
 }
-function server(ctx:CanvasRenderingContext2D,x:number,y:number,h=150,time=0,index=0){
-  ctx.fillStyle='#203541';ctx.fillRect(x,y,52,h);ctx.strokeStyle='#54717f';ctx.strokeRect(x,y,52,h);
-  for(let yy=y+13,n=0;yy<y+h-10;yy+=21,n++){ctx.fillStyle='#142a35';ctx.fillRect(x+7,yy,38,14);ctx.fillStyle=((Math.sin(time/320+n+index)+1)/2)>.38?COLORS.green:'#49646f';ctx.fillRect(x+37,yy+5,4,4)}
-}
 function board(ctx:CanvasRenderingContext2D,x:number,y:number,w=140,h=72){
   ctx.fillStyle='#ded9cb';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#6d6156';ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);
   const c=['#e0bd55','#78afc2','#d48478','#86a66e'];let n=0;
   for(let yy=0;yy<2;yy++)for(let xx=0;xx<4;xx++){ctx.fillStyle=c[n++%c.length];ctx.fillRect(x+13+xx*29,y+14+yy*27,21,17)}
 }
 function drawWorld(ctx:CanvasRenderingContext2D,time:number,images?:Map<string,HTMLImageElement>){
+  const pulse=.5+.5*Math.sin(time/550);
   // Zero-cost vertical slice: one dense, premium Development studio using only
   // our CC0 sheets plus Canvas lighting. This intentionally replaces the old
   // full-office schematic while we validate the final art language.
@@ -166,7 +153,7 @@ function drawWorld(ctx:CanvasRenderingContext2D,time:number,images?:Map<string,H
   for(let gx=x+55;gx<x+w-55;gx+=115){ctx.beginPath();ctx.moveTo(gx,y+34);ctx.lineTo(gx,y+112);ctx.stroke()}
   ctx.fillStyle='rgba(11,28,38,.72)';ctx.fillRect(x+40,y+46,258,54);
   ctx.fillStyle='#dff7ff';ctx.font='800 22px Inter,system-ui,sans-serif';ctx.fillText('</>  DEVELOPMENT',x+62,y+80);
-  ctx.fillStyle='#63cfe4';ctx.fillRect(x+40,y+99,258,3);
+  ctx.fillStyle=`rgba(99,207,228,${.65+pulse*.35})`;ctx.fillRect(x+40,y+99,258,3);
 
   // carpeted work pod
   ctx.fillStyle='#315d63';ctx.fillRect(x+145,y+180,670,365);
