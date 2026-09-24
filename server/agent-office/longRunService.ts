@@ -329,7 +329,7 @@ export class LongRunService{
 
   private roleAgents(selected:string[],decision:RoutingDecision){
     const rows=this.db.prepare("SELECT id,name,role,description,enabled,paused,provider_id,model_id FROM agents WHERE enabled=1 AND paused=0 AND provider_id IS NOT NULL AND model_id IS NOT NULL").all() as Array<{id:string;name:string;role:string;description:string}>;
-    const canExpand=decision.target_mode!=='agent'&&decision.target_mode!=='explicit';
+    const canExpand=decision.target_mode!=='direct_agent';
     const pool=canExpand?[...rows.filter(row=>selected.includes(row.id)),...rows.filter(row=>!selected.includes(row.id))]:rows.filter(row=>selected.includes(row.id));
     const pick=(pattern:RegExp,fallback?:string|null)=>{
       const hit=pool.find(row=>pattern.test((row.name+' '+row.role+' '+row.description).toLowerCase()));
