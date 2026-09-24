@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - feat/experience-v2-universal-api
-      - feat/stage5-1-approved-backdrop
   pull_request:
     branches:
       - main
