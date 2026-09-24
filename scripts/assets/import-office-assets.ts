@@ -6,7 +6,16 @@ import { tmpdir } from 'node:os';
 import type { AssetCategory, AssetInteraction, AssetLayer, AssetRecord, AssetRegistryData } from '../../src/agent-office/assets/assetRegistry.js';
 import { AssetRegistrySchema } from '../../src/agent-office/assets/assetRegistry.js';
 
-type Args={source:string;output:string;includeScenes:boolean;dryRun:boolean};
+type Args={source:string;output:string;includeScenes:boolean;dryRun:boolean;overrides?:string};
+type AssetOverride={
+  match:{pack?:string;path?:string};
+  set?:{
+    category?:AssetCategory;interaction?:AssetInteraction;layer?:AssetLayer;
+    anchor?:{x:number;y:number};footprint?:{width:number;height:number;unit:'tile'|'px'};
+    tags?:string[];roomTags?:string[];teamTags?:string[];styleTags?:string[];
+    priority?:number;enabled?:boolean;collision?:'none'|'solid'|'partial';
+  };
+};
 type ImportFile={pack:string;absolute:string;relative:string};
 
 const DEFAULT_OUTPUT='public/office-assets/licensed';
@@ -21,6 +30,7 @@ function args():Args{
     output:resolve(read('--output')??DEFAULT_OUTPUT),
     includeScenes:argv.includes('--include-scenes'),
     dryRun:argv.includes('--dry-run'),
+    overrides:read('--overrides')?resolve(read('--overrides')!):undefined,
   };
 }
 function walk(root:string){
@@ -158,6 +168,28 @@ function sourceRoots(source:string){
   for(const d of dirs)roots.push({pack:basename(d),root:d,temp:false});
   return{roots,tmp};
 }
+function loadOverrides(path?:string):AssetOverride[]{
+  if(!path)return[];
+  if(!existsSync(path))throw new Error(`Overrides file not found: ${path}`);
+  const value=JSON.parse(readFileSync(path,'utf8'));
+  if(!Array.isArray(value))throw new Error('Overrides file must contain an array.');
+  return value as AssetOverride[];
+}
+function applyOverrides(asset:AssetRecord,path:string,pack:string,overrides:AssetOverride[]){
+  for(const o of overrides){
+    if(o.match.pack&&!new RegExp(o.match.pack,'i').test(pack))continue;
+    if(o.match.path&&!new RegExp(o.match.path,'i').test(path))continue;
+    const s=o.set;if(!s)continue;
+    if(s.category)asset.category=s.category;if(s.interaction)asset.interaction=s.interaction;if(s.layer)asset.runtime.layer=s.layer;
+    if(s.anchor)asset.runtime.anchor=s.anchor;if(s.footprint)asset.runtime.footprint=s.footprint;if(s.priority!==undefined)asset.priority=s.priority;
+    if(s.enabled!==undefined)asset.enabled=s.enabled;if(s.collision)asset.runtime.collision=s.collision;
+    if(s.tags)asset.tags=[...new Set([...asset.tags,...s.tags])];
+    if(s.roomTags)asset.roomTags=[...new Set(s.roomTags)];
+    if(s.teamTags)asset.teamTags=[...new Set(s.teamTags)];
+    if(s.styleTags)asset.styleTags=[...new Set([...asset.styleTags,...s.styleTags])];
+  }
+  return asset;
+}
 function discover(roots:{pack:string;root:string}[],includeScenes:boolean){
   const files:ImportFile[]=[];
   for(const r of roots)for(const p of walk(r.root)){
@@ -174,6 +206,7 @@ function main(){
   const {roots,tmp}=sourceRoots(cfg.source);
   if(!roots.length)throw new Error('No ZIPs or extracted pack folders found.');
   const input=discover(roots,cfg.includeScenes);
+  const overrides=loadOverrides(cfg.overrides);
   const hashes=new Map<string,string>();
   const assets:AssetRecord[]=[];const skipped:{path:string;reason:string}[]=[];
   const runtimeDir=join(cfg.output,'files');
@@ -203,6 +236,7 @@ function main(){
         },
         enabled:true,priority:rooms.includes('development')?20:10,
       };
+      applyOverrides(record,f.relative,f.pack,overrides);
       assets.push(record);
       if(!cfg.dryRun){mkdirSync(runtimeDir,{recursive:true});cpSync(f.absolute,join(runtimeDir,runtimeName));}
     }catch(error){skipped.push({path:`${f.pack}/${f.relative}`,reason:error instanceof Error?error.message:String(error)})}
@@ -213,7 +247,7 @@ function main(){
   const byCategory=Object.fromEntries([...new Set(assets.map(a=>a.category))].sort().map(c=>[c,assets.filter(a=>a.category===c).length]));
   const byRoom=Object.fromEntries([...new Set(assets.flatMap(a=>a.roomTags))].sort().map(r=>[r,assets.filter(a=>a.roomTags.includes(r)).length]));
   const packs=Object.fromEntries(roots.map(r=>[r.pack,assets.filter(a=>a.source.pack===r.pack).length]));
-  const report={schemaVersion:1,generatedAt:registry.generatedAt,source:cfg.source,output:cfg.output,totalAssets:assets.length,skippedCount:skipped.length,byCategory,byRoom,packs,skipped};
+  const report={schemaVersion:1,generatedAt:registry.generatedAt,source:cfg.source,output:cfg.output,overrides:cfg.overrides??null,totalAssets:assets.length,skippedCount:skipped.length,byCategory,byRoom,packs,skipped};
 
   if(!cfg.dryRun){
     mkdirSync(cfg.output,{recursive:true});
