@@ -136,8 +136,8 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   {id:'divider-b',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:840,y:495,scale:.42,layer:'furniture_front',shadow:true},
 
   // Meeting area is a self-contained glass pod on its own rug.
-  {id:'meeting-rug',assetId:DEVELOPMENT_V3_ASSETS.meetingRug,x:1185,y:620,scale:.72,layer:'floor',alpha:.94},
-  {id:'meeting-glass-left',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassV,x:1043,y:540,scale:1.95,layer:'wall_front'},
+  {id:'meeting-rug',assetId:DEVELOPMENT_V3_ASSETS.meetingRug,x:1185,y:705,scale:1.10,layer:'floor',alpha:.94},
+  {id:'meeting-glass-left',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassV,x:1043,y:650,scale:1.80,layer:'wall_front'},
   {id:'meeting-glass-top-a',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassH,x:1120,y:420,scale:1.15,layer:'wall_back'},
   {id:'meeting-glass-top-b',assetId:DEVELOPMENT_V3_ASSETS.meetingGlassH,x:1240,y:420,scale:1.15,layer:'wall_back'},
   {id:'meeting-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:1185,y:590,scale:.54,layer:'furniture_back',shadow:true},
@@ -147,7 +147,7 @@ export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
   {id:'meeting-chair-east',assetId:DEVELOPMENT_V3_ASSETS.conferenceChairRight,x:1275,y:600,scale:.56,layer:'furniture_front'},
 
   // Lounge: rug owns the entire lounge footprint; no desk may cross it.
-  {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.loungeRug,x:425,y:770,scale:1.02,layer:'floor',alpha:.96},
+  {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.loungeRug,x:410,y:850,scale:1.15,layer:'floor',alpha:.96},
   {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:355,y:805,scale:.67,layer:'furniture_back',shadow:true},
   {id:'lounge-armchair',assetId:DEVELOPMENT_V3_ASSETS.loungeArmchair,x:515,y:810,scale:.46,layer:'furniture_front',shadow:true},
   {id:'lounge-table',assetId:DEVELOPMENT_V3_ASSETS.loungeTable,x:455,y:795,scale:.48,layer:'furniture_back',shadow:true},
