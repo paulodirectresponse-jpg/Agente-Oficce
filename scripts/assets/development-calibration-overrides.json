@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "overrides": [
+    {
+      "assetId": "desk.combination.001.complete.workstation.22f9e85f92",
+      "canonicalScale": 1.0,
+      "confidence": "curated",
+      "occlusion": {
+        "mode": "front-rects",
+        "frontRects": [
+          {"x": 8, "y": 112, "width": 205, "height": 20},
+          {"x": 8, "y": 132, "width": 64, "height": 101},
+          {"x": 151, "y": 132, "width": 62, "height": 101}
+        ]
+      },
+      "sockets": [
+        {
+          "id": "seat",
+          "kind": "work",
+          "x": 110,
+          "y": 222,
+          "facing": "north",
+          "pose": "seated-working",
+          "layer": "same"
+        },
+        {
+          "id": "stand",
+          "kind": "stand",
+          "x": 110,
+          "y": 258,
+          "facing": "north",
+          "pose": "standing",
+          "layer": "front"
+        }
+      ],
+      "notes": [
+        "Measured against the licensed 221x270 composite workstation.",
+        "The full workstation renders behind the Agent. Only tabletop/front drawer rectangles re-render over the Agent.",
+        "Room layouts must not change this asset's physical scale directly."
+      ]
+    },
+    {
+      "assetId": "plant.061.p04.04.workstation.divider.planter.888514e87d",
+      "canonicalScale": 1.0,
+      "confidence": "curated",
+      "notes": [
+        "Licensed PNG contains substantial transparent top padding; automatic alpha calibration must be used for placement."
+      ]
+    },
+    {
+      "assetId": "character.01.manager.navy.front.idle.c6dc34cd78",
+      "confidence": "curated",
+      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+    },
+    {
+      "assetId": "character.01.manager.navy.right.seated.working.646715397d",
+      "confidence": "curated",
+      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+    },
+    {
+      "assetId": "character.02.worker.orange.yellow.front.idle.0c6c38f3e5",
+      "confidence": "curated",
+      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+    },
+    {
+      "assetId": "character.02.worker.orange.yellow.right.seated.working.d89cdb7c93",
+      "confidence": "curated",
+      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+    },
+    {
+      "assetId": "character.03.worker.dark.purple.front.idle.b0ecf8e174",
+      "confidence": "curated",
+      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+    },
+    {
+      "assetId": "character.03.worker.dark.purple.right.seated.working.c2f29f1c67",
+      "confidence": "curated",
+      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+    },
+    {
+      "assetId": "character.04.worker.brown.green.front.idle.0053fa062f",
+      "confidence": "curated",
+      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+    },
+    {
+      "assetId": "character.04.worker.brown.green.right.seated.working.c7fa72d8b7",
+      "confidence": "curated",
+      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+    },
+    {
+      "assetId": "character.05.worker.black.charcoal.front.idle.a7a88018af",
+      "confidence": "curated",
+      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+    },
+    {
+      "assetId": "character.05.worker.black.charcoal.right.seated.working.07399caf29",
+      "confidence": "curated",
+      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+    },
+    {
+      "assetId": "character.06.worker.blond.blue.front.idle.cf5be32a0f",
+      "confidence": "curated",
+      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+    },
+    {
+      "assetId": "character.06.worker.blond.blue.right.seated.working.7890eb657a",
+      "confidence": "curated",
+      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+    }
+  ]
+}
