@@ -2,7 +2,7 @@ import type { AssetLayer, AssetRecord } from '../assets/assetRegistry.js';
 import type { RoomLayout } from '../assets/officeSpec.js';
 import { DEVELOPMENT_ROOM_TEMPLATE } from '../assets/roomSpec.js';
 
-export const DEVELOPMENT_V3_BOUNDS={x:245,y:75,width:1190,height:790};
+export const DEVELOPMENT_V3_BOUNDS={x:210,y:54,width:1260,height:850};
 
 export const DEVELOPMENT_V3_AGENT_SPRITES=[
   {idle:'character.01.manager.navy.front.idle.c6dc34cd78',working:'character.01.manager.navy.right.seated.working.646715397d'},
@@ -53,64 +53,92 @@ export type DevelopmentV3Placement={
   shadow?:boolean;
 };
 
+export const DEVELOPMENT_V3_ZONES={
+  work:{x:500,y:315,width:510,height:330},
+  lounge:{x:255,y:635,width:330,height:230},
+  planning:{x:965,y:120,width:390,height:260},
+  meeting:{x:1035,y:390,width:300,height:285},
+  storage:{x:235,y:235,width:145,height:330},
+  entry:{x:760,y:805,width:160,height:95},
+} as const;
+
 export const DEVELOPMENT_V3_WORKSTATIONS=[
-  {id:'ws-1',x:535,y:390,agentX:535,agentY:418},
-  {id:'ws-2',x:755,y:390,agentX:755,agentY:418},
-  {id:'ws-3',x:975,y:390,agentX:975,agentY:418},
-  {id:'ws-4',x:535,y:625,agentX:535,agentY:653},
-  {id:'ws-5',x:755,y:625,agentX:755,agentY:653},
-  {id:'ws-6',x:975,y:625,agentX:975,agentY:653},
+  {id:'ws-1',x:585,y:405,agentX:585,agentY:438},
+  {id:'ws-2',x:755,y:405,agentX:755,agentY:438},
+  {id:'ws-3',x:925,y:405,agentX:925,agentY:438},
+  {id:'ws-4',x:585,y:580,agentX:585,agentY:613},
+  {id:'ws-5',x:755,y:580,agentX:755,agentY:613},
+  {id:'ws-6',x:925,y:580,agentX:925,agentY:613},
 ] as const;
 
 export const DEVELOPMENT_V3_BEHAVIOR={
-  planning:{x:1180,y:515},
-  review:{x:1190,y:645},
-  waiting:{x:400,y:720},
-  lounge:{x:440,y:735},
-  entry:{x:340,y:780},
+  planning:{x:1120,y:310},
+  review:{x:1165,y:575},
+  waiting:{x:430,y:735},
+  lounge:{x:455,y:770},
+  entry:{x:840,y:845},
 } as const;
 
 export const DEVELOPMENT_V3_PLACEMENTS:DevelopmentV3Placement[]=[
-  {id:'back-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:485,y:188,scale:1.22,layer:'wall_back'},
-  {id:'back-wall-b',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:1040,y:188,scale:1.22,layer:'wall_back'},
-  {id:'left-wall',assetId:DEVELOPMENT_V3_ASSETS.wallV,x:284,y:525,scale:1.36,layer:'wall_back'},
-  {id:'right-glass',assetId:DEVELOPMENT_V3_ASSETS.glassV,x:1380,y:495,scale:1.28,layer:'wall_back'},
-  {id:'glass-a',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:640,y:217,scale:1.18,layer:'wall_back'},
-  {id:'glass-b',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:1030,y:217,scale:1.18,layer:'wall_back'},
-  {id:'entrance',assetId:DEVELOPMENT_V3_ASSETS.door,x:1290,y:806,scale:.95,layer:'wall_front'},
+  // Architectural shell. The entrance exists only in a real bottom wall opening.
+  {id:'top-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:470,y:150,scale:1.18,layer:'wall_back'},
+  {id:'top-wall-b',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:1045,y:150,scale:1.18,layer:'wall_back'},
+  {id:'left-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallV,x:235,y:430,scale:1.34,layer:'wall_back'},
+  {id:'right-wall-a',assetId:DEVELOPMENT_V3_ASSETS.wallV,x:1435,y:430,scale:1.34,layer:'wall_back'},
+  {id:'bottom-wall-left',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:525,y:870,scale:1.15,layer:'wall_front'},
+  {id:'bottom-wall-right',assetId:DEVELOPMENT_V3_ASSETS.wallLong,x:1155,y:870,scale:1.15,layer:'wall_front'},
+  {id:'entrance',assetId:DEVELOPMENT_V3_ASSETS.door,x:840,y:874,scale:.90,layer:'wall_front'},
 
+  // Upper glass/planning wall, flush with architecture.
+  {id:'glass-planning-a',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:650,y:188,scale:1.04,layer:'wall_back'},
+  {id:'glass-planning-b',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:910,y:188,scale:1.04,layer:'wall_back'},
+  {id:'whiteboard',assetId:DEVELOPMENT_V3_ASSETS.whiteboard,x:805,y:250,scale:.66,layer:'surface'},
+  {id:'dashboard',assetId:DEVELOPMENT_V3_ASSETS.marketWall,x:1170,y:250,scale:.59,layer:'surface'},
+  {id:'dashboard-sideboard',assetId:DEVELOPMENT_V3_ASSETS.sideboard,x:1170,y:327,scale:.62,layer:'furniture_back',shadow:true},
+
+  // Left storage wall. All storage is flush to the wall and on the floor.
+  {id:'storage-bookcase',assetId:DEVELOPMENT_V3_ASSETS.bookcase,x:315,y:455,scale:.72,layer:'furniture_back',shadow:true},
+  {id:'storage-cabinet',assetId:DEVELOPMENT_V3_ASSETS.documentCabinet,x:315,y:585,scale:.62,layer:'furniture_back',shadow:true},
+
+  // Six aligned workstations, two rows of three.
   ...DEVELOPMENT_V3_WORKSTATIONS.map(ws=>({
     id:ws.id,
     assetId:DEVELOPMENT_V3_ASSETS.workstation,
     x:ws.x,
     y:ws.y,
-    scale:.62,
+    scale:.54,
     layer:'furniture_back' as const,
     shadow:true,
   })),
 
-  {id:'dashboard',assetId:DEVELOPMENT_V3_ASSETS.marketWall,x:1095,y:260,scale:.64,layer:'surface'},
-  {id:'whiteboard',assetId:DEVELOPMENT_V3_ASSETS.whiteboard,x:1210,y:472,scale:.72,layer:'surface'},
-  {id:'meeting-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:1190,y:610,scale:.60,layer:'furniture_back',shadow:true},
-  {id:'meeting-chair-l',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1110,y:620,scale:.52,layer:'furniture_front'},
-  {id:'meeting-chair-r',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1272,y:620,scale:.52,layer:'furniture_front'},
+  // Green dividers between workstation rows, never crossing rugs.
+  {id:'divider-a',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:670,y:495,scale:.42,layer:'furniture_front',shadow:true},
+  {id:'divider-b',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:840,y:495,scale:.42,layer:'furniture_front',shadow:true},
 
-  {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.rug,x:420,y:748,scale:.98,layer:'floor',alpha:.92},
-  {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:420,y:755,scale:.66,layer:'furniture_back',shadow:true},
-  {id:'lounge-lamp',assetId:DEVELOPMENT_V3_ASSETS.floorLamp,x:325,y:742,scale:.78,layer:'furniture_back'},
-  {id:'bookcase',assetId:DEVELOPMENT_V3_ASSETS.bookcase,x:330,y:520,scale:.66,layer:'furniture_back',shadow:true},
-  {id:'document-cabinet',assetId:DEVELOPMENT_V3_ASSETS.documentCabinet,x:1310,y:390,scale:.52,layer:'furniture_back',shadow:true},
-  {id:'sideboard',assetId:DEVELOPMENT_V3_ASSETS.sideboard,x:1080,y:345,scale:.72,layer:'furniture_back',shadow:true},
-  {id:'divider-planter-a',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:755,y:510,scale:.46,layer:'furniture_front',shadow:true},
-  {id:'divider-planter-b',assetId:DEVELOPMENT_V3_ASSETS.dividerPlanter,x:975,y:510,scale:.46,layer:'furniture_front',shadow:true},
+  // Meeting area is a self-contained glass pod on its own rug.
+  {id:'meeting-rug',assetId:DEVELOPMENT_V3_ASSETS.rug,x:1185,y:615,scale:.78,layer:'floor',alpha:.94},
+  {id:'meeting-glass-left',assetId:DEVELOPMENT_V3_ASSETS.glassV,x:1040,y:520,scale:.92,layer:'wall_front'},
+  {id:'meeting-glass-top',assetId:DEVELOPMENT_V3_ASSETS.glassLong,x:1185,y:410,scale:.82,layer:'wall_back'},
+  {id:'meeting-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:1185,y:590,scale:.54,layer:'furniture_back',shadow:true},
+  {id:'meeting-chair-north',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1185,y:510,scale:.45,layer:'furniture_back'},
+  {id:'meeting-chair-south',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1185,y:680,scale:.45,layer:'furniture_front'},
+  {id:'meeting-chair-west',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1105,y:590,scale:.45,layer:'furniture_front'},
+  {id:'meeting-chair-east',assetId:DEVELOPMENT_V3_ASSETS.conferenceChair,x:1265,y:590,scale:.45,layer:'furniture_front'},
 
-  {id:'plant-large-left',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:360,y:310,scale:.66,layer:'furniture_front',shadow:true},
-  {id:'plant-large-right',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:1320,y:720,scale:.62,layer:'furniture_front',shadow:true},
-  {id:'plant-mid-a',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:655,y:240,scale:.64,layer:'furniture_front'},
-  {id:'plant-mid-b',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:865,y:240,scale:.64,layer:'furniture_front'},
-  {id:'plant-mid-c',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:1090,y:760,scale:.58,layer:'furniture_front'},
-  {id:'plant-small-a',assetId:DEVELOPMENT_V3_ASSETS.plantSmall,x:650,y:535,scale:.82,layer:'furniture_front'},
-  {id:'plant-small-b',assetId:DEVELOPMENT_V3_ASSETS.plantSmall,x:865,y:535,scale:.82,layer:'furniture_front'},
+  // Lounge: rug owns the entire lounge footprint; no desk may cross it.
+  {id:'lounge-rug',assetId:DEVELOPMENT_V3_ASSETS.rug,x:425,y:765,scale:.88,layer:'floor',alpha:.94},
+  {id:'lounge-sofa',assetId:DEVELOPMENT_V3_ASSETS.sofa,x:365,y:780,scale:.64,layer:'furniture_back',shadow:true},
+  {id:'lounge-table',assetId:DEVELOPMENT_V3_ASSETS.conferenceTable,x:500,y:785,scale:.28,layer:'furniture_back',shadow:true},
+  {id:'lounge-lamp',assetId:DEVELOPMENT_V3_ASSETS.floorLamp,x:285,y:760,scale:.70,layer:'furniture_back'},
+
+  // Intentional greenery. Plants support zones; they are not random fillers.
+  {id:'plant-top-left',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:330,y:220,scale:.58,layer:'furniture_front',shadow:true},
+  {id:'plant-planning-left',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:560,y:220,scale:.54,layer:'furniture_front'},
+  {id:'plant-planning-right',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:950,y:220,scale:.54,layer:'furniture_front'},
+  {id:'plant-meeting',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:1325,y:470,scale:.52,layer:'furniture_front',shadow:true},
+  {id:'plant-lounge',assetId:DEVELOPMENT_V3_ASSETS.plantLarge,x:300,y:835,scale:.52,layer:'furniture_front',shadow:true},
+  {id:'plant-entry-left',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:735,y:845,scale:.50,layer:'furniture_front'},
+  {id:'plant-entry-right',assetId:DEVELOPMENT_V3_ASSETS.plantMedium,x:945,y:845,scale:.50,layer:'furniture_front'},
 ];
 
 export const DEVELOPMENT_V3_LAYER_ORDER:AssetLayer[]=[
