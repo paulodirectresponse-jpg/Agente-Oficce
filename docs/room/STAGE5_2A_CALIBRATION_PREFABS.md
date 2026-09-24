@@ -312,3 +312,18 @@ Stage 5.2A is complete when:
 - tests, typecheck and project build pass.
 
 No new MSI should be generated during Stage 5.2A.
+
+
+## Private runtime delivery
+
+The desktop backend now exposes the private calibration catalog through:
+
+`GET /api/agent-office/room-assets/calibration`
+
+The room asset status is only considered fully installed for Stage 5.2 when all three are present:
+
+- `registry.json`
+- `calibration.json`
+- `files/`
+
+This allows Stage 5.2B to load registry, calibrated geometry and PNGs from the same private app-data boundary without placing licensed artwork in the public repository.
