@@ -13,6 +13,9 @@ export const PREFAB_LAYER_ORDER:AssetLayer[]=[
 
 export function prefabNodeRects(node:CompiledPrefabNode,pass:PrefabNodePass){
   const s=node.sourceRect,d=node.destinationRect;
+  if(node.occlusion.mode==='front-rects'){
+    return pass==='front'?null:{source:s,destination:d};
+  }
   if(node.occlusion.mode!=='horizontal-split'||node.occlusion.splitY===undefined||pass==='all'){
     return pass==='front'&&node.occlusion.mode==='none'?null:{source:s,destination:d};
   }
@@ -44,6 +47,28 @@ export function drawCompiledPrefabNode(
 ){
   const image=images.get(node.assetId);
   if(!image)return false;
+
+  if(node.occlusion.mode==='front-rects'&&pass==='front'){
+    const source=node.sourceRect,destination=node.destinationRect;
+    const sx=destination.width/source.width,sy=destination.height/source.height;
+    let drawn=false;
+    ctx.save();
+    ctx.imageSmoothingEnabled=false;
+    for(const raw of node.occlusion.frontRects??[]){
+      const x1=Math.max(source.x,raw.x),y1=Math.max(source.y,raw.y);
+      const x2=Math.min(source.x+source.width,raw.x+raw.width);
+      const y2=Math.min(source.y+source.height,raw.y+raw.height);
+      if(x2<=x1||y2<=y1)continue;
+      const width=x2-x1,height=y2-y1;
+      const dx=destination.x+(x1-source.x)*sx;
+      const dy=destination.y+(y1-source.y)*sy;
+      ctx.drawImage(image,x1,y1,width,height,dx,dy,width*sx,height*sy);
+      drawn=true;
+    }
+    ctx.restore();
+    return drawn;
+  }
+
   const rects=prefabNodeRects(node,pass);
   if(!rects)return false;
   const s=rects.source,d=rects.destination;
@@ -92,8 +117,8 @@ export function drawCompiledPrefabsAfterCharacters(
   images:PrefabImageSource,
 ){
   let drawn=0;
-  const splitNodes=prefabs.flatMap(prefab=>prefab.nodes).filter(node=>node.occlusion.mode==='horizontal-split');
-  for(const node of splitNodes)if(drawCompiledPrefabNode(ctx,node,images,'front'))drawn++;
+  const occludingNodes=prefabs.flatMap(prefab=>prefab.nodes).filter(node=>node.occlusion.mode==='horizontal-split'||node.occlusion.mode==='front-rects');
+  for(const node of occludingNodes)if(drawCompiledPrefabNode(ctx,node,images,'front'))drawn++;
   for(const layer of ['furniture_front','wall_front','fx','overlay'] as AssetLayer[]){
     drawn+=drawCompiledPrefabsLayer(ctx,prefabs,images,layer,'all');
   }
