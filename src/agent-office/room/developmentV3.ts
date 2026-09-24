@@ -211,10 +211,10 @@ export const DEVELOPMENT_V3_ROOM_LAYOUT:RoomLayout={
     ...DEVELOPMENT_V3_WORKSTATIONS.map((ws,index)=>({
       id:`development.workstation.${index+1}`,kind:'workstation',x:ws.agentX,y:ws.agentY,capacity:1,assetPlacementId:ws.id,tags:['development','work','coding'],
     })),
-    {id:'development.whiteboard',kind:'whiteboard',x:805,y:285,capacity:3,assetPlacementId:'whiteboard',tags:['planning','review']},
-    {id:'development.meeting',kind:'meeting',x:1185,y:625,capacity:4,assetPlacementId:'meeting-table',tags:['meeting','review']},
-    {id:'development.lounge',kind:'seat',x:420,y:790,capacity:3,assetPlacementId:'lounge-sofa',tags:['rest','waiting']},
-    {id:'development.entry',kind:'door',x:840,y:852,capacity:1,tags:['entry','open-passage']},
+    {id:'development.whiteboard',kind:'whiteboard',x:805,y:225,capacity:3,assetPlacementId:'whiteboard',tags:['planning','review']},
+    {id:'development.meeting',kind:'meeting',x:1210,y:505,capacity:4,assetPlacementId:'meeting-table',tags:['meeting','review']},
+    {id:'development.lounge',kind:'seat',x:485,y:700,capacity:3,assetPlacementId:'lounge-sofa',tags:['rest','waiting']},
+    {id:'development.entry',kind:'door',x:977,y:820,capacity:1,tags:['entry','open-passage']},
   ],
 };
 
