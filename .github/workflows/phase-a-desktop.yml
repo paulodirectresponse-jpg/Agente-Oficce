@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - feat/experience-v2-universal-api
-      - feat/stage5-2a-calibration-prefabs
   pull_request:
     branches:
       - main
