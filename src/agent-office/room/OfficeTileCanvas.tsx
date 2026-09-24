@@ -42,7 +42,7 @@ function draw(ctx:CanvasRenderingContext2D,w:number,h:number){
   drawRoom(ctx,t,{x:35.5,y:.5,w:12,h:8},'#c2ced0','Reunião');
   drawRoom(ctx,t,{x:35.5,y:17,w:12,h:10.5},'#c8bdca','Lounge');
   drawRoom(ctx,t,{x:13.2,y:18.5,w:7.5,h:9},'#bdc9bd','Pesquisa');
-  drawRoom(ctx,t,{x:31,y:.5,w:4,w:4.1,h:8},'#afc1c8','Infra');
+  drawRoom(ctx,t,{x:31,y:.5,w:4.1,h:8},'#afc1c8','Infra');
   ctx.fillStyle='rgba(104,139,151,.08)';ctx.fillRect(13*t,2*t,18*t,23*t);
   ctx.strokeStyle='#3e5966';ctx.lineWidth=t*.18;ctx.beginPath();ctx.moveTo(13*t,0);ctx.lineTo(13*t,28*t);ctx.moveTo(35*t,0);ctx.lineTo(35*t,28*t);ctx.stroke();
   ctx.fillStyle='rgba(83,110,124,.11)';ctx.fillRect(13*t,24.7*t,22*t,3.3*t);
