@@ -167,21 +167,25 @@ export function TrabalhoView({project}:{project:Project|null}){
 
   const submit=async(event:React.FormEvent)=>{
     event.preventDefault();if(!project||(!message.trim()&&!pendingFiles.length)||sending)return;
-    const text=message.trim()||'Analise os arquivos anexados.';const files=pendingFiles.slice();setMessage('');setPendingFiles([]);setSending(true);setUploading(Boolean(files.length));setError(null);
+    const text=message.trim()||'Analise os arquivos anexados.';const files=pendingFiles.slice();const optimisticId='local-'+Date.now();
+    setMessage('');setPendingFiles([]);setSending(true);setUploading(Boolean(files.length));setError(null);
+    setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:optimisticId,role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{pending:true,pending_file_names:files.map(file=>file.name)}}]}:cur);
     let uploaded:ResourceFile[]=[];
     try{
       if(files.length)uploaded=await Promise.all(files.map(file=>api.uploadResource(project.id,file,'chat')));
+      setConversation(cur=>cur?{...cur,messages:cur.messages.map(item=>item.id===optimisticId?{...item,metadata:{...item.metadata,pending:false,attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}:item)}:cur);
       if(isRunning&&activeRun){
         await api.sendWorkspaceCommandV3(project.id,{command_type:activeAction,message:text+(uploaded.length?'\n\nArquivos anexados: '+uploaded.map(file=>file.storage_path).join(', '):''),target,chat_run_id:activeRun.id,execution_plan_id:snapshot?.active_plan?.id});
-        setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:'local-'+Date.now(),role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{workspace_command:activeAction,pending:true}}]}:cur);
         await refresh();
       }else{
         const receipt=await api.startChatRun({project_id:project.id,conversation_id:conversation?.conversation_id,message:text,target,attachment_ids:uploaded.map(file=>file.id)});
         setSelectedRunId(receipt.run_id);
-        setConversation(cur=>cur?{...cur,messages:[...cur.messages,{id:'local-'+Date.now(),role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}]}:cur);
         await refresh();await connect(receipt.run_id);
       }
-    }catch(reason){setMessage(text);setPendingFiles(files);setError(humanError(reason))}
+    }catch(reason){
+      setConversation(cur=>cur?{...cur,messages:cur.messages.filter(item=>item.id!==optimisticId)}:cur);
+      setMessage(text);setPendingFiles(files);setError(humanError(reason))
+    }
     finally{setSending(false);setUploading(false)}
   };
 
