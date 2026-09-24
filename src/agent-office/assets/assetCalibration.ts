@@ -41,9 +41,10 @@ export const AssetCalibrationSchema=z.object({
   }),
   sockets:z.array(CalibrationSocketSchema).default([]),
   occlusion:z.object({
-    mode:z.enum(['none','horizontal-split']).default('none'),
+    mode:z.enum(['none','horizontal-split','front-rects']).default('none'),
     splitY:z.number().optional(),
-  }).default({mode:'none'}),
+    frontRects:z.array(AlphaBoundsSchema).default([]),
+  }).default({mode:'none',frontRects:[]}),
   renderLayer: z.custom<AssetLayer>(),
   confidence:z.enum(['auto','manifest','curated']).default('auto'),
   notes:z.array(z.string()).default([]),
@@ -64,7 +65,7 @@ export type CalibrationOverride={
   baselinePx?:number;
   visualAnchorPx?:{x:number;y:number};
   sockets?:CalibrationSocket[];
-  occlusion?:{mode:'none'|'horizontal-split';splitY?:number};
+  occlusion?:{mode:'none'|'horizontal-split'|'front-rects';splitY?:number;frontRects?:AlphaBounds[]};
   confidence?:'manifest'|'curated';
   notes?:string[];
 };
@@ -148,7 +149,7 @@ export function deriveCalibration(
       bottom:Math.max(0,asset.runtime.heightPx-alphaBounds.y-alphaBounds.height),
     },
     sockets:override?.sockets??[],
-    occlusion:override?.occlusion??{mode:'none'},
+    occlusion:override?.occlusion??{mode:'none',frontRects:[]},
     renderLayer:asset.runtime.layer,
     confidence:override?.confidence??(asset.runtime.tileSize!==32?'manifest':'auto'),
     notes:override?.notes??[],
