@@ -5,6 +5,7 @@ import {
   DEVELOPMENT_V3_PLACEMENTS,
   DEVELOPMENT_V3_WORKSTATIONS,
   requiredDevelopmentV3AssetIds,
+  validateDevelopmentV3Composition,
   validateDevelopmentV3Registry,
 } from './developmentV3.js';
 
@@ -24,6 +25,18 @@ describe('Development V3 layout',()=>{
     expect(DEVELOPMENT_V3_PLACEMENTS.length).toBeGreaterThanOrEqual(20);
     expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.layer==='furniture_front')).toBe(true);
     expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.assetId===DEVELOPMENT_V3_ASSETS.glassLong)).toBe(true);
+  });
+
+  it('passes the approved composition rules',()=>{
+    expect(validateDevelopmentV3Composition()).toEqual({ok:true,errors:[]});
+  });
+
+  it('keeps lounge and meeting areas separate from workstations',()=>{
+    const workstationIds=new Set(DEVELOPMENT_V3_WORKSTATIONS.map(ws=>ws.id));
+    expect(DEVELOPMENT_V3_PLACEMENTS.filter(p=>workstationIds.has(p.id)).length).toBe(6);
+    expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='lounge-rug')).toBe(true);
+    expect(DEVELOPMENT_V3_PLACEMENTS.some(p=>p.id==='meeting-rug')).toBe(true);
+    expect(DEVELOPMENT_V3_PLACEMENTS.find(p=>p.id==='entrance')?.layer).toBe('wall_front');
   });
 
   it('declares every licensed asset dependency explicitly',()=>{
