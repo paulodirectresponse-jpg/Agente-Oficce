@@ -22,7 +22,7 @@ function paeth(a:number,b:number,c:number){
   return pa<=pb&&pa<=pc?a:pb<=pc?b:c;
 }
 
-function unfilter(raw:Buffer,width:number,height:number,bpp:number,rowBytes:number){
+function unfilter(raw:Buffer,height:number,bpp:number,rowBytes:number){
   const out=Buffer.alloc(rowBytes*height);let input=0;
   for(let y=0;y<height;y++){
     const filter=raw[input++];
@@ -69,7 +69,7 @@ export function pngAlphaBounds(buffer:Buffer):PngAlphaBounds{
   const bitsPerPixel=channels*bitDepth;
   const rowBytes=Math.ceil(width*bitsPerPixel/8);
   const bpp=Math.max(1,Math.ceil(bitsPerPixel/8));
-  const scan=unfilter(raw,width,height,bpp,rowBytes);
+  const scan=unfilter(raw,height,bpp,rowBytes);
   const trns=cs.find(c=>c.type==='tRNS')?.data;
   let minX=width,minY=height,maxX=-1,maxY=-1,opaquePixels=0;
 
