@@ -117,3 +117,19 @@ Automated composition validation now rejects:
 - entrances not placed in the real wall opening.
 
 This alignment is the final Stage-4 visual layout baseline until a new preview is explicitly approved.
+
+
+### Final approved layout details
+
+The approved reference uses the following concrete arrangement:
+- 6 aligned Development workstations in two rows of three;
+- upper planning wall with glass, whiteboard and a real analytics display;
+- meeting pod on the right, with its own blue rug and glass boundary;
+- lounge in the lower-left, with its own rug, teal seating, round coffee table and lamp;
+- storage/printer zone flush to the left wall;
+- an **open bottom-center entrance passage**, not a decorative free-standing door;
+- a deliberately empty lower-center **circulation spine** connecting the room entrance to work, lounge and meeting zones.
+
+The empty circulation area is intentional functional space and is protected by validation so furniture cannot later drift into it.
+
+The lounge now uses a dedicated lounge rug and coffee table; the meeting room uses directional conference chairs and dedicated modular glass partitions. These changes remove the semantic mismatches from earlier V3 drafts.
