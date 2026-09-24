@@ -5317,3 +5317,40 @@ textarea {
 .work-v2-knowledge-drawer .v2-empty-state,
 .work-v2-activity-drawer .v2-empty-state,
 .work-v2-inspector .v2-empty-state{background:#0b1722!important;border-color:rgba(127,165,202,.15)!important;color:#6f879c!important}
+
+
+/* =========================================================
+   Block A — live build telemetry and rigorous execution UI
+   ========================================================= */
+.work-v2-goal-summary{grid-template-columns:8px minmax(0,1fr) auto auto 18px!important}
+.work-v2-goal-stats{display:flex;align-items:center;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.work-v2-goal-stats span{padding:3px 6px;border:1px solid rgba(127,165,202,.12);border-radius:999px;background:rgba(255,255,255,.018);color:#6f8aa0;font:700 7px ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}
+.work-v2-live-trace{border-top:1px solid rgba(127,165,202,.08);padding:5px 10px 6px;display:flex;flex-direction:column;gap:3px;background:rgba(5,15,24,.38)}
+.trace-row{display:grid;grid-template-columns:8px minmax(0,1fr);align-items:start;gap:6px;min-height:24px;padding:3px 4px;border-radius:5px}
+.trace-row:hover{background:rgba(58,168,255,.035)}
+.trace-dot{width:5px;height:5px;margin-top:5px;border-radius:50%;background:#55758f;box-shadow:0 0 0 2px rgba(85,117,143,.08)}
+.trace-row.tool-started .trace-dot,.trace-row.execution-step-started .trace-dot{background:#47b7ff;box-shadow:0 0 0 2px rgba(71,183,255,.1)}
+.trace-row.tool-completed .trace-dot,.trace-row.execution-step-completed .trace-dot{background:#59d79a;box-shadow:0 0 0 2px rgba(89,215,154,.1)}
+.trace-row.execution-step-failed .trace-dot{background:#ff7589;box-shadow:0 0 0 2px rgba(255,117,137,.1)}
+.trace-row>div{min-width:0;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.trace-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9db5c7;font-size:8px;font-weight:560}
+.trace-row small{flex:0 0 auto;color:#506a7f;font-size:7px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+
+.work-v2-goal-steps{grid-template-columns:1fr!important;gap:6px!important}
+.goal-step-card{border:1px solid rgba(123,154,184,.1);border-radius:8px;background:rgba(255,255,255,.01);overflow:hidden}
+.goal-step-card.running{border-color:rgba(58,168,255,.22);background:rgba(58,168,255,.025)}
+.goal-step-card.completed{border-color:rgba(77,231,157,.12)}
+.goal-step-card.failed{border-color:rgba(255,109,130,.22)}
+.goal-step-card>.goal-step{border:0!important;border-radius:0!important;background:transparent!important;padding:7px 8px!important}
+.goal-step-events{padding:0 8px 7px 29px;display:flex;flex-direction:column;gap:3px}
+.goal-step-events>div{display:grid;grid-template-columns:9px minmax(0,1fr);gap:4px;align-items:start;color:#5f7b91}
+.goal-step-events>div>span{font-size:8px;color:#42647d;margin-top:1px}
+.goal-step-events>div>div{min-width:0;display:flex;justify-content:space-between;gap:8px}
+.goal-step-events strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#819caf;font-size:7px;font-weight:520}
+.goal-step-events small{flex:0 0 auto;color:#486278;font-size:7px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.work-v2-goal-dock.expanded{box-shadow:0 12px 34px rgba(0,0,0,.2)}
+
+@media(max-width:900px){
+  .work-v2-goal-summary{grid-template-columns:8px minmax(0,1fr) auto 18px!important}
+  .work-v2-goal-stats{display:none}
+}
