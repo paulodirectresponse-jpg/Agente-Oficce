@@ -156,6 +156,16 @@ function draw(ctx:CanvasRenderingContext2D,w:number,h:number,a:OfficeAssets,time
   ctx.fillStyle='rgba(98,119,127,.2)';for(let x=13;x<45;x+=4)ctx.fillRect(x*t,26.1*t,1.6*t,.25*t);
   ctx.fillStyle='rgba(34,58,68,.44)';ctx.font=`700 ${Math.max(6,t*.34)}px ui-monospace,monospace`;ctx.fillText('DEV HUB',26.4*t,11.7*t);ctx.fillText('OPS POD',36.6*t,11.7*t);
   ctx.fillStyle='rgba(255,255,255,.05)';for(let x=13;x<45;x+=2.5)for(let y=10.5;y<26;y+=2.5){ctx.fillRect(x*t,y*t,.06*t,.06*t)}
+
+  /* Real CC0 pixel-art details layered over the vector fallback. */
+  pixelBookshelf(ctx,a,t,15.3,29.3,.9);pixelBookshelf(ctx,a,t,19.0,29.3,.9);pixelBookshelf(ctx,a,t,58.9,26.7,.72);
+  pixelPainting(ctx,a,t,2.5,1.45);pixelPainting(ctx,a,t,16.0,1.5);pixelPainting(ctx,a,t,50.3,1.5);
+  pixelClock(ctx,a,t,11.55,1.5);pixelClock(ctx,a,t,44.0,1.55);pixelClock(ctx,a,t,61.1,1.5);
+  for(const [x,y,small] of [[10.7,9.35,false],[44.0,9.95,false],[43.8,25.45,true],[23.0,26.4,true],[31.15,10.15,false],[17.65,10.35,true],[61.0,10.0,false],[12.05,26.0,true],[60.7,29.3,false],[8.8,28.4,true]] as Array<[number,number,boolean]>)pixelPlant(ctx,a,t,x,y,small);
+  pixelLamp(ctx,a,t,47.8,28.2);pixelLamp(ctx,a,t,61.45,28.15);pixelLamp(ctx,a,t,22.0,29.6);
+  const pulse=.35+.35*((Math.sin(time/420)+1)/2);ctx.save();ctx.globalAlpha=pulse;ctx.fillStyle='#60e3a3';
+  for(const [x,y] of [[41.25,3.0],[43.1,4.4],[41.2,6.0],[43.0,7.0]]){ctx.beginPath();ctx.arc(x*t,y*t,.09*t,0,Math.PI*2);ctx.fill()}
+  ctx.restore();
   ctx.restore();
 }
 export function OfficeTileCanvas(){
