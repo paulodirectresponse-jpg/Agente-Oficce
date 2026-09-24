@@ -17,11 +17,13 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
   const viewportRef=useRef<HTMLDivElement|null>(null);
   const dragRef=useRef<{pointerId:number;x:number;y:number;panX:number;panY:number}|null>(null);
   const [camera,setCamera]=useState({x:0,y:0,zoom:.7});
+  const [viewportSize,setViewportSize]=useState({width:1,height:1});
   const [dragging,setDragging]=useState(false);
 
   const fit=useCallback(()=>{
     const el=viewportRef.current;if(!el)return;
     const rect=el.getBoundingClientRect();
+    setViewportSize({width:rect.width,height:rect.height});
     const zoom=clamp(Math.min((rect.width-20)/WORLD_W,(rect.height-20)/WORLD_H),MIN_ZOOM,1);
     setCamera({zoom,x:(rect.width-WORLD_W*zoom)/2,y:(rect.height-WORLD_H*zoom)/2});
   },[]);
@@ -57,6 +59,15 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
     else if(event.key==='ArrowUp'){event.preventDefault();setCamera(current=>({...current,y:current.y+step}))}
     else if(event.key==='ArrowDown'){event.preventDefault();setCamera(current=>({...current,y:current.y-step}))}
   };
+  const miniLeft=clamp((-camera.x/camera.zoom)/WORLD_W*100,0,100);
+  const miniTop=clamp((-camera.y/camera.zoom)/WORLD_H*100,0,100);
+  const miniWidth=clamp((viewportSize.width/camera.zoom)/WORLD_W*100,3,100);
+  const miniHeight=clamp((viewportSize.height/camera.zoom)/WORLD_H*100,3,100);
+  const centerFromMinimap=(event:React.MouseEvent<HTMLDivElement>)=>{
+    const rect=event.currentTarget.getBoundingClientRect(),wx=((event.clientX-rect.left)/rect.width)*WORLD_W,wy=((event.clientY-rect.top)/rect.height)*WORLD_H;
+    setCamera(current=>({...current,x:viewportSize.width/2-wx*current.zoom,y:viewportSize.height/2-wy*current.zoom}));
+  };
+
   const focusAgents=()=>{
     const el=viewportRef.current;if(!el)return;const rect=el.getBoundingClientRect(),z=clamp(Math.max(camera.zoom,.82),MIN_ZOOM,MAX_ZOOM);
     const worldX=WORLD_W*.51,worldY=WORLD_H*.52;setCamera({zoom:z,x:rect.width/2-worldX*z,y:rect.height/2-worldY*z});
@@ -84,6 +95,10 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
         <i/>
         <button type="button" className="wide" onClick={focusAgents}>Agents</button>
         <button type="button" className="wide" onClick={fit}>Visão geral</button>
+      </div>
+      <div className="room-minimap" onClick={centerFromMinimap} onPointerDown={event=>event.stopPropagation()} title="Clique para navegar">
+        <OfficeTileCanvas/>
+        <span className="room-minimap-viewport" style={{left:miniLeft+'%',top:miniTop+'%',width:Math.min(miniWidth,100-miniLeft)+'%',height:Math.min(miniHeight,100-miniTop)+'%'}}/>
       </div>
       <div className="room-navigation-hint">Arraste para passear · Scroll para zoom · Duplo clique para visão geral</div>
     </div>
