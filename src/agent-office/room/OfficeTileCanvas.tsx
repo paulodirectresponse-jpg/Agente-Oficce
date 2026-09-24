@@ -86,7 +86,7 @@ export function OfficeTileCanvas(){
   const ref=useRef<HTMLCanvasElement|null>(null);
   useEffect(()=>{
     const canvas=ref.current;if(!canvas)return;
-    const render=()=>{const rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,rect.width,rect.height);draw(ctx,rect.width,rect.height)};
+    const render=()=>{const width=Math.max(1,canvas.clientWidth),height=Math.max(1,canvas.clientHeight),dpr=Math.min(window.devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(width*dpr));canvas.height=Math.max(1,Math.floor(height*dpr));const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,width,height);draw(ctx,width,height)};
     const ro=new ResizeObserver(render);ro.observe(canvas);render();return()=>ro.disconnect();
   },[]);
   return <canvas ref={ref} className="office-tile-canvas" aria-hidden="true"/>;
