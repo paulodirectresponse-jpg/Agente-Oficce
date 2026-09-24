@@ -158,7 +158,8 @@ agentOfficeRouter.get('/agent-office/projects/:projectId/conversation', (request
     const database = openAgentOfficeDatabase();
     const conversations = new ConversationRepository(database.connection);
     const conversationId = conversations.ensureForProject(request.params.projectId);
-    const messages = new MessageRepository(database.connection).list(conversationId, 200);
+    const messages = new MessageRepository(database.connection).list(conversationId, 500)
+      .filter((message: any) => message?.metadata?.hidden !== true);
     const resources = new ResourceService(database.connection);
     const hydrated = messages.map((message: any) => {
       const ids = Array.isArray(message.metadata?.attachment_ids) ? message.metadata.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [];
