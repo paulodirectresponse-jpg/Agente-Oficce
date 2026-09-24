@@ -192,7 +192,7 @@ export const api = {
     request<WorkspaceRunInspection>(`/api/agent-office/v3/workspace/runs/${runId}`),
   getWorkspacePlanV3: (planId: string) =>
     request<WorkspacePlan>(`/api/agent-office/v3/workspace/plans/${planId}`),
-  sendWorkspaceCommandV3: (projectId: string, input: { command_type: 'orient'|'enqueue'|'interrupt'; message: string; target?: string; chat_run_id?: string; execution_plan_id?: string }) =>
+  sendWorkspaceCommandV3: (projectId: string, input: { command_type: 'orient'|'enqueue'|'interrupt'; message: string; target?: string; chat_run_id?: string; execution_plan_id?: string; attachment_ids?: string[] }) =>
     request<WorkspaceCommand>(`/api/agent-office/v3/workspace/projects/${projectId}/commands`, { method: 'POST', body: JSON.stringify(input) }),
   markWorkspaceCommandDispatchedV3: (commandId: string) =>
     request<{ id: string; status: string }>(`/api/agent-office/v3/workspace/commands/${commandId}/dispatched`, { method: 'POST' }),
