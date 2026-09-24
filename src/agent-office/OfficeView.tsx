@@ -175,6 +175,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [resolvingApproval, setResolvingApproval] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
+  const [roomChatExpanded,setRoomChatExpanded]=useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -211,6 +212,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     setLiveEvents([]);
     setLastHandoff(null);
     setApprovals([]);
+    setRoomChatExpanded(false);
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
     void loadSnapshot();
@@ -562,7 +564,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
 
         <OfficeMap agents={visibleAgents} providers={providers} states={states} liveStates={liveStates} target={target} onTarget={setTarget} lastHandoff={lastHandoff}/>
 
-        <section className="office-chat-card" aria-label="Chat">
+        <section className={'office-chat-card '+(focus==='office'?(roomChatExpanded?'room-chat-expanded':'room-chat-compact'):'')} aria-label="Chat">
           <div className="chat-header">
             <div>
               <strong>Chat</strong>
@@ -574,6 +576,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               ) : (
                 <span>{agents.length} agentes disponíveis</span>
               )}
+              {focus==='office'&&<button type="button" className="room-chat-toggle" onClick={()=>setRoomChatExpanded(value=>!value)}>{roomChatExpanded?'Ocultar histórico':'Histórico'}</button>}
             </div>
           </div>
 
@@ -583,7 +586,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
             <small>{activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||'Concluído'}</small>
           </section>}
 
-          <div className="chat-transcript">
+          {(focus!=='office'||roomChatExpanded)&&<div className="chat-transcript">
             {conversation?.messages.length ? conversation.messages.slice(-16).map((item) => {
               const agent = item.agent_id ? agents.find((candidate) => candidate.id === item.agent_id) : null;
               return (
@@ -622,7 +625,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               );
             })}
             <div ref={chatEndRef} />
-          </div>
+          </div>}
 
           <form className="chat-composer" onSubmit={submit} onDragOver={(event)=>{event.preventDefault();event.dataTransfer.dropEffect='copy'}} onDrop={(event)=>{event.preventDefault();setPendingFiles(cur=>[...cur,...Array.from(event.dataTransfer.files??[])].slice(0,12))}}>
             {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><PendingAttachmentCard key={file.name+'-'+index} file={file} onRemove={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}/>)}</div>}
