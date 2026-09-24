@@ -11,6 +11,7 @@ import { UniversalOrchestratorLLM } from '../agent-office/orchestratorRuntime.js
 import { TeamService } from '../agent-office/teamService.js';
 import { WorkspaceService } from '../agent-office/workspaceService.js';
 import { LongRunService, shouldUseLongRun } from '../agent-office/longRunService.js';
+import { ResourceService } from '../agent-office/resourceService.js';
 
 export const chatRouter = Router();
 
@@ -38,6 +39,11 @@ chatRouter.post('/runs', async (request, response) => {
     const projectId = String(request.body?.project_id || '');
     const message = String(request.body?.message || '');
     const requestedTarget = typeof request.body?.target === 'string' ? request.body.target : 'auto';
+    const attachmentIds = Array.isArray(request.body?.attachment_ids) ? request.body.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [];
+    const attachmentKinds = [...new Set(new ResourceService(database.connection).attachments(attachmentIds).map(item=>String(item.metadata.kind||'other')))];
+    const routingMessage = attachmentKinds.length
+      ? message + '\n\n[Routing context only: the request includes attached media/files of type(s): ' + attachmentKinds.join(', ') + '. Route execution so the actual attachments are inspected by a compatible model. Never answer as if an attachment was analyzed when it was not.]'
+      : message;
     if (!database.connection.prepare('SELECT 1 FROM projects WHERE id=?').get(projectId)) {
       throw new Error('CHAT_PROJECT_NOT_FOUND');
     }
@@ -48,7 +54,7 @@ chatRouter.post('/runs', async (request, response) => {
     ).route({
       project_id: projectId,
       conversation_id: typeof request.body?.conversation_id === 'string' ? request.body.conversation_id : null,
-      message,
+      message: routingMessage,
       target: requestedTarget,
     });
 
@@ -96,7 +102,7 @@ chatRouter.post('/runs', async (request, response) => {
       orchestration_run_id: orchestration.orchestration_run_id,
       routing_level: orchestration.level,
       routing_decision: decision as unknown as Record<string, unknown>,
-      attachment_ids: Array.isArray(request.body?.attachment_ids) ? request.body.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [],
+      attachment_ids: attachmentIds,
     });
 
     const receipt = service.receipt(prepared);
@@ -107,7 +113,7 @@ chatRouter.post('/runs', async (request, response) => {
     const longRunning = shouldUseLongRun(message, decision);
     if (longRunning) {
       const durable = new LongRunService(database.connection);
-      const created = durable.create(prepared, orchestration, message);
+      const created = durable.create(prepared, orchestration, message, attachmentIds);
       void durable.run(created.plan.id, prepared.run.id, signal)
         .catch(() => undefined)
         .finally(() => {
