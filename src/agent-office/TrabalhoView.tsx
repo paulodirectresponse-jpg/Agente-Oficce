@@ -310,7 +310,7 @@ export function TrabalhoView({project}:{project:Project|null}){
                 <button type="button" className="primary" onClick={openPreview}>Abrir preview</button>
                 <button type="button" onClick={()=>window.open(snapshot?.preview?.url??'','_blank')}>Nova janela</button>
               </section>}
-              {!previewHealthy&&snapshot?.git?.files?.length>0&&!isRunning&&<section className="work-v2-preview-ready muted-preview">
+              {!previewHealthy&&(snapshot?.git?.files?.length??0)>0&&!isRunning&&<section className="work-v2-preview-ready muted-preview">
                 <div className="preview-ready-icon">◇</div>
                 <div><strong>Resultado pronto para visualizar</strong><span>Inicie o preview local para conferir a aplicação.</span></div>
                 <button type="button" className="primary" disabled={previewStarting} onClick={()=>void startPreview()}>{previewStarting?'Iniciando…':'Iniciar preview'}</button>
