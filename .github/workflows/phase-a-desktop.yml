@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feat/experience-v2-universal-api
+      - feat/asset-registry-v1
   pull_request:
     branches:
       - main
