@@ -94,21 +94,29 @@ function glassWall(ctx:CanvasRenderingContext2D,t:number,x:number,y:number,w:num
   for(let i=1;i<Math.floor(w/2);i++){ctx.beginPath();ctx.moveTo((x+i*2)*t,y*t);ctx.lineTo((x+i*2)*t,(y+h)*t);ctx.stroke()}
 }
 function artWall(ctx:CanvasRenderingContext2D,t:number,x:number,y:number){for(const [dx,dy,w,h,c] of [[0,0,2.4,1.5,'#456e8a'],[2.8,.25,1.6,2,'#8a5e73'],[4.8,0,2.1,1.4,'#6d8a60']] as const){ctx.fillStyle='#e4ded1';ctx.fillRect((x+dx)*t,(y+dy)*t,w*t,h*t);ctx.fillStyle=c;ctx.fillRect((x+dx+.18)*t,(y+dy+.18)*t,(w-.36)*t,(h-.36)*t)}}
-function draw(ctx:CanvasRenderingContext2D,w:number,h:number){
+function draw(ctx:CanvasRenderingContext2D,w:number,h:number,a:OfficeAssets,time=0){
   const t=Math.min(w/COLS,h/ROWS),ox=(w-COLS*t)/2,oy=(h-ROWS*t)/2;ctx.save();ctx.translate(ox,oy);
   ctx.fillStyle='#cbbba4';ctx.fillRect(0,0,COLS*t,ROWS*t);
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){ctx.strokeStyle='rgba(84,70,55,.065)';ctx.strokeRect(x*t,y*t,t,t)}
-  room(ctx,t,{x:.6,y:.6,w:13,h:8.5},'#d8c8ae','Projeto');
-  room(ctx,t,{x:14.4,y:.6,w:9,h:8.5},'#c6d2d0','Design');
-  room(ctx,t,{x:46,y:.6,w:17.4,h:8.5},'#c2ced0','Reunião');
-  room(ctx,t,{x:39.8,y:.6,w:5.5,h:8.5},'#adc1c8','Infra');
-  room(ctx,t,{x:.6,y:27.6,w:13,h:9.7},'#c5d0c7','Café');
-  room(ctx,t,{x:14.4,y:27.6,w:9,h:9.7},'#c1cabb','Biblioteca');
-  room(ctx,t,{x:46,y:25.4,w:17.4,h:11.9},'#c9becc','Lounge');
-  room(ctx,t,{x:24.2,y:27.6,w:7.8,h:9.7},'#c7cdc0','Focus');
-  room(ctx,t,{x:32.8,y:27.6,w:12.5,h:9.7},'#c4c8d0','Sprint');
-  room(ctx,t,{x:.6,y:10.2,w:10.3,h:7.2},'#c9d2c8','Recepção');
-  room(ctx,t,{x:.6,y:18.1,w:10.3,h:8.6},'#c8c3b6','Phone booths');
+  const R={
+    project:{x:.6,y:.6,w:13,h:8.5},design:{x:14.4,y:.6,w:9,h:8.5},meeting:{x:46,y:.6,w:17.4,h:8.5},infra:{x:39.8,y:.6,w:5.5,h:8.5},
+    cafe:{x:.6,y:27.6,w:13,h:9.7},library:{x:14.4,y:27.6,w:9,h:9.7},lounge:{x:46,y:25.4,w:17.4,h:11.9},focus:{x:24.2,y:27.6,w:7.8,h:9.7},
+    sprint:{x:32.8,y:27.6,w:12.5,h:9.7},reception:{x:.6,y:10.2,w:10.3,h:7.2},phone:{x:.6,y:18.1,w:10.3,h:8.6}
+  } satisfies Record<string,Rect>;
+  room(ctx,t,R.project,'#d8c8ae','Projeto');
+  room(ctx,t,R.design,'#c6d2d0','Design');
+  room(ctx,t,R.meeting,'#c2ced0','Reunião');
+  room(ctx,t,R.infra,'#adc1c8','Infra');
+  room(ctx,t,R.cafe,'#c5d0c7','Café');
+  room(ctx,t,R.library,'#c1cabb','Biblioteca');
+  room(ctx,t,R.lounge,'#c9becc','Lounge');
+  room(ctx,t,R.focus,'#c7cdc0','Focus');
+  room(ctx,t,R.sprint,'#c4c8d0','Sprint');
+  room(ctx,t,R.reception,'#c9d2c8','Recepção');
+  room(ctx,t,R.phone,'#c8c3b6','Phone booths');
+  tileTexture(ctx,a.floors,t,R.project,0,0,.34);tileTexture(ctx,a.floors,t,R.design,10,4,.32);tileTexture(ctx,a.floors,t,R.meeting,2,3,.34);tileTexture(ctx,a.floors,t,R.infra,14,7,.36);
+  tileTexture(ctx,a.floors,t,R.cafe,10,4,.35);tileTexture(ctx,a.floors,t,R.library,4,0,.33);tileTexture(ctx,a.floors,t,R.lounge,10,0,.30);tileTexture(ctx,a.floors,t,R.focus,12,7,.29);
+  tileTexture(ctx,a.floors,t,R.sprint,6,0,.32);tileTexture(ctx,a.floors,t,R.reception,6,0,.30);tileTexture(ctx,a.floors,t,R.phone,12,7,.28);
   ctx.fillStyle='rgba(105,139,151,.07)';ctx.fillRect(11.6*t,10.2*t,34*t,16.5*t);
   wall(ctx,t,11.5,9.5,34.2);wall(ctx,t,11.5,26.8,34.2);wall(ctx,t,45.7,9.5,.2,17.3);
   ctx.fillStyle='rgba(83,110,124,.12)';ctx.fillRect(11.8*t,23.8*t,33.5*t,2.3*t);
