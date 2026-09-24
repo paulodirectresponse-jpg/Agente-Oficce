@@ -12,7 +12,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "desktop:prepare-runtime": "node scripts/prepare-desktop-runtime.mjs",
     "preview": "npm run build && node dist/server/index.js",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && npm run assets:typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
@@ -28,7 +28,8 @@
     "app:icon": "tauri icon src-tauri/app-icon.svg",
     "assets:import": "tsx scripts/assets/import-office-assets.ts",
     "assets:validate": "tsx scripts/assets/validate-asset-registry.ts",
-    "assets:gate": "npm run assets:validate"
+    "assets:gate": "npm run assets:validate",
+    "assets:typecheck": "tsc -p tsconfig.assets.json"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
