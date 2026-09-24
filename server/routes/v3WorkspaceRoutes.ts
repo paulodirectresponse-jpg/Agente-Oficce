@@ -24,7 +24,8 @@ v3WorkspaceRouter.post('/projects/:projectId/commands',(req,res)=>{
     const type=req.body?.command_type;if(!['orient','enqueue','interrupt'].includes(type)){res.status(400).json({ok:false,error:{code:'WORKSPACE_COMMAND_INVALID',message:'WORKSPACE_COMMAND_INVALID'}});return}
     const message=String(req.body?.message||'').trim();if(!message){res.status(400).json({ok:false,error:{code:'WORKSPACE_COMMAND_MESSAGE_REQUIRED',message:'WORKSPACE_COMMAND_MESSAGE_REQUIRED'}});return}
     const service=new WorkspaceService(db.connection),snap=service.snapshot(req.params.projectId),runId=typeof req.body?.chat_run_id==='string'?req.body.chat_run_id:snap.active_run?.id??null,planId=typeof req.body?.execution_plan_id==='string'?req.body.execution_plan_id:snap.active_plan?.id??null;
-    const data=service.queueCommand({project_id:req.params.projectId,chat_run_id:runId,execution_plan_id:planId,command_type:type,message,target:String(req.body?.target||'auto')});
+    const attachmentIds=Array.isArray(req.body?.attachment_ids)?req.body.attachment_ids.filter((value:unknown):value is string=>typeof value==='string'):[];
+    const data=service.queueCommand({project_id:req.params.projectId,chat_run_id:runId,execution_plan_id:planId,command_type:type,message,target:String(req.body?.target||'auto'),attachment_ids:attachmentIds});
     if(type==='interrupt'&&runId)chatRunControls.cancel(runId);
     res.status(201).json({ok:true,data});
   }catch(e){const c=code(e);res.status(status(c)).json({ok:false,error:{code:c,message:c}})}finally{db.connection.close()}
