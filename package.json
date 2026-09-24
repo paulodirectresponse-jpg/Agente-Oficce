@@ -36,7 +36,7 @@
     "assets:catalog:gate": "npm run assets:validate:lennox",
     "room:development-v3:validate": "tsx scripts/assets/validate-development-v3.ts",
     "assets:calibrate": "tsx scripts/assets/calibrate-asset-catalog.ts",
-    "assets:calibration:gate": "npm run assets:typecheck && npx vitest run src/agent-office/assets/assetCalibration.test.ts src/agent-office/assets/prefabSystem.test.ts src/agent-office/assets/prefabRoom.test.ts",
+    "assets:calibration:gate": "npm run assets:typecheck && npx vitest run src/agent-office/assets/assetCalibration.test.ts src/agent-office/assets/characterCalibration.test.ts src/agent-office/assets/prefabSystem.test.ts src/agent-office/assets/prefabRoom.test.ts",
     "prefabs:validate": "tsx scripts/assets/validate-prefab-system.ts",
     "stage5.2a:gate": "npm run assets:calibration:gate"
   },
