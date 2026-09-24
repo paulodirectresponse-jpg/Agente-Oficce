@@ -47,6 +47,16 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
     setCamera(current=>({...current,x:drag.panX+(event.clientX-drag.x),y:drag.panY+(event.clientY-drag.y)}));
   };
   const endDrag=(event:React.PointerEvent<HTMLDivElement>)=>{if(dragRef.current?.pointerId===event.pointerId)dragRef.current=null;setDragging(false)};
+  const onKeyDown=(event:React.KeyboardEvent<HTMLDivElement>)=>{
+    const step=event.shiftKey?90:45;
+    if(event.key==='+'||event.key==='='){event.preventDefault();zoomAt(camera.zoom*1.14)}
+    else if(event.key==='-'){event.preventDefault();zoomAt(camera.zoom/1.14)}
+    else if(event.key==='0'){event.preventDefault();fit()}
+    else if(event.key==='ArrowLeft'){event.preventDefault();setCamera(current=>({...current,x:current.x+step}))}
+    else if(event.key==='ArrowRight'){event.preventDefault();setCamera(current=>({...current,x:current.x-step}))}
+    else if(event.key==='ArrowUp'){event.preventDefault();setCamera(current=>({...current,y:current.y+step}))}
+    else if(event.key==='ArrowDown'){event.preventDefault();setCamera(current=>({...current,y:current.y-step}))}
+  };
   const focusAgents=()=>{
     const el=viewportRef.current;if(!el)return;const rect=el.getBoundingClientRect(),z=clamp(Math.max(camera.zoom,.82),MIN_ZOOM,MAX_ZOOM);
     const worldX=WORLD_W*.51,worldY=WORLD_H*.52;setCamera({zoom:z,x:rect.width/2-worldX*z,y:rect.height/2-worldY*z});
@@ -58,7 +68,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
       <div className="room-brand"><strong>AGENT OFFICE</strong><span>operational workspace</span></div>
       <div className="room-clock">AO</div>
     </div>
-    <div ref={viewportRef} className={'room-floor room-canvas-floor room-viewport-shell'+(dragging?' dragging':'')} onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
+    <div ref={viewportRef} className={'room-floor room-canvas-floor room-viewport-shell'+(dragging?' dragging':'')} tabIndex={0} onKeyDown={onKeyDown} onDoubleClick={fit} onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag}>
       <div className="room-camera-layer" style={{width:WORLD_W,height:WORLD_H,transform:`translate3d(${camera.x}px,${camera.y}px,0) scale(${camera.zoom})`}}>
         <OfficeTileCanvas/>
         <div className={'room-stations canvas-stations count-'+Math.min(views.length,12)}>
@@ -75,7 +85,7 @@ export function OfficeMap({agents,providers,states,liveStates,target,onTarget,la
         <button type="button" className="wide" onClick={focusAgents}>Agents</button>
         <button type="button" className="wide" onClick={fit}>Visão geral</button>
       </div>
-      <div className="room-navigation-hint">Arraste para passear · Scroll para zoom</div>
+      <div className="room-navigation-hint">Arraste para passear · Scroll para zoom · Duplo clique para visão geral</div>
     </div>
   </div>;
 }
