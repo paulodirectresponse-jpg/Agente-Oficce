@@ -32,6 +32,7 @@ export const PrefabPlacementSchema=z.object({
   x:z.number(),
   y:z.number(),
   scaleToken:z.enum(['compact','standard','spacious']).default('standard'),
+  rotation:z.enum(['none','cw90','180','ccw90']).default('none'),
   layerOverride:z.custom<AssetLayer>().optional(),
   zBias:z.number().default(0),
   hidden:z.boolean().default(false),
@@ -82,6 +83,7 @@ export type CompiledPrefabNode={
   layer:AssetLayer;
   zBias:number;
   scale:number;
+  rotation:'none'|'cw90'|'180'|'ccw90';
   occlusion:{mode:'none'|'horizontal-split'|'front-rects';splitY?:number;frontRects?:Array<{x:number;y:number;width:number;height:number}>};
   tags:string[];
 };
@@ -165,6 +167,7 @@ export function compilePrefab(
       layer:placement.layerOverride??asset.runtime.layer,
       zBias:placement.zBias+asset.runtime.zBias,
       scale:rect.scale,
+      rotation:placement.rotation,
       occlusion:calibration.occlusion,
       tags:[...new Set([...definition.tags,...placement.tags,...instance.tags])],
     });

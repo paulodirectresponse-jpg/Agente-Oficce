@@ -74,7 +74,14 @@ export function drawCompiledPrefabNode(
   const s=rects.source,d=rects.destination;
   ctx.save();
   ctx.imageSmoothingEnabled=false;
-  ctx.drawImage(image,s.x,s.y,s.width,s.height,d.x,d.y,d.width,d.height);
+  if(node.rotation==='none'){
+    ctx.drawImage(image,s.x,s.y,s.width,s.height,d.x,d.y,d.width,d.height);
+  }else{
+    const angle=node.rotation==='cw90'?Math.PI/2:node.rotation==='ccw90'?-Math.PI/2:Math.PI;
+    ctx.translate(d.x+d.width/2,d.y+d.height/2);
+    ctx.rotate(angle);
+    ctx.drawImage(image,s.x,s.y,s.width,s.height,-d.width/2,-d.height/2,d.width,d.height);
+  }
   ctx.restore();
   return true;
 }

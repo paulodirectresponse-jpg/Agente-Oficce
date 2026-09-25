@@ -8,7 +8,8 @@ import {
 import type { Development52BRuntime } from './developmentPrefabRoom.js';
 import { DEVELOPMENT_52B_BOUNDS } from './developmentPrefabRoom.js';
 
-export const DEVELOPMENT_52B_FLOOR_ID='floor.animated.corporate.wood.plank.tile.14298a60';
+export const DEVELOPMENT_52B_FLOOR_ID='floor.luxury.01.warm.oak.patch';
+export const DEVELOPMENT_52B_TOP_WALL_ID='architecture.luxury.05.straight.interior.wall';
 
 export type Development52BRenderRuntime={
   registry:AssetRegistry;
@@ -26,19 +27,22 @@ function drawFloor(ctx:CanvasRenderingContext2D,runtime:Development52BRenderRunt
   const b=DEVELOPMENT_52B_BOUNDS;
   ctx.fillStyle='#061722';ctx.fillRect(0,0,1680,980);
   ctx.fillStyle='#0d2a38';ctx.fillRect(b.x-28,b.y-28,b.width+56,b.height+56);
-  ctx.fillStyle='#173b4b';ctx.fillRect(b.x-16,b.y-16,b.width+32,b.height+32);
+  ctx.fillStyle='#d7c79e';ctx.fillRect(b.x-16,b.y-16,b.width+32,b.height+32);
+  ctx.fillStyle='#a85f28';ctx.fillRect(b.x,b.y,b.width,b.height);
 
   const tile=runtime.images.get(DEVELOPMENT_52B_FLOOR_ID);
   if(tile?.complete&&tile.naturalWidth){
     ctx.save();ctx.imageSmoothingEnabled=false;
+    ctx.globalAlpha=.95;
     const calibration=runtime.calibrations.require(DEVELOPMENT_52B_FLOOR_ID);
     const source=calibration.alphaBounds;
-    const tileW=Math.max(32,Math.round(source.width*calibration.canonicalScale));
-    const tileH=Math.max(32,Math.round(source.height*calibration.canonicalScale));
+    const tileW=Math.round(source.width*calibration.canonicalScale);
+    const tileH=Math.round(source.height*calibration.canonicalScale);
     const firstX=b.x-Math.ceil((((b.x%tileW)+tileW)%tileW));
     const firstY=b.y-Math.ceil((((b.y%tileH)+tileH)%tileH));
-    for(let y=firstY;y<b.y+b.height;y+=tileH){
-      for(let x=firstX;x<b.x+b.width;x+=tileW){
+    for(let row=0,y=firstY;y<b.y+b.height;row++,y+=tileH){
+      const rowStart=firstX-(row%2?Math.floor(tileW/2):0);
+      for(let x=rowStart;x<b.x+b.width;x+=tileW){
         const clipped={
           x:Math.max(x,b.x),y:Math.max(y,b.y),
           width:Math.min(x+tileW,b.x+b.width)-Math.max(x,b.x),
@@ -53,8 +57,25 @@ function drawFloor(ctx:CanvasRenderingContext2D,runtime:Development52BRenderRunt
       }
     }
     ctx.restore();
+    ctx.fillStyle='rgba(36,18,9,.08)';ctx.fillRect(b.x,b.y,b.width,b.height);
   }else{
     ctx.fillStyle='#9c633a';ctx.fillRect(b.x,b.y,b.width,b.height);
+  }
+
+  const wall=runtime.images.get(DEVELOPMENT_52B_TOP_WALL_ID);
+  if(wall?.complete&&wall.naturalWidth){
+    const calibration=runtime.calibrations.require(DEVELOPMENT_52B_TOP_WALL_ID);
+    const source=calibration.alphaBounds;
+    const moduleWidth=source.width*calibration.canonicalScale;
+    const moduleHeight=source.height*calibration.canonicalScale;
+    ctx.save();ctx.imageSmoothingEnabled=false;
+    for(let i=0;i<5;i++){
+      ctx.drawImage(wall,source.x,source.y,source.width,source.height,
+        Math.round(b.x+8+i*moduleWidth),b.y+14,Math.ceil(moduleWidth),Math.ceil(moduleHeight));
+    }
+    ctx.fillStyle='rgba(29,38,43,.58)';
+    ctx.fillRect(b.x+9,b.y+43,b.width-18,76);
+    ctx.restore();
   }
 
   const vignette=ctx.createRadialGradient(
@@ -88,12 +109,21 @@ function drawAmbientLighting(ctx:CanvasRenderingContext2D,time:number){
     [b.x+b.width-125,b.y+160],
     [b.x+95,b.y+b.height-160],
     [b.x+b.width-110,b.y+b.height-160],
+    [b.x+b.width*.5-80,b.y+b.height-50],
+    [b.x+b.width*.5+80,b.y+b.height-50],
   ];
   for(const [x,y] of warm){
     const g=ctx.createRadialGradient(x,y,0,x,y,110);
     g.addColorStop(0,'rgba(255,184,86,.15)');
     g.addColorStop(1,'rgba(255,184,86,0)');
     ctx.fillStyle=g;ctx.fillRect(x-110,y-110,220,220);
+  }
+  for(const x of [b.x+38,b.x+310,b.x+1190]){
+    const y=b.y+96;
+    const halo=ctx.createRadialGradient(x,y,0,x,y,62);
+    halo.addColorStop(0,'rgba(255,196,103,.27)');
+    halo.addColorStop(1,'rgba(255,196,103,0)');
+    ctx.fillStyle=halo;ctx.fillRect(x-62,y-62,124,124);
   }
   const p=.045+.012*Math.sin(time/920);
   const cool=ctx.createRadialGradient(b.x+b.width*.58,b.y+b.height*.40,30,b.x+b.width*.58,b.y+b.height*.40,520);
@@ -134,7 +164,7 @@ export function drawDevelopment52BMini(
 }
 
 export function requiredDevelopment52BAssetIds(runtime:Development52BRuntime){
-  const ids=new Set<string>([DEVELOPMENT_52B_FLOOR_ID]);
+  const ids=new Set<string>([DEVELOPMENT_52B_FLOOR_ID,DEVELOPMENT_52B_TOP_WALL_ID]);
   for(const prefab of runtime.room.prefabs)for(const node of prefab.nodes)ids.add(node.assetId);
   return [...ids];
 }

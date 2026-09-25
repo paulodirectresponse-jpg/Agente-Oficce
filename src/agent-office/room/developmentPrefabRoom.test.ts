@@ -61,10 +61,14 @@ describe('Development 5.2B prefab room',()=>{
     expect(runtime.entrySockets.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('keeps the main entrance as an open passage rather than a decorative door asset',()=>{
+  it('keeps the main entrance open and marks its threshold with a floor mat',()=>{
     expect(DEVELOPMENT_52B_BLUEPRINT.instances.some(i=>i.prefabId==='entrance.bottom.open')).toBe(true);
     const entry=DEVELOPMENT_PREFABS.find(p=>p.id==='entrance.bottom.open');
-    expect(entry?.placements).toHaveLength(0);
+    expect(entry?.placements.map(p=>p.assetId)).toEqual([
+      'rug.056.p03.19.blue.entrance.floor.mat.3d2cb51e',
+      'lighting.075.p04.18.gold.white.wall.sconce.f32f6636',
+      'lighting.075.p04.18.gold.white.wall.sconce.f32f6636',
+    ]);
   });
 
   it('uses prefabs rather than the approved static concept image',()=>{

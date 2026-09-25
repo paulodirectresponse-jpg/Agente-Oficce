@@ -21,6 +21,31 @@ Update it **before every work session ends**.
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
 - Merge to main: intentionally pending user review
 
+### 2026-09-25 — Codex (Stage 5.2B visual refinement for preview)
+
+**Completed**
+- Continued the existing Calibration + Prefab System. The Development room still compiles from modular placements; no static room image was added.
+- Replaced the lounge armchair's private licensed runtime PNG with a cleaned derivative. The source art contained an opaque grey floor patch under its legs, which caused the visible checkerboard-like defect.
+- Completed the meeting room's left glass wall and lower glass edge while leaving a lower-left access gap.
+- Added a calibrated modular cream wall on the upper perimeter, a borderless warm-oak floor tile from the licensed pack, desk plants/books, meeting-table and lounge-table accents, and small wall fixtures.
+- Moved the entry socket up onto the threshold mat so the standing character no longer straddles the bottom wall.
+- Added `scripts/assets/curate-stage5-2b-room.ts` to reproduce the private runtime additions from the extracted licensed packs and a private cleaned armchair PNG. The source art remains outside Git.
+
+**Private runtime**
+- Current curated files, `registry.json`, and `calibration.json`: `../stage5-runtime/` relative to this worktree.
+- Cleaned armchair source for local reproduction: `../private-curated/development-armchair-clean.png` relative to this worktree.
+- Recreate by running `npx tsx scripts/assets/curate-stage5-2b-room.ts <runtime-dir> <extracted-corporate-pack-dir> <extracted-luxury-pack-dir> <private-clean-armchair.png>`.
+- Include the curated runtime with an installer only after the user approves the visual preview. License metadata marks runtime bundling allowed and source redistribution disallowed.
+
+**Verification**
+- Rendered the full prefab room in a local browser and compared it against the approved Development reference. The final visual capture includes an entry character.
+- Private runtime validation: 51 calibrated assets, six work sockets, zero blueprint errors, no static backdrop.
+- `npx tsc --noEmit`, `npm run build:client`, and `git diff --check`: passed.
+
+**Next exact action**
+1. Get user feedback on the saved visual preview before making an installer.
+2. If the preview is approved, package the curated private runtime with the desktop build and inspect the room inside the application.
+
 ### 2026-09-25 — Codex (Stage 5.2B Development composition fix)
 
 **Remote commit**

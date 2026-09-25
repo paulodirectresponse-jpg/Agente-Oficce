@@ -1,7 +1,7 @@
 import { PrefabDefinitionSchema, type PrefabDefinition } from './prefabSystem.js';
 
 const workstation='desk.combination.001.complete.workstation.22f9e85f92';
-const divider='plant.061.p04.04.workstation.divider.planter.888514e87d';
+const divider='plant.079.green.hedge.strip.71bc822e';
 const meetingRug='rug.01.executive.area.rug.1e092d7f';
 const meetingGlassH='glass.architecture.013.glass.partition.horizontal.8c253f3341';
 const meetingGlassV='glass.architecture.014.glass.partition.vertical.b89e37da3f';
@@ -10,7 +10,7 @@ const chairN='chair.furniture.009.conference.chair.north.2c380d40b7';
 const chairS='chair.furniture.010.conference.chair.south.39b5b2d98e';
 const chairL='chair.furniture.011.conference.chair.left.ee6b8f37d1';
 const chairR='chair.furniture.012.conference.chair.right.a62ae2fd1e';
-const loungeRug='rug.04.deep.teal.area.rug.7fc5b269';
+const loungeRug='rug.01.executive.area.rug.1e092d7f';
 const loungeSofa='seating.prop.028.teal.lounge.sofa.e10cd9310c';
 const loungeChair='seating.012.p01.12.teal.lounge.armchair.9440121898';
 const loungeTable='coffee.010.round.lounge.coffee.table.4ec13eb00f';
@@ -23,6 +23,10 @@ const dashboard='monitor.tech.007.large.market.video.wall.b3fd1bf0dc';
 const credenza='storage.meeting.credenza.wood.5310a6eae9';
 const plantLarge='plant.prop.036.large.round.pot.plant.2ab1c2f413';
 const plantMedium='plant.prop.037.medium.square.planter.plant.212fc9ff2f';
+const entranceMat='rug.056.p03.19.blue.entrance.floor.mat.3d2cb51e';
+const wallSconce='lighting.075.p04.18.gold.white.wall.sconce.f32f6636';
+const deskPlant='plant.corporate.016.small.desk.pot';
+const deskBook='decor.corporate.069.small.blue.book';
 
 function prefab(input:unknown):PrefabDefinition{
   return PrefabDefinitionSchema.parse({schemaVersion:1,...(input as Record<string,unknown>)});
@@ -52,6 +56,9 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
       })),
       {id:'cornerTL',assetId:'architecture.architecture.009.structural.corner.post.d13add17d9',x:16,y:22,scaleToken:'standard',layerOverride:'wall_back'},
       {id:'cornerTR',assetId:'architecture.architecture.009.structural.corner.post.d13add17d9',x:1244,y:22,scaleToken:'standard',layerOverride:'wall_back'},
+      {id:'identityLightLeft',assetId:wallSconce,x:38,y:112,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'identityLightRight',assetId:wallSconce,x:310,y:112,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'dashboardLight',assetId:wallSconce,x:1190,y:112,scaleToken:'standard',layerOverride:'wall_front'},
     ],
     sockets:[],
     collision:[],
@@ -69,11 +76,19 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
       {id:'ws1',assetId:workstation,x:115,y:95,scaleToken:'standard',tags:['workstation']},
       {id:'ws2',assetId:workstation,x:310,y:95,scaleToken:'standard',tags:['workstation']},
       {id:'ws3',assetId:workstation,x:505,y:95,scaleToken:'standard',tags:['workstation']},
-      {id:'divider1',assetId:divider,x:178,y:204,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
-      {id:'divider2',assetId:divider,x:425,y:204,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
+      {id:'divider1',assetId:divider,x:122,y:120,scaleToken:'standard',layerOverride:'surface',tags:['divider']},
+      {id:'divider2',assetId:divider,x:247,y:120,scaleToken:'standard',layerOverride:'surface',tags:['divider']},
+      {id:'divider3',assetId:divider,x:373,y:120,scaleToken:'standard',layerOverride:'surface',tags:['divider']},
+      {id:'divider4',assetId:divider,x:498,y:120,scaleToken:'standard',layerOverride:'surface',tags:['divider']},
       {id:'ws4',assetId:workstation,x:115,y:280,scaleToken:'standard',tags:['workstation']},
       {id:'ws5',assetId:workstation,x:310,y:280,scaleToken:'standard',tags:['workstation']},
       {id:'ws6',assetId:workstation,x:505,y:280,scaleToken:'standard',tags:['workstation']},
+      {id:'deskPlant1',assetId:deskPlant,x:175,y:-25,scaleToken:'standard',layerOverride:'surface',tags:['desk-accent']},
+      {id:'deskBook2',assetId:deskBook,x:255,y:-25,scaleToken:'standard',layerOverride:'surface',tags:['desk-accent']},
+      {id:'deskPlant3',assetId:deskPlant,x:565,y:-25,scaleToken:'standard',layerOverride:'surface',tags:['desk-accent']},
+      {id:'deskBook4',assetId:deskBook,x:60,y:160,scaleToken:'standard',layerOverride:'surface',tags:['desk-accent']},
+      {id:'deskPlant5',assetId:deskPlant,x:370,y:160,scaleToken:'standard',layerOverride:'surface',tags:['desk-accent']},
+      {id:'deskBook6',assetId:deskBook,x:450,y:160,scaleToken:'standard',layerOverride:'surface',tags:['desk-accent']},
     ],
     sockets:[
       {id:'seat1',kind:'work',x:115,y:125,facing:'north',pose:'seated-working',tags:['workstation','1']},
@@ -125,22 +140,26 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     category:'meeting',
     width:330,height:360,pivot:{x:165,y:180},
     placements:[
-      {id:'rug',assetId:meetingRug,x:165,y:265,scaleToken:'standard',layerOverride:'floor'},
-      {id:'glassLeft',assetId:meetingGlassV,x:25,y:215,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'rug',assetId:meetingRug,x:165,y:279,scaleToken:'standard',layerOverride:'floor',rotation:'cw90'},
+      {id:'glassLeftUpper',assetId:meetingGlassV,x:25,y:87,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'glassLeftLower',assetId:meetingGlassV,x:25,y:215,scaleToken:'standard',layerOverride:'wall_front'},
       {id:'glassTop1',assetId:meetingGlassH,x:110,y:35,scaleToken:'standard',layerOverride:'wall_back'},
       {id:'glassTop2',assetId:meetingGlassH,x:220,y:35,scaleToken:'standard',layerOverride:'wall_back'},
-      {id:'table',assetId:meetingTable,x:165,y:238,scaleToken:'compact'},
-      {id:'north',assetId:chairN,x:165,y:158,scaleToken:'compact'},
-      {id:'south',assetId:chairS,x:165,y:330,scaleToken:'compact',layerOverride:'furniture_front'},
-      {id:'west',assetId:chairL,x:89,y:238,scaleToken:'compact',layerOverride:'furniture_front'},
-      {id:'east',assetId:chairR,x:241,y:238,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'glassBottom1',assetId:meetingGlassH,x:110,y:355,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'glassBottom2',assetId:meetingGlassH,x:220,y:355,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'table',assetId:meetingTable,x:165,y:245,scaleToken:'standard',rotation:'cw90'},
+      {id:'tablePlant',assetId:deskPlant,x:165,y:160,scaleToken:'standard',layerOverride:'surface'},
+      {id:'north',assetId:chairN,x:165,y:112,scaleToken:'compact'},
+      {id:'south',assetId:chairS,x:165,y:250,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'west',assetId:chairL,x:84,y:180,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'east',assetId:chairR,x:246,y:180,scaleToken:'compact',layerOverride:'furniture_front'},
       {id:'plant',assetId:plantLarge,x:300,y:110,scaleToken:'compact',layerOverride:'furniture_front'},
     ],
     sockets:[
-      {id:'chairN',kind:'meeting',x:165,y:160,facing:'south',pose:'seated-meeting'},
-      {id:'chairS',kind:'meeting',x:165,y:335,facing:'north',pose:'seated-meeting'},
-      {id:'chairW',kind:'meeting',x:80,y:260,facing:'east',pose:'seated-meeting'},
-      {id:'chairE',kind:'meeting',x:250,y:260,facing:'west',pose:'seated-meeting'},
+      {id:'chairN',kind:'meeting',x:165,y:112,facing:'south',pose:'seated-meeting'},
+      {id:'chairS',kind:'meeting',x:165,y:250,facing:'north',pose:'seated-meeting'},
+      {id:'chairW',kind:'meeting',x:84,y:180,facing:'east',pose:'seated-meeting'},
+      {id:'chairE',kind:'meeting',x:246,y:180,facing:'west',pose:'seated-meeting'},
       {id:'presenter',kind:'stand',x:165,y:90,facing:'south',pose:'standing-present'},
     ],
     collision:[{x:30,y:120,width:270,height:215}],
@@ -154,10 +173,11 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     category:'lounge',
     width:340,height:260,pivot:{x:170,y:130},
     placements:[
-      {id:'rug',assetId:loungeRug,x:170,y:250,scaleToken:'standard',layerOverride:'floor'},
+      {id:'rug',assetId:loungeRug,x:170,y:250,scaleToken:'spacious',layerOverride:'floor'},
       {id:'sofa',assetId:loungeSofa,x:90,y:190,scaleToken:'standard'},
       {id:'chair',assetId:loungeChair,x:265,y:205,scaleToken:'standard',layerOverride:'furniture_front'},
       {id:'table',assetId:loungeTable,x:165,y:205,scaleToken:'standard'},
+      {id:'coffeePlant',assetId:deskPlant,x:165,y:150,scaleToken:'standard',layerOverride:'surface'},
       {id:'lamp',assetId:floorLamp,x:25,y:145,scaleToken:'standard'},
       {id:'plant',assetId:plantLarge,x:18,y:215,scaleToken:'compact',layerOverride:'furniture_front'},
     ],
@@ -196,6 +216,8 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     width:300,height:120,pivot:{x:150,y:60},
     placements:[
       {id:'credenza',assetId:credenza,x:150,y:82,scaleToken:'standard',layerOverride:'furniture_back'},
+      {id:'binder',assetId:deskBook,x:100,y:35,scaleToken:'standard',layerOverride:'surface'},
+      {id:'counterPlant',assetId:deskPlant,x:210,y:35,scaleToken:'standard',layerOverride:'surface'},
     ],
     sockets:[
       {id:'support',kind:'interact',x:150,y:112,facing:'north',pose:'standing-interact',capacity:1,tags:['storage','support']},
@@ -212,6 +234,7 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     width:300,height:120,pivot:{x:150,y:60},
     placements:[
       {id:'credenza',assetId:credenza,x:150,y:82,scaleToken:'standard',layerOverride:'furniture_back'},
+      {id:'binder',assetId:deskBook,x:150,y:35,scaleToken:'standard',layerOverride:'surface'},
       {id:'plant-left',assetId:plantMedium,x:28,y:90,scaleToken:'compact',layerOverride:'furniture_front'},
       {id:'plant-right',assetId:plantMedium,x:272,y:90,scaleToken:'compact',layerOverride:'furniture_front'},
     ],
@@ -228,15 +251,19 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     name:'Open Bottom Entrance',
     category:'entrance',
     width:260,height:90,pivot:{x:130,y:45},
-    placements:[],
+    placements:[
+      {id:'threshold-mat',assetId:entranceMat,x:130,y:115,scaleToken:'standard',layerOverride:'floor'},
+      {id:'left-sconce',assetId:wallSconce,x:48,y:85,scaleToken:'standard',layerOverride:'wall_front'},
+      {id:'right-sconce',assetId:wallSconce,x:212,y:85,scaleToken:'standard',layerOverride:'wall_front',rotation:'180'},
+    ],
     sockets:[
-      {id:'entry',kind:'entry',x:130,y:85,facing:'north',pose:'standing'},
-      {id:'exit',kind:'exit',x:130,y:85,facing:'south',pose:'standing'},
+      {id:'entry',kind:'entry',x:130,y:55,facing:'north',pose:'standing'},
+      {id:'exit',kind:'exit',x:130,y:55,facing:'south',pose:'standing'},
     ],
     collision:[],
     keepClear:[{x:55,y:0,width:150,height:90}],
     tags:['entrance','open-passage'],roomTags:['development'],teamTags:['general'],
-    notes:['Intentionally contains no decorative door. The surrounding room shell owns the wall opening.'],
+    notes:['The surrounding shell owns the open wall passage; only a calibrated floor mat marks the threshold.'],
   }),
 ];
 

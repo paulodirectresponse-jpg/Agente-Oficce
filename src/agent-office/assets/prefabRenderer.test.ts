@@ -7,7 +7,7 @@ const base:CompiledPrefabNode={
   x:100,y:100,
   sourceRect:{x:10,y:20,width:100,height:120},
   destinationRect:{x:200,y:300,width:200,height:240},
-  layer:'furniture_back',zBias:0,scale:2,
+  layer:'furniture_back',zBias:0,scale:2,rotation:'none',
   occlusion:{mode:'horizontal-split',splitY:80},
   tags:[],
 };
