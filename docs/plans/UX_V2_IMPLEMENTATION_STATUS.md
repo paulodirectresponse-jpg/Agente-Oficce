@@ -21,6 +21,33 @@ Update it **before every work session ends**.
 - Stable backend baseline: Agent Office 0.4.0 / Blocks 1–11
 - Merge to main: intentionally pending user review
 
+### 2026-09-25 — Codex (Stage 5.2B Development composition fix)
+
+**Remote commit**
+`83f8e6500e80cc88c273704a109c721d709d1368`
+
+**Completed**
+- Fixed the blueprint validation failure where `work-left-aisle` overlapped the workpod's conservative collision footprint, preventing the room runtime from compiling.
+- Aligned the central entry socket and protected corridor to the opening between the bottom shell segments.
+- Added two reusable low-credenza prefab instances along the lower perimeter, keeping the entrance corridor clear.
+
+**Verification**
+- Private Stage 5.2B validation against the local licensed bundle and curated overrides: passed; six calibrated workstation sockets, no static backdrop, no blueprint errors.
+- `npx tsc --noEmit`: passed.
+- `npm run build:client`: passed.
+- `git diff --check`: passed.
+
+**Files most relevant**
+- `src/agent-office/room/developmentPrefabRoom.ts`
+- `src/agent-office/assets/developmentPrefabs.ts`
+- `src/agent-office/room/developmentPrefabRoom.test.ts`
+
+**Next exact action**
+1. Continue visual review with the licensed runtime active, especially asset facing, workstation divider layering, and glass partition alignment.
+
+**Do not redo**
+- Do not replace the prefab-based room with a static backdrop.
+
 ## Completed
 
 ### Planning / contract
