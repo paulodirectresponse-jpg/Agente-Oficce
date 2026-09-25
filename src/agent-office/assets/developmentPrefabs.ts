@@ -31,6 +31,43 @@ function prefab(input:unknown):PrefabDefinition{
 
 export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
   prefab({
+    id:'development.shell',
+    name:'Development Architectural Shell',
+    category:'custom',
+    width:1260,height:840,pivot:{x:630,y:420},
+    placements:[
+      ...[64,192,320,448,576,704,832,960,1088,1216].map((x,index)=>({
+        id:`top-${index+1}`,assetId:'architecture.architecture.005.outer.wall.horizontal.482ac5b7cd',x,y:22,scaleToken:'standard' as const,layerOverride:'wall_back' as const,
+      })),
+      ...[64,192,320,448,576].map((x,index)=>({
+        id:`bottom-left-${index+1}`,assetId:'architecture.architecture.005.outer.wall.horizontal.482ac5b7cd',x,y:818,scaleToken:'standard' as const,layerOverride:'wall_front' as const,
+      })),
+      ...[832,960,1088,1216].map((x,index)=>({
+        id:`bottom-right-${index+1}`,assetId:'architecture.architecture.005.outer.wall.horizontal.482ac5b7cd',x,y:818,scaleToken:'standard' as const,layerOverride:'wall_front' as const,
+      })),
+      ...[96,224,352,480,608,736].map((y,index)=>({
+        id:`left-${index+1}`,assetId:'architecture.architecture.006.outer.wall.vertical.d1e5aa3c68',x:16,y,scaleToken:'standard' as const,layerOverride:'wall_back' as const,
+      })),
+      ...[96,224,352,480,608,736].map((y,index)=>({
+        id:`right-${index+1}`,assetId:'architecture.architecture.006.outer.wall.vertical.d1e5aa3c68',x:1244,y,scaleToken:'standard' as const,layerOverride:'wall_back' as const,
+      })),
+      {id:'cornerTL',assetId:'architecture.architecture.009.structural.corner.post.d13add17d9',x:16,y:22,scaleToken:'standard',layerOverride:'wall_back'},
+      {id:'cornerTR',assetId:'architecture.architecture.009.structural.corner.post.d13add17d9',x:1244,y:22,scaleToken:'standard',layerOverride:'wall_back'},
+    ],
+    sockets:[],
+    collision:[
+      {x:0,y:0,width:1260,height:44},
+      {x:0,y:0,width:38,height:840},
+      {x:1222,y:0,width:38,height:840},
+      {x:0,y:796,width:570,height:44},
+      {x:790,y:796,width:470,height:44},
+    ],
+    keepClear:[{x:570,y:760,width:220,height:80}],
+    tags:['development','architecture','shell'],roomTags:['development'],teamTags:['general'],
+    notes:['Permanent modular shell with a real open bottom entrance.'],
+  }),
+
+  prefab({
     id:'development.workpod.6',
     name:'Development Work Pod — 6',
     category:'workpod',
