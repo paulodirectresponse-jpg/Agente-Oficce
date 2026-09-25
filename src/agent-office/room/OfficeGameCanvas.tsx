@@ -230,7 +230,7 @@ function drawWorld(ctx:CanvasRenderingContext2D,time:number,images?:Map<string,H
     cropAsset(ctx,decor,0,96,16,16,330,34,1.2);
   }
 }
-function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAgent,img:HTMLImageElement|undefined,time:number,selected:boolean,singleSprite=false){
+function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAgent,img:HTMLImageElement|undefined,time:number,selected:boolean,singleSprite=false,calibration?:AssetCalibration,pose:CharacterPoseClass='standing'){
   const working=isWorking(agent.state),walking=Math.hypot(rt.tx-rt.x,rt.ty-rt.y)>3;
   const bob=walking?Math.sin(time/95+rt.phase)*3:working?Math.sin(time/180+rt.phase)*1.5:Math.sin(time/420+rt.phase)*.8;
   ctx.save();ctx.translate(rt.x,rt.y+bob);
@@ -242,8 +242,12 @@ function drawAgent(ctx:CanvasRenderingContext2D,agent:RoomAgentView,rt:RuntimeAg
 
   if(img?.complete&&img.naturalWidth){
     ctx.imageSmoothingEnabled=false;
-    if(singleSprite){
-      const targetH=working&&!walking?50:56;
+    if(singleSprite&&calibration){
+      const rect=characterDestinationRect(calibration,0,14,pose);
+      const s=calibration.alphaBounds;
+      ctx.drawImage(img,s.x,s.y,s.width,s.height,rect.x,rect.y,rect.width,rect.height);
+    }else if(singleSprite){
+      const targetH=pose==='standing'?48:35;
       const scale=targetH/img.naturalHeight;
       const targetW=img.naturalWidth*scale;
       ctx.drawImage(img,-targetW/2,-targetH+14,targetW,targetH);
@@ -288,18 +292,20 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
   const [dragging,setDragging]=useState(false);
   const [ready,setReady]=useState(false);
   const imagesRef=useRef(new Map<string,HTMLImageElement>());
-  const licensedRuntimeRef=useRef<LicensedDevelopmentRuntime|null>(null);
+  const licensedRuntimeRef=useRef<Development52BRenderRuntime|null>(null);
   const [v3Ready,setV3Ready]=useState(false);
 
   const positioned=useMemo(()=>{
     const count:Record<StationKind,number>={development:0,research:0,lead:0,operations:0};
+    const developmentRuntime=licensedRuntimeRef.current?.room;
     return agents.map((agent,index)=>{
       const stationIndex=count[agent.station]++;
-      const v3Home=v3Ready&&agent.station==='development'
-        ? DEVELOPMENT_V3_WORKSTATIONS[stationIndex%DEVELOPMENT_V3_WORKSTATIONS.length]
-        : null;
-      const home=v3Home?{x:v3Home.agentX,y:v3Home.agentY}:stationPosition(agent,stationIndex);
-      return{agent,pos:behaviorPosition(agent,home,index,v3Ready)};
+      if(v3Ready&&agent.station==='development'&&developmentRuntime){
+        const target=developmentAgentTarget(developmentRuntime,stationIndex,agent.state);
+        return{agent,pos:{x:target.x,y:target.y}};
+      }
+      const home=stationPosition(agent,stationIndex);
+      return{agent,pos:behaviorPosition(agent,home,index,false)};
     });
   },[agents,v3Ready]);
 
@@ -308,29 +314,44 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
     const load=async()=>{
       try{
         let data:{assets?:AssetRecord[]}|null=null;
+        let calibrationData:unknown=null;
         try{
           data=await api.getRoomAssetRegistry() as {assets?:AssetRecord[]};
+          calibrationData=await api.getRoomAssetCalibration();
         }catch{
-          const response=await fetch('/office-assets/licensed/registry.json',{cache:'no-store'});
-          if(response.ok)data=await response.json() as {assets?:AssetRecord[]};
+          const [registryResponse,calibrationResponse]=await Promise.all([
+            fetch('/office-assets/licensed/registry.json',{cache:'no-store'}),
+            fetch('/office-assets/licensed/calibration.json',{cache:'no-store'}),
+          ]);
+          if(registryResponse.ok)data=await registryResponse.json() as {assets?:AssetRecord[]};
+          if(calibrationResponse.ok)calibrationData=await calibrationResponse.json();
         }
-        if(!data)return;
-        const registry=new Map<string,AssetRecord>((data.assets??[]).map(asset=>[asset.id,asset]));
-        const gate=validateDevelopmentV3Registry(registry);
-        if(!gate.ok)return;
+        if(!data||!calibrationData)return;
+
+        const registryData={schemaVersion:1,generatedAt:new Date().toISOString(),tileSize:32,source:{provider:'private-runtime',bundle:'development-5.2b'},assets:data.assets??[]};
+        const registry=new AssetRegistry(registryData);
+        const calibrations=new AssetCalibrationCatalog(calibrationData);
+        const room=compileDevelopment52B(registry,calibrations);
+
+        const ids=new Set<string>([
+          ...requiredDevelopment52BAssetIds(room),
+          ...DEVELOPMENT_V3_AGENT_SPRITES.flatMap(sprite=>[sprite.idle,sprite.working]),
+        ]);
+        const missing=[...ids].filter(id=>!registry.has(id)||!calibrations.has(id));
+        if(missing.length)return;
+
         const images=new Map<string,HTMLImageElement>();
-        const ids=requiredDevelopmentV3AssetIds();
         let loaded=0;
-        await Promise.all(ids.map(id=>new Promise<void>(resolve=>{
+        await Promise.all([...ids].map(id=>new Promise<void>(resolve=>{
           const asset=registry.get(id);if(!asset){resolve();return}
           const img=new Image();images.set(id,img);
           img.onload=()=>{loaded++;resolve()};img.onerror=()=>resolve();img.src=asset.runtime.uri;
         })));
-        if(cancelled||loaded!==ids.length)return;
-        licensedRuntimeRef.current={registry,images};
+        if(cancelled||loaded!==ids.size)return;
+        licensedRuntimeRef.current={registry,calibrations,room,images};
         setV3Ready(true);
       }catch{
-        // Licensed art is optional in public-source builds and loaded from app data in desktop runtime.
+        // Private Stage 5.2 assets/calibration are optional in public-source builds.
       }
     };
     void load();
@@ -368,7 +389,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
   const fit=()=>{
     const el=viewportRef.current;if(!el)return;const r=el.getBoundingClientRect();
     if(v3Ready){
-      const b=DEVELOPMENT_V3_BOUNDS;
+      const b=DEVELOPMENT_52B_BOUNDS;
       const z=clamp(Math.min((r.width-54)/b.width,(r.height-54)/b.height),.62,1.16);
       cameraRef.current={x:r.width/2-(b.x+b.width/2)*z,y:r.height/2-(b.y+b.height/2)*z,zoom:z};setZoom(z);return;
     }
@@ -399,7 +420,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
       const dt=Math.min(.05,(time-last)/1000);last=time;
       const camera=cameraRef.current;ctx.save();ctx.translate(camera.x,camera.y);ctx.scale(camera.zoom,camera.zoom);
       const licensed=licensedRuntimeRef.current;
-      if(v3Ready&&licensed)drawDevelopmentV3Back(ctx,licensed,time);
+      if(v3Ready&&licensed)drawDevelopment52BBack(ctx,licensed,time);
       else drawWorld(ctx,time,imagesRef.current);
 
       const byId=new Map(positioned.map(x=>[x.agent.id,x.agent]));
@@ -407,16 +428,20 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
         const agent=byId.get(rt.id);if(!agent)continue;
         const dx=rt.tx-rt.x,dy=rt.ty-rt.y,dist=Math.hypot(dx,dy);
         if(dist>1){const speed=agent.state==='offline'?80:190;const step=Math.min(dist,speed*dt);rt.x+=dx/dist*step;rt.y+=dy/dist*step;if(dist<5)rt.spawnDone=true}
-        let agentImage=imagesRef.current.get(agent.station),singleSprite=false;
+        let agentImage=imagesRef.current.get(agent.station),singleSprite=false,characterCalibration:AssetCalibration|undefined,pose:CharacterPoseClass='standing';
         if(v3Ready&&licensed&&agent.station==='development'){
           const sprite=DEVELOPMENT_V3_AGENT_SPRITES[hash(agent.id)%DEVELOPMENT_V3_AGENT_SPRITES.length];
-          const spriteId=isWorking(agent.state)?sprite.working:sprite.idle;
+          const walking=Math.hypot(rt.tx-rt.x,rt.ty-rt.y)>3;
+          const useWorking=isWorking(agent.state)&&!walking;
+          const spriteId=useWorking?sprite.working:sprite.idle;
           agentImage=licensed.images.get(spriteId)??agentImage;
+          characterCalibration=licensed.calibrations.get(spriteId);
+          pose=useWorking?'working':'standing';
           singleSprite=Boolean(licensed.images.get(spriteId));
         }
-        drawAgent(ctx,agent,rt,agentImage,time,agent.selected,singleSprite);
+        drawAgent(ctx,agent,rt,agentImage,time,agent.selected,singleSprite,characterCalibration,pose);
       }
-      if(v3Ready&&licensed)drawDevelopmentV3Front(ctx,licensed,time);
+      if(v3Ready&&licensed)drawDevelopment52BFront(ctx,licensed,time);
 
       if(lastHandoff){
         const from=positioned.find(x=>x.agent.name===lastHandoff.from||x.agent.id===lastHandoff.from);
@@ -427,7 +452,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
 
       const mdpr=Math.min(devicePixelRatio||1,2),mw=172,mh=100;
       if(mini.width!==Math.floor(mw*mdpr)||mini.height!==Math.floor(mh*mdpr)){mini.width=Math.floor(mw*mdpr);mini.height=Math.floor(mh*mdpr)}
-      const m=mini.getContext('2d');if(m){m.setTransform(mdpr,0,0,mdpr,0,0);m.clearRect(0,0,mw,mh);m.save();m.scale(mw/WORLD_W,mh/WORLD_H);if(v3Ready&&licensed)drawDevelopmentV3Mini(m,licensed,time);else drawWorld(m,time,imagesRef.current);for(const rt of entitiesRef.current.values()){m.fillStyle='#173c4d';m.fillRect(rt.x-7,rt.y-7,14,14)}m.restore();const vw=rect.width/camera.zoom/WORLD_W*mw,vh=rect.height/camera.zoom/WORLD_H*mh,vx=(-camera.x/camera.zoom)/WORLD_W*mw,vy=(-camera.y/camera.zoom)/WORLD_H*mh;m.strokeStyle='rgba(236,248,251,.82)';m.lineWidth=1.5;m.strokeRect(clamp(vx,0,mw),clamp(vy,0,mh),Math.min(vw,mw),Math.min(vh,mh))}
+      const m=mini.getContext('2d');if(m){m.setTransform(mdpr,0,0,mdpr,0,0);m.clearRect(0,0,mw,mh);m.save();m.scale(mw/WORLD_W,mh/WORLD_H);if(v3Ready&&licensed)drawDevelopment52BMini(m,licensed,time);else drawWorld(m,time,imagesRef.current);for(const rt of entitiesRef.current.values()){m.fillStyle='#173c4d';m.fillRect(rt.x-7,rt.y-7,14,14)}m.restore();const vw=rect.width/camera.zoom/WORLD_W*mw,vh=rect.height/camera.zoom/WORLD_H*mh,vx=(-camera.x/camera.zoom)/WORLD_W*mw,vy=(-camera.y/camera.zoom)/WORLD_H*mh;m.strokeStyle='rgba(236,248,251,.82)';m.lineWidth=1.5;m.strokeRect(clamp(vx,0,mw),clamp(vy,0,mh),Math.min(vw,mw),Math.min(vh,mh))}
       raf=requestAnimationFrame(render);
     };
     raf=requestAnimationFrame(render);return()=>cancelAnimationFrame(raf);
