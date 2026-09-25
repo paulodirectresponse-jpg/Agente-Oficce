@@ -425,7 +425,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
         if(v3Ready&&licensed&&agent.station==='development'){
           const sprite=DEVELOPMENT_V3_AGENT_SPRITES[hash(agent.id)%DEVELOPMENT_V3_AGENT_SPRITES.length];
           const walking=Math.hypot(rt.tx-rt.x,rt.ty-rt.y)>3;
-          const useWorking=isWorking(agent.state)&&!walking;
+          const useWorking=(agent.state==='coding'||agent.state==='responding')&&!walking;
           const spriteId=useWorking?sprite.working:sprite.idle;
           agentImage=licensed.images.get(spriteId)??agentImage;
           characterCalibration=licensed.calibrations.get(spriteId);
