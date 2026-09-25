@@ -16,8 +16,8 @@ export const DEVELOPMENT_52B_BLUEPRINT={
   instances:[
     {id:'shell',prefabId:'development.shell',x:630,y:420},
     {id:'planning',prefabId:'development.planning-wall',x:665,y:155},
-    {id:'work',prefabId:'development.workpod.6',x:670,y:455},
-    {id:'meeting',prefabId:'meeting.glass.6',x:1050,y:475},
+    {id:'work',prefabId:'development.workpod.6',x:620,y:455},
+    {id:'meeting',prefabId:'meeting.glass.6',x:1080,y:475},
     {id:'lounge',prefabId:'lounge.standard',x:245,y:690},
     {id:'storage',prefabId:'storage.wall.standard',x:95,y:420},
     {id:'entry',prefabId:'entrance.bottom.open',x:630,y:790},
@@ -25,7 +25,7 @@ export const DEVELOPMENT_52B_BLUEPRINT={
   protectedZones:[
     {id:'main-entry-corridor',x:540,y:650,width:180,height:160,tags:['circulation','entry']},
     {id:'work-left-aisle',x:300,y:300,width:65,height:350,tags:['circulation']},
-    {id:'meeting-access',x:885,y:620,width:120,height:100,tags:['circulation']},
+    {id:'meeting-access',x:895,y:500,width:50,height:220,tags:['circulation']},
   ],
   tags:['development','approved-reference','prefab-runtime'],
 } as const;
