@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RoomAgentView, StationKind } from './roomTypes.js';
-import type { AssetRecord } from '../assets/assetRegistry.js';
+import { AssetRegistry, type AssetRecord } from '../assets/assetRegistry.js';
+import { AssetCalibrationCatalog, type AssetCalibration } from '../assets/assetCalibration.js';
+import { characterDestinationRect, type CharacterPoseClass } from '../assets/characterCalibration.js';
 import { api } from '../api.js';
+import { DEVELOPMENT_V3_AGENT_SPRITES } from './developmentV3.js';
 import {
-  DEVELOPMENT_V3_AGENT_SPRITES,
-  DEVELOPMENT_V3_BEHAVIOR,
-  DEVELOPMENT_V3_BOUNDS,
-  DEVELOPMENT_V3_WORKSTATIONS,
-  requiredDevelopmentV3AssetIds,
-  validateDevelopmentV3Registry,
-} from './developmentV3.js';
+  DEVELOPMENT_52B_BOUNDS,
+  compileDevelopment52B,
+  developmentAgentTarget,
+} from './developmentPrefabRoom.js';
 import {
-  drawDevelopmentV3Back,
-  drawDevelopmentV3Front,
-  drawDevelopmentV3Mini,
-  type LicensedDevelopmentRuntime,
-} from './licensedDevelopmentRenderer.js';
+  drawDevelopment52BBack,
+  drawDevelopment52BFront,
+  drawDevelopment52BMini,
+  requiredDevelopment52BAssetIds,
+  type Development52BRenderRuntime,
+} from './developmentPrefabRenderer.js';
 import './room-game.css';
 
 const WORLD_W=1680;
