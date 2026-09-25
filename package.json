@@ -39,7 +39,8 @@
     "assets:calibration:gate": "npm run assets:typecheck && npx vitest run scripts/assets/png-alpha-bounds.test.ts src/agent-office/assets/assetCalibration.test.ts src/agent-office/assets/characterCalibration.test.ts src/agent-office/assets/prefabSystem.test.ts src/agent-office/assets/prefabRoom.test.ts src/agent-office/assets/prefabRenderer.test.ts",
     "prefabs:validate": "tsx scripts/assets/validate-prefab-system.ts",
     "stage5.2a:gate": "npm run assets:calibration:gate",
-    "stage5.2b:gate": "npm run assets:calibration:gate && npx vitest run src/agent-office/room/developmentPrefabRoom.test.ts"
+    "stage5.2b:gate": "npm run assets:calibration:gate && npx vitest run src/agent-office/room/developmentPrefabRoom.test.ts",
+    "stage5.2b:private:validate": "tsx scripts/assets/validate-stage5-2b.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
