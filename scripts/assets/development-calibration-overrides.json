@@ -3,14 +3,29 @@
   "overrides": [
     {
       "assetId": "desk.combination.001.complete.workstation.22f9e85f92",
-      "canonicalScale": 1.0,
+      "canonicalScale": 0.8,
       "confidence": "curated",
       "occlusion": {
         "mode": "front-rects",
         "frontRects": [
-          {"x": 8, "y": 112, "width": 205, "height": 20},
-          {"x": 8, "y": 132, "width": 64, "height": 101},
-          {"x": 151, "y": 132, "width": 62, "height": 101}
+          {
+            "x": 8,
+            "y": 112,
+            "width": 205,
+            "height": 20
+          },
+          {
+            "x": 8,
+            "y": 132,
+            "width": 64,
+            "height": 101
+          },
+          {
+            "x": 151,
+            "y": 132,
+            "width": 62,
+            "height": 101
+          }
         ]
       },
       "sockets": [
@@ -41,7 +56,7 @@
     },
     {
       "assetId": "plant.061.p04.04.workstation.divider.planter.888514e87d",
-      "canonicalScale": 1.0,
+      "canonicalScale": 0.48,
       "confidence": "curated",
       "notes": [
         "Licensed PNG contains substantial transparent top padding; automatic alpha calibration must be used for placement."
@@ -50,62 +65,176 @@
     {
       "assetId": "character.01.manager.navy.front.idle.c6dc34cd78",
       "confidence": "curated",
-      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+      "notes": [
+        "Scale is derived by characterCalibration.ts from calibrated visible height."
+      ]
     },
     {
       "assetId": "character.01.manager.navy.right.seated.working.646715397d",
       "confidence": "curated",
-      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+      "notes": [
+        "Seated/working height is controlled by the canonical character scale profile."
+      ]
     },
     {
       "assetId": "character.02.worker.orange.yellow.front.idle.0c6c38f3e5",
       "confidence": "curated",
-      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+      "notes": [
+        "Scale is derived by characterCalibration.ts from calibrated visible height."
+      ]
     },
     {
       "assetId": "character.02.worker.orange.yellow.right.seated.working.d89cdb7c93",
       "confidence": "curated",
-      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+      "notes": [
+        "Seated/working height is controlled by the canonical character scale profile."
+      ]
     },
     {
       "assetId": "character.03.worker.dark.purple.front.idle.b0ecf8e174",
       "confidence": "curated",
-      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+      "notes": [
+        "Scale is derived by characterCalibration.ts from calibrated visible height."
+      ]
     },
     {
       "assetId": "character.03.worker.dark.purple.right.seated.working.c2f29f1c67",
       "confidence": "curated",
-      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+      "notes": [
+        "Seated/working height is controlled by the canonical character scale profile."
+      ]
     },
     {
       "assetId": "character.04.worker.brown.green.front.idle.0053fa062f",
       "confidence": "curated",
-      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+      "notes": [
+        "Scale is derived by characterCalibration.ts from calibrated visible height."
+      ]
     },
     {
       "assetId": "character.04.worker.brown.green.right.seated.working.c7fa72d8b7",
       "confidence": "curated",
-      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+      "notes": [
+        "Seated/working height is controlled by the canonical character scale profile."
+      ]
     },
     {
       "assetId": "character.05.worker.black.charcoal.front.idle.a7a88018af",
       "confidence": "curated",
-      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+      "notes": [
+        "Scale is derived by characterCalibration.ts from calibrated visible height."
+      ]
     },
     {
       "assetId": "character.05.worker.black.charcoal.right.seated.working.07399caf29",
       "confidence": "curated",
-      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+      "notes": [
+        "Seated/working height is controlled by the canonical character scale profile."
+      ]
     },
     {
       "assetId": "character.06.worker.blond.blue.front.idle.cf5be32a0f",
       "confidence": "curated",
-      "notes": ["Scale is derived by characterCalibration.ts from calibrated visible height."]
+      "notes": [
+        "Scale is derived by characterCalibration.ts from calibrated visible height."
+      ]
     },
     {
       "assetId": "character.06.worker.blond.blue.right.seated.working.7890eb657a",
       "confidence": "curated",
-      "notes": ["Seated/working height is controlled by the canonical character scale profile."]
+      "notes": [
+        "Seated/working height is controlled by the canonical character scale profile."
+      ]
+    },
+    {
+      "assetId": "monitor.tech.007.large.market.video.wall.b3fd1bf0dc",
+      "confidence": "curated",
+      "canonicalScale": 0.64
+    },
+    {
+      "assetId": "whiteboard.035.p02.17.whiteboard.with.diagrams.5db621d5d2",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "storage.meeting.credenza.wood.5310a6eae9",
+      "confidence": "curated",
+      "canonicalScale": 0.7
+    },
+    {
+      "assetId": "plant.prop.036.large.round.pot.plant.2ab1c2f413",
+      "confidence": "curated",
+      "canonicalScale": 0.64
+    },
+    {
+      "assetId": "plant.prop.037.medium.square.planter.plant.212fc9ff2f",
+      "confidence": "curated",
+      "canonicalScale": 0.72
+    },
+    {
+      "assetId": "storage.prop.016.tall.bookcase.141dcb5f7a",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "storage.prop.017.document.cabinet.d8643d2784",
+      "confidence": "curated",
+      "canonicalScale": 0.52
+    },
+    {
+      "assetId": "electronics.prop.020.compact.printer.scanner.4611e63027",
+      "confidence": "curated",
+      "canonicalScale": 0.58
+    },
+    {
+      "assetId": "table.001.p01.01.large.rectangular.conference.table.9fa0913ec6",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "chair.furniture.009.conference.chair.north.2c380d40b7",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "chair.furniture.010.conference.chair.south.39b5b2d98e",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "chair.furniture.011.conference.chair.left.ee6b8f37d1",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "chair.furniture.012.conference.chair.right.a62ae2fd1e",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "seating.012.p01.12.teal.lounge.armchair.9440121898",
+      "confidence": "curated",
+      "canonicalScale": 0.78
+    },
+    {
+      "assetId": "coffee.010.round.lounge.coffee.table.4ec13eb00f",
+      "confidence": "curated",
+      "canonicalScale": 0.85
+    },
+    {
+      "assetId": "lighting.prop.009.floor.lamp.22dbca4e23",
+      "confidence": "curated",
+      "canonicalScale": 0.82
+    },
+    {
+      "assetId": "rug.055.p03.18.blue.executive.office.rug.4d633abdd4",
+      "confidence": "curated",
+      "canonicalScale": 1.1
+    },
+    {
+      "assetId": "rug.prop.011.lounge.rug.744e8a1f81",
+      "confidence": "curated",
+      "canonicalScale": 1.05
     }
   ]
 }
