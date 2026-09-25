@@ -47,7 +47,7 @@ describe('Development 5.2B prefab room',()=>{
     const runtime=compileDevelopment52B(registry,calibrations);
     expect(runtime.room.errors).toEqual([]);
     expect(runtime.room.prefabs.map(p=>p.instance.id)).toEqual([
-      'shell','planning','work','meeting','lounge','storage','entry',
+      'shell','planning','work','meeting','lounge','storage','support-right','entry',
     ]);
   });
 
