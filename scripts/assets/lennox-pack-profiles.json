@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "bundle": "Office Pixel Art Mega Bundle — Lennox Studio",
+  "licensePolicy": {
+    "licenseId": "lennox-studio-commercial-asset",
+    "commercialUse": true,
+    "modificationAllowed": true,
+    "sourceRedistributionAllowed": false,
+    "runtimeBundlingAllowed": true,
+    "aiTrainingAllowed": false
+  },
+  "packs": [
+    {"match":"Top_Down_Modern_Corporate_Office_Pixel_Asset_Pack_v1.2","id":"top-down-modern-corporate-office-v1.2","priority":100,"rooms":["development","research","operations","strategy","leadership","lobby","lounge"],"teams":["development","research","qa","operations","strategy","leadership","reception"],"tags":["core","top-down","modern","corporate","premium","warm-wood","glass"]},
+    {"match":"LennoxStudio_Modular_Office_Builder_Essentials_v1.0","id":"modular-office-builder-essentials-v1.0","priority":95,"rooms":["general","development","research","operations","strategy","leadership","design","lobby","lounge","infra"],"teams":["general"],"tags":["core","modular","architecture","modern","corporate"]},
+    {"match":"Corporate_Office_Pixel_Art_Asset_Pack_v1.1","id":"corporate-office-v1.1","priority":80,"rooms":["development","research","operations","strategy","leadership","lounge"],"teams":["general"],"tags":["core","modern","corporate","props"]},
+    {"match":"LennoxStudio_Corporate_Office_Asset_Pack_v1.2","id":"corporate-office-asset-v1.2","priority":82,"rooms":["development","research","operations","strategy","leadership","lounge"],"teams":["general"],"tags":["core","modern","corporate","props"]},
+    {"match":"Corporate_Office_Pixel_Art_Asset_Pack_v2.0","id":"corporate-office-v2.0","priority":72,"rooms":["development","research","operations","strategy","leadership","lounge"],"teams":["general"],"tags":["modern","corporate","props"]},
+    {"match":"LennoxStudio_FinancialTradingFloor_v1.4","id":"financial-trading-floor-v1.4","priority":88,"rooms":["development","research","operations","strategy"],"teams":["development","research","qa","operations"],"tags":["core","tech","dashboard","trading","modern","corporate"]},
+    {"match":"LennoxStudio_IT_Network_Operations_Office_Pixel_Art_Asset_Pack_v1.0","id":"it-network-operations-v1.0","priority":92,"rooms":["infra","development","operations","research"],"teams":["infra","devops","development","operations"],"tags":["core","tech","server","network","industrial"]},
+    {"match":"LennoxStudio_Animated_Corporate_Office_Asset_Pack_v1.1","id":"animated-corporate-office-v1.1","priority":86,"rooms":["development","operations","strategy","lounge"],"teams":["general"],"tags":["core","animated","modern","corporate"]},
+    {"match":"Newsroom_Editorial_Office_Pixel_Asset_Pack_v1.0","id":"newsroom-editorial-v1.0","priority":90,"rooms":["design","development","operations"],"teams":["design","content","media"],"tags":["core","studio","media","broadcast","tech"]},
+    {"match":"Corporate_Headquarters_Office_Pixel_Art_Asset_Pack","id":"corporate-headquarters","priority":84,"rooms":["leadership","strategy","lounge","operations"],"teams":["leadership","strategy"],"tags":["core","executive","premium","corporate"]},
+    {"match":"LennoxStudio_Luxury_Office_Pixel_Art_Asset_Pack_v1.0","id":"luxury-office-v1.0","priority":76,"rooms":["leadership","strategy","lobby","lounge"],"teams":["leadership","strategy","reception"],"tags":["luxury","premium","executive"]},
+    {"match":"LennoxStudio_LawFirm_Pixel_Asset_Pack_v1.1","id":"law-firm-v1.1","priority":74,"rooms":["leadership","strategy","lobby"],"teams":["leadership","strategy"],"tags":["executive","premium","private-office"]},
+    {"match":"Corporate_Meeting_Training_Center_v1.0","id":"meeting-training-center-v1.0","priority":86,"rooms":["strategy","research","leadership","development"],"teams":["strategy","research","leadership"],"tags":["core","meeting","training","collaboration"]},
+    {"match":"Customer_Support_Call_Center_Office_v1.0","id":"call-center-v1.0","priority":70,"rooms":["operations","development"],"teams":["operations","support"],"tags":["operations","call-center","workstations"]},
+    {"match":"LennoxStudio_Police_Dispatch_v1.0","id":"police-dispatch-v1.0","priority":68,"rooms":["operations","infra"],"teams":["operations","infra"],"tags":["dispatch","command-center","tech"]},
+    {"match":"Modern_Corporate_Lobby_Pixel_Art_v1.1","id":"modern-corporate-lobby-v1.1","priority":94,"rooms":["lobby","leadership","strategy"],"teams":["reception"],"tags":["core","lobby","reception","premium","glass"]},
+    {"match":"Modern_Corporate_Office_Pixel_Art_Asset_Pack_v1.0","id":"modern-corporate-office-v1.0","priority":72,"rooms":["development","strategy","leadership","lounge"],"teams":["general"],"tags":["modern","corporate"]},
+    {"match":"Office_Workday_v1.0","id":"office-workday-v1.0","priority":64,"rooms":["development","operations","lobby","lounge"],"teams":["general"],"tags":["office-life","characters","props"]}
+  ]
+}

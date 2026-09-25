@@ -1,3 +1,23 @@
+export interface VoiceStatus {
+  local_ready:boolean; local_binary:string|null; local_model:string|null;
+  cloud_ready:boolean; cloud_provider:string|null; mode:'local'|'cloud'|'unavailable';
+}
+export interface VoiceTranscript { text:string; engine:string; }
+
+export interface ResourceFile {
+  id:string; project_id:string|null; owner_type:'chat'|'project'|'agent'|'subagent'|'skill'; owner_id:string|null;
+  file_name:string; mime_type:string; size_bytes:number; storage_path:string; text_content:string;
+  status:'ready'|'stored'|'error'; metadata:Record<string,unknown>; created_at:string;
+}
+export interface KnowledgeItem {
+  id:string; scope_type:'project'|'agent'|'subagent'; scope_id:string; resource_id:string; title:string;
+  enabled:boolean; metadata:Record<string,unknown>; created_at:string; updated_at:string; resource?:ResourceFile;
+}
+export interface SkillDefinition {
+  id:string; name:string; slug:string; description:string; instructions:string; source_path:string|null;
+  enabled:boolean; metadata:Record<string,unknown>; created_at:string; updated_at:string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -538,6 +558,9 @@ export interface ChatRunReceipt {
   mode: 'single' | 'team';
   status: 'running';
   tools_enabled: boolean;
+  orchestration_run_id?: string;
+  execution_plan_id?: string;
+  long_running?: boolean;
 }
 
 export interface ChatStartInput {
@@ -546,6 +569,10 @@ export interface ChatStartInput {
   message: string;
   target?: 'auto' | 'team' | string;
   model_override?: string;
+  attachment_ids?: string[];
+  execution_policy?: 'auto'|'plan'|'research'|'build'|'review'|'test'|'until_done';
+  tool_hint?: string;
+  directives?: string[];
 }
 
 export interface ChatStreamEnvelope {

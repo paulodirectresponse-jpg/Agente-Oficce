@@ -5,12 +5,12 @@ import type { IntegrationCatalogEntry, IntegrationConnection, Project, ProjectIn
 type Draft={driver:string;name:string;auth_mode:string;secret:string};
 
 function statusLabel(status:string){
-  if(status==='healthy')return'Healthy';
-  if(status==='auth_error')return'Auth required';
-  if(status==='degraded')return'Degraded';
-  if(status==='unavailable')return'Unavailable';
-  if(status==='misconfigured')return'Misconfigured';
-  return'Unknown';
+  if(status==='healthy')return'Disponível';
+  if(status==='auth_error')return'Autenticação necessária';
+  if(status==='degraded')return'Limitada';
+  if(status==='unavailable')return'Indisponível';
+  if(status==='misconfigured')return'Configuração incompleta';
+  return'Desconhecido';
 }
 
 export function IntegrationsView({project}:{project:Project|null}){
@@ -33,6 +33,7 @@ export function IntegrationsView({project}:{project:Project|null}){
   },[project?.id]);
 
   useEffect(()=>{void load()},[load]);
+  useEffect(()=>{if(!draft)return;const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setDraft(null)};document.addEventListener('keydown',onKey);return()=>document.removeEventListener('keydown',onKey)},[draft]);
 
   const boundIds=useMemo(()=>new Set(bindings.map(x=>x.integration_id)),[bindings]);
 
@@ -54,7 +55,7 @@ export function IntegrationsView({project}:{project:Project|null}){
   async function test(connection:IntegrationConnection){
     setBusy('test:'+connection.id);
     try{await api.testIntegrationV3(connection.id);await load()}
-    catch(error){setMessage(error instanceof Error?error.message:'Falha no health check.')}
+    catch(error){setMessage(error instanceof Error?error.message:'Falha no teste da conexão.')}
     finally{setBusy(null)}
   }
 
@@ -89,9 +90,9 @@ export function IntegrationsView({project}:{project:Project|null}){
   return <div className="integrations-page">
     <header className="integrations-header">
       <div>
-        <span className="office-kicker">External systems</span>
+        <span className="office-kicker">Sistemas externos</span>
         <h1>Integrações</h1>
-        <p>Conexões externas separadas dos Providers. Tools continuam passando por policies, approval, audit e idempotência.</p>
+        <p>Conecte serviços externos que seus Agents podem usar quando o trabalho precisar.</p>
       </div>
       <div className="integration-project-context">
         <span>Project ativo</span>
@@ -103,7 +104,7 @@ export function IntegrationsView({project}:{project:Project|null}){
 
     <section className="integration-section">
       <div className="analytics-card-head">
-        <div><span className="office-kicker">Connections</span><h2>Conectadas</h2></div>
+        <div><span className="office-kicker">Conexões</span><h2>Conectadas</h2></div>
         <small>{connections.length} conexões</small>
       </div>
       <div className="integration-grid">
@@ -119,11 +120,11 @@ export function IntegrationsView({project}:{project:Project|null}){
               </div>
               <span className={'integration-health '+connection.health_status}>{statusLabel(connection.health_status)}</span>
             </div>
-            <p>{cat?.description??'External integration'}</p>
+            <p>{cat?.description??'Integração externa'}</p>
             <div className="integration-meta">
-              <span>{connection.capabilities.filter(x=>x.enabled).length} capabilities</span>
+              <span>{connection.capabilities.filter(x=>x.enabled).length} recursos</span>
               <span>{connection.auth_mode}</span>
-              <span>{connection.enabled?'Enabled':'Disabled'}</span>
+              <span>{connection.enabled?'Ativa':'Desativada'}</span>
             </div>
             <div className="integration-capabilities">
               {connection.capabilities.slice(0,6).map(cap=><span key={cap.capability_key}>{cap.capability_key.replace('external.','')}</span>)}
@@ -142,25 +143,25 @@ export function IntegrationsView({project}:{project:Project|null}){
     </section>
 
     <section className="integration-section">
-      <div className="analytics-card-head"><div><span className="office-kicker">Catalog</span><h2>Adicionar integração</h2></div></div>
+      <div className="analytics-card-head"><div><span className="office-kicker">Disponíveis</span><h2>Adicionar integração</h2></div></div>
       <div className="integration-catalog-grid">
         {catalog.filter(item=>!item.local).map(item=><article className="integration-catalog-card" key={item.driver}>
           <div><strong>{item.name}</strong><span>{item.description}</span></div>
-          <small>{item.capabilities.length} capabilities · {item.auth_modes.join(' / ')}</small>
+          <small>{item.capabilities.length} recursos · {item.auth_modes.join(' / ')}</small>
           <button className="btn" onClick={()=>setDraft({driver:item.driver,name:item.name,auth_mode:item.auth_modes[0]??'none',secret:''})}>Adicionar conexão</button>
         </article>)}
       </div>
     </section>
 
-    {draft&&<div className="integration-modal-backdrop" onClick={()=>setDraft(null)}>
-      <div className="integration-modal" onClick={e=>e.stopPropagation()}>
-        <span className="office-kicker">New connection</span><h2>{catalog.find(x=>x.driver===draft.driver)?.name}</h2>
+    {draft&&<div className="integration-modal-backdrop" role="presentation" onClick={()=>setDraft(null)}>
+      <div className="integration-modal" role="dialog" aria-modal="true" aria-label="Nova conexão" onClick={e=>e.stopPropagation()}>
+        <span className="office-kicker">Nova conexão</span><h2>{catalog.find(x=>x.driver===draft.driver)?.name}</h2>
         <label>Nome<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
         <label>Autenticação<select value={draft.auth_mode} onChange={e=>setDraft({...draft,auth_mode:e.target.value})}>
           {(catalog.find(x=>x.driver===draft.driver)?.auth_modes??[]).map(mode=><option key={mode} value={mode}>{mode}</option>)}
         </select></label>
-        {draft.auth_mode==='token'&&<label>Token<input type="password" autoComplete="off" value={draft.secret} onChange={e=>setDraft({...draft,secret:e.target.value})} placeholder="Salvo criptografado fora do SQLite"/></label>}
-        <p className="muted">Credenciais nunca são armazenadas no banco de dados.</p>
+        {draft.auth_mode==='token'&&<label>Token<input type="password" autoComplete="off" value={draft.secret} onChange={e=>setDraft({...draft,secret:e.target.value})} placeholder="Salvo com segurança fora do banco local"/></label>}
+        <p className="muted">Credenciais são mantidas fora do banco local de dados.</p>
         <div className="integration-actions"><button className="btn" onClick={()=>setDraft(null)}>Cancelar</button><button className="btn btn-primary" disabled={busy!==null} onClick={()=>void create()}>{busy==='create'?'Criando…':'Criar conexão'}</button></div>
       </div>
     </div>}

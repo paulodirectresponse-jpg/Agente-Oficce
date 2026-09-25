@@ -1,0 +1,504 @@
+import type { Database } from 'better-sqlite3';
+import { ChatRunnerService, type PreparedChatRun } from './chatRunner.js';
+import { ExecutionGraphService, ExecutionScheduler, type PlanDraft, type StepExecutor, type WorkPacket } from './executionGraph.js';
+import { DurableExecutionService } from './durableExecution.js';
+import { DevelopmentSecretStore } from './secretStore.js';
+import { getAgentOfficeConfig } from './config.js';
+import { WorkspaceService } from './workspaceService.js';
+import { MessageRepository } from './conversationRepository.js';
+import { ChatRunRepository, ActivityRepository } from './v2DataModel.js';
+import { PreviewService } from './previewService.js';
+import { chatEventHub } from './chatEventHub.js';
+import type { RoutingDecision } from './orchestratorGateway.js';
+
+const DAY_MS=24*60*60*1000;
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+const now=()=>new Date().toISOString();
+
+export interface GoalContract {
+  objective:string;
+  original_request:string;
+  constraints:string[];
+  definition_of_done:string[];
+  quality_policy:{
+    require_evidence:boolean;
+    require_review:boolean;
+    require_validation:boolean;
+    allow_replan:boolean;
+  };
+}
+
+export function shouldUseLongRun(message:string,decision:RoutingDecision):boolean{
+  const text=message.toLowerCase();
+  const explicit=/\b(at[eé] terminar|at[eé] concluir|s[oó] pare|n[aã]o pare|until[- ]?done|horas|24\s*h|completo|inteiro|do zero|end[- ]to[- ]end)\b/i.test(text);
+  const action=/\b(fa[cç]a|crie|construa|implemente|refa[cç]a|corrija|programe|desenvolva|migre|integre|publique|teste|finalize|arrume|edite)\b/i.test(text);
+  const projectWork=/\b(site|app|aplicativo|sistema|projeto|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|arquitetura|software|landing\s?page|p[aá]gina\s?de\s?venda|dashboard)\b/i.test(text);
+  const webBuild=action&&/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(text);
+  return explicit||webBuild||(decision.requires_plan&&decision.complexity==='high'&&action&&projectWork);
+}
+
+function goalContract(message:string):GoalContract{
+  const software=/\b(site|app|aplicativo|sistema|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|software|landing\s?page|p[aá]gina\s?de\s?venda|dashboard|web\s?app)\b/i.test(message);
+  const done=[
+    'O objetivo original foi atendido integralmente, sem trocar o escopo por uma solução parcial.',
+    'Nenhum erro crítico conhecido permanece sem tratamento.',
+    'As alterações relevantes foram revisadas contra o pedido original.',
+  ];
+  if(software)done.push(
+    'A implementação compila ou gera build com sucesso quando o projeto possuir etapa de build.',
+    'Testes automatizados existentes devem passar; falhas novas precisam ser corrigidas ou justificadas com evidência.',
+    'Um smoke test coerente com o projeto deve validar o caminho principal alterado.',
+  );
+  return{
+    objective:message.trim(),
+    original_request:message.trim(),
+    constraints:[
+      'Preservar funcionalidades existentes que não fazem parte da mudança.',
+      'Preferir correções verificáveis a alegações de conclusão sem evidência.',
+      'Não encerrar somente porque uma resposta foi gerada; encerrar quando os critérios de conclusão forem satisfeitos.',
+    ],
+    definition_of_done:done,
+    quality_policy:{require_evidence:true,require_review:true,require_validation:true,allow_replan:true},
+  };
+}
+
+function planDraft(input:{
+  project_id:string;
+  orchestration_run_id:string;
+  decision:RoutingDecision;
+  contract:GoalContract;
+  selected_agents:string[];
+  selected_subagents:string[];
+  role_agents?:{planner?:string|null;builder?:string|null;reviewer?:string|null;validator?:string|null;auditor?:string|null;delivery?:string|null};
+}):PlanDraft{
+  const team=input.decision.target_team_id??null;
+  const direct=input.selected_agents.length===1&&!input.selected_subagents.length&&!team?input.selected_agents[0]:null;
+  const assign=(step:any,role:keyof NonNullable<typeof input.role_agents>)=>{
+    const roleAgent=!team&&!input.selected_subagents.length?(input.role_agents?.[role]??direct):null;
+    return{...step,assigned_agent_id:roleAgent,assigned_team_id:roleAgent?null:team};
+  };
+  const common={risk:'medium' as const,retry_policy:{max_retries:3},timeout_ms:45*60*1000};
+  const steps=[
+    assign({key:'01_inspect_plan',title:'Analisar e planejar',goal:[
+      'Inspecione rigorosamente o projeto e o pedido original.',
+      'Entenda a arquitetura existente antes de alterar arquivos.',
+      'Crie um plano operacional detalhado para cumprir o Goal Contract.',
+      'Identifique riscos, dependências, testes e critérios verificáveis.',
+      'Não encerre com teoria: prepare a execução concreta das próximas etapas.'
+    ].join(' '),...common,priority:100,expected_outputs:['Plano operacional','Riscos e dependências'],success_criteria:['Escopo compreendido','Plano cobre o objetivo original']},'planner'),
+    assign({key:'02_implement',title:'Implementar',goal:[
+      'Execute integralmente o plano definido na etapa anterior.',
+      'Faça as alterações necessárias no projeto usando as ferramentas disponíveis.',
+      'Não entregue somente trechos ou sugestões se o objetivo exigir implementação real.',
+      'Preserve compatibilidade e registre decisões importantes.'
+    ].join(' '),...common,priority:90,expected_outputs:['Implementação funcional','Arquivos alterados'],success_criteria:['Mudanças concretas realizadas','Objetivo funcional implementado']},'builder'),
+    assign({key:'03_review_fix',title:'Revisar e corrigir',goal:[
+      'Atue como revisor crítico independente da implementação anterior.',
+      'Procure bugs, lacunas, regressões, simplificações indevidas, inconsistências e requisitos esquecidos.',
+      'Corrija diretamente todos os problemas encontrados quando houver ferramentas para isso.',
+      'Revise novamente após corrigir. Não aprove trabalho sem evidência.'
+    ].join(' '),...common,priority:80,expected_outputs:['Revisão crítica','Correções adicionais'],success_criteria:['Problemas críticos corrigidos','Implementação coerente com o pedido']},'reviewer'),
+    assign({key:'04_validate',title:'Testar e validar',goal:[
+      'Valide a solução de forma objetiva.',
+      'Execute os testes relevantes, typecheck, build e smoke tests que façam sentido para este projeto.',
+      'Se qualquer validação falhar por causa das alterações, investigue e corrija antes de concluir.',
+      'Termine a resposta com exatamente QUALITY_GATE: PASS somente se as validações relevantes estiverem satisfatórias; caso contrário use QUALITY_GATE: REVISE.'
+    ].join(' '),...common,priority:70,expected_outputs:['Resultados de testes','Build/smoke quando aplicável'],success_criteria:['Validações relevantes aprovadas','QUALITY_GATE: PASS']},'validator'),
+    assign({key:'05_final_audit',title:'Auditoria final',goal:[
+      'Faça uma auditoria final usando o pedido ORIGINAL e o Goal Contract como fonte de verdade.',
+      'Compare item por item o que foi pedido com o estado atual real do projeto.',
+      'Não confie apenas nos resumos das etapas anteriores: inspecione evidências e estado atual.',
+      'Corrija qualquer lacuna residual que ainda possa ser resolvida.',
+      'Termine com exatamente QUALITY_GATE: PASS apenas quando o objetivo original e a Definition of Done estiverem cumpridos; caso contrário use QUALITY_GATE: REVISE.'
+    ].join(' '),...common,priority:60,expected_outputs:['Auditoria contra objetivo original','Correções finais'],success_criteria:['Definition of Done satisfeita','QUALITY_GATE: PASS']},'auditor'),
+    assign({key:'06_delivery',title:'Preparar entrega',goal:[
+      'Prepare a entrega final ao usuário.',
+      'Resuma o que foi feito, as validações executadas, as evidências mais importantes e qualquer limitação real remanescente.',
+      'Não invente sucesso. Seja conciso, mas deixe claro que o objetivo foi validado.'
+    ].join(' '),...common,priority:50,expected_outputs:['Relatório final verificável'],success_criteria:['Entrega clara e baseada em evidência']},'delivery'),
+  ];
+  const dependencies=[
+    {step_key:'02_implement',depends_on_key:'01_inspect_plan'},{step_key:'03_review_fix',depends_on_key:'02_implement'},
+    {step_key:'04_validate',depends_on_key:'03_review_fix'},{step_key:'05_final_audit',depends_on_key:'04_validate'},
+    {step_key:'06_delivery',depends_on_key:'05_final_audit'},
+  ];
+  return{
+    project_id:input.project_id,
+    orchestration_run_id:input.orchestration_run_id,
+    goal:input.contract.objective,
+    rationale:'Automatic long-running execution selected by the unified work router.',
+    budget:{
+      max_agents:8,max_parallel:3,max_cost:1000,max_tokens:2_000_000,max_wall_time:DAY_MS,
+      max_step_retries:3,max_tool_calls:500,max_replans:5,max_delegation_depth:4,
+    },
+    steps,dependencies,
+  };
+}
+
+function json<T>(value:string|undefined|null,fallback:T):T{try{return value?JSON.parse(value):fallback}catch{return fallback}}
+
+class ChatStepExecutor implements StepExecutor{
+  private readonly runs:ChatRunRepository;
+  constructor(
+    private readonly db:Database,
+    private readonly rootRunId:string,
+    private readonly conversationId:string,
+    private readonly projectId:string,
+    private readonly contract:GoalContract,
+    private readonly selectedAgents:string[],
+    private readonly selectedSubagents:string[],
+    private readonly attachmentIds:string[],
+    private readonly requiredTools:string[],
+    private readonly modelOverride?:string,
+    private readonly signal?:AbortSignal,
+  ){this.runs=new ChatRunRepository(db)}
+
+  private emitStep(event:string,input:{plan_id:string;step_id:string;step_key:string},payload:Record<string,unknown>={}){
+    const step=this.db.prepare('SELECT title FROM execution_steps WHERE id=?').get(input.step_id) as {title?:string}|undefined;
+    const data={execution_plan_id:input.plan_id,execution_step_id:input.step_id,step_key:input.step_key,step_title:step?.title??input.step_key,...payload};
+    const type='execution.step.'+event;
+    this.db.prepare(`INSERT INTO activity_events(id,project_id,conversation_id,run_id,agent_id,type,severity,title,detail,payload_json,created_at)
+      VALUES(lower(hex(randomblob(16))),?,?,?,?,?,'info',?,?,?,?)`).run(this.projectId,this.conversationId,this.rootRunId,null,type,step?.title??input.step_key,typeof payload.message==='string'?payload.message:'',JSON.stringify(data),now());
+    chatEventHub.publish(this.rootRunId,type,data);
+  }
+
+  private toolAudit(runId:string){
+    return (this.db.prepare(`SELECT tool_name,status,input_json,result_json,started_at,ended_at FROM tool_audit_events
+      WHERE run_id=? OR run_id IN (SELECT id FROM chat_runs WHERE parent_run_id=?) ORDER BY started_at`).all(runId,runId) as any[])
+      .map(row=>({...row,input:json<any>(row.input_json,{}),result:json<any>(row.result_json,{})}));
+  }
+
+  private evidence(planId:string){
+    const artifacts=(this.db.prepare('SELECT type,payload_json,created_at FROM execution_artifacts WHERE plan_id=? ORDER BY created_at').all(planId) as any[])
+      .slice(-12).map(row=>({kind:'artifact',type:row.type,payload:json(row.payload_json,{}),created_at:row.created_at}));
+    const attempts=(this.db.prepare(`SELECT s.key,s.title,a.result_summary,a.output_json,a.ended_at
+      FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id
+      WHERE s.plan_id=? AND a.status='completed' ORDER BY a.ended_at`).all(planId) as any[])
+      .slice(-8).map(row=>({kind:'step_output',step_key:row.key,title:row.title,summary:String(row.result_summary||'').slice(0,10000),output:json(row.output_json,{}),ended_at:row.ended_at}));
+    return[...attempts,...artifacts].slice(-18);
+  }
+
+  private orientations(planId:string){
+    const rows=this.db.prepare("SELECT id,payload_json FROM execution_commands WHERE plan_id=? AND status='pending' AND command_type IN ('orient','enqueue_message') ORDER BY created_at").all(planId) as any[];
+    if(!rows.length)return{messages:[] as string[],attachment_ids:[] as string[]};
+    const t=now(),messages:string[]=[],attachmentIds:string[]=[];
+    for(const row of rows){
+      this.db.prepare("UPDATE execution_commands SET status='applied',applied_at=? WHERE id=?").run(t,row.id);
+      const payload=json<any>(row.payload_json,{});
+      if(typeof payload.message==='string'&&payload.message.trim())messages.push(payload.message.trim());
+      if(Array.isArray(payload.attachment_ids))for(const value of payload.attachment_ids)if(typeof value==='string'&&value&&!attachmentIds.includes(value))attachmentIds.push(value);
+    }
+    return{messages,attachment_ids:attachmentIds};
+  }
+
+  async execute(input:{plan_id:string;step_id:string;step_key:string;agent_id:string|null;subagent_id?:string|null;worker_kind?:'agent'|'subagent'|null;team_id?:string|null;goal:string;timeout_ms:number;work_packet?:WorkPacket}){
+    if(this.signal?.aborted)throw new Error('CHAT_RUN_CANCELLED');
+    const stepStartedAt=Date.now();
+    this.emitStep('started',input,{message:'Etapa iniciada'});
+    const workspace=new WorkspaceService(this.db);
+    const before=workspace.gitStatus(this.projectId);
+    const stepRow=this.db.prepare('SELECT title,success_criteria_json,expected_outputs_json FROM execution_steps WHERE id=?').get(input.step_id) as any;
+    const evidence=this.evidence(input.plan_id);
+    const orientations=this.orientations(input.plan_id);
+    const prompt=[
+      'INTERNAL DURABLE EXECUTION STEP. Do the work; do not merely describe how to do it.',
+      'You are operating as part of a long-running Agent Office execution. The user only sees the final consolidated delivery.',
+      '',
+      'GOAL CONTRACT:',
+      JSON.stringify(this.contract,null,2),
+      '',
+      `CURRENT STEP: ${input.step_key} — ${stepRow?.title??input.step_key}`,
+      input.goal,
+      '',
+      'SUCCESS CRITERIA:',
+      JSON.stringify(json(stepRow?.success_criteria_json,[]),null,2),
+      '',
+      'PREVIOUS STEP OUTPUTS AND EVIDENCE:',
+      JSON.stringify(evidence,null,2),
+      input.work_packet?'\nSCHEDULER WORK PACKET:\n'+JSON.stringify(input.work_packet,null,2):'',
+      orientations.messages.length?'\nUSER ORIENTATIONS RECEIVED DURING EXECUTION:\n'+orientations.messages.map(x=>'- '+x).join('\n'):'',
+      orientations.attachment_ids.length?'\nNew media/files were attached with the user orientation. Inspect the attached files directly; do not rely on path text alone.':'',
+      '',
+      input.step_key==='01_inspect_plan'?'EVIDENCE REQUIREMENT: inspect the real workspace with tools before planning. Do not plan from assumptions.':'',
+      input.step_key==='02_implement'?'EVIDENCE REQUIREMENT: make real file/project changes. A text-only answer is a failed implementation.':'',
+      input.step_key==='03_review_fix'?'EVIDENCE REQUIREMENT: inspect current files/diff with tools, challenge the implementation, and fix defects you can prove.':'',
+      input.step_key==='04_validate'?'EVIDENCE REQUIREMENT: execute build/test/typecheck/lint or equivalent validation commands and inspect their real output.':'',
+      input.step_key==='05_final_audit'?'EVIDENCE REQUIREMENT: independently inspect the final project state with tools before approving the original objective.':'',
+      'Rules: inspect actual state, use tools when needed, persist real changes, verify claims, and continue until this step is genuinely complete.',
+    ].filter(Boolean).join('\n');
+
+    const service=new ChatRunnerService(this.db,new DevelopmentSecretStore(getAgentOfficeConfig().dataDir));
+    const chosenAgents=input.agent_id?[input.agent_id]:this.selectedAgents;
+    const chosenSubs=input.subagent_id?[input.subagent_id]:this.selectedSubagents;
+    const prepared=service.prepare({
+      project_id:this.projectId,conversation_id:this.conversationId,message:prompt,
+      target:(chosenAgents.length+chosenSubs.length)>1?'team':chosenAgents[0]??'auto',
+      selected_agent_ids:chosenAgents.length?chosenAgents:undefined,
+      selected_subagent_ids:chosenSubs.length?chosenSubs:undefined,
+      model_override:(chosenAgents.length+chosenSubs.length)===1?this.modelOverride:undefined,
+      attachment_ids:[...new Set([...this.attachmentIds,...orientations.attachment_ids])],
+      required_tools:input.step_key==='01_inspect_plan'?this.requiredTools:[],
+      internal:true,parent_run_id:this.rootRunId,execution_plan_id:input.plan_id,execution_step_id:input.step_id,
+    });
+    await service.execute(prepared,this.signal);
+    const finished=this.runs.get(prepared.run.id);
+    if(!finished||finished.status!=='completed'){
+      this.emitStep('failed',input,{message:finished?.error?.message?String(finished.error.message):'EXECUTION_INTERNAL_RUN_FAILED',duration_ms:Date.now()-stepStartedAt});
+      throw new Error(finished?.error?.message?String(finished.error.message):'EXECUTION_INTERNAL_RUN_FAILED');
+    }
+    const finalId=typeof finished.metadata?.final_message_id==='string'?finished.metadata.final_message_id:null;
+    const msg=finalId?this.db.prepare('SELECT content FROM messages WHERE id=?').get(finalId) as {content:string}|undefined:undefined;
+    const text=msg?.content?.trim()||'';
+    const after=workspace.gitStatus(this.projectId);
+    const diff=workspace.gitDiff(this.projectId);
+    const audits=this.toolAudit(prepared.run.id);
+    const successfulAudits=audits.filter(item=>item.status==='completed'||item.status==='success'||item.result?.ok===true);
+    const software=/\b(site|app|aplicativo|sistema|c[oó]digo|backend|frontend|api|banco|database|deploy|build|bug|software|landing\s?page|p[aá]gina\s?de\s?venda|dashboard)\b/i.test(this.contract.objective);
+    const webBuild=/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(this.contract.objective);
+    const writeEvidence=successfulAudits.some(item=>['fs_write_any','fs_copy','fs_move','fs_create_directory'].includes(item.tool_name))
+      ||after.files.some(item=>!before.files.some(prev=>prev.path===item.path&&prev.status===item.status))
+      ||diff.additions+diff.deletions>0;
+    if(input.step_key==='01_inspect_plan'&&software&&successfulAudits.length===0){
+      this.emitStep('failed',input,{message:'O planejamento não inspecionou o workspace real.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_PLAN_NO_TOOL_EVIDENCE');
+    }
+    if(input.step_key==='02_implement'&&software&&!writeEvidence){
+      this.emitStep('failed',input,{message:'Nenhuma alteração real de arquivo foi comprovada.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_IMPLEMENTATION_NO_FILE_EVIDENCE');
+    }
+    if(input.step_key==='03_review_fix'&&software&&successfulAudits.length===0){
+      this.emitStep('failed',input,{message:'A revisão não inspecionou o projeto com ferramentas.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_REVIEW_NO_TOOL_EVIDENCE');
+    }
+    if(input.step_key==='04_validate'&&software){
+      const validated=successfulAudits.some(item=>{
+        if(!['shell_command','process_start','process_status','git_command'].includes(item.tool_name))return false;
+        const command=String(item.input?.command??(Array.isArray(item.input?.args)?item.input.args.join(' '):'')).toLowerCase();
+        return /\b(test|build|typecheck|tsc|lint|check|vitest|jest|playwright|cargo\s+(test|check|build)|npm\s+run|pnpm\s+run|yarn\s+)\b/.test(command);
+      });
+      if(!validated){
+        this.emitStep('failed',input,{message:'Nenhuma validação executável (build/test/typecheck/lint) foi comprovada.',duration_ms:Date.now()-stepStartedAt});
+        throw new Error('EXECUTION_VALIDATION_NO_COMMAND_EVIDENCE');
+      }
+      if(webBuild){
+        try{
+          const preview=await new PreviewService(this.db).start(this.projectId,{chat_run_id:this.rootRunId});
+          if(preview.status!=='healthy'||!preview.url)throw new Error('PREVIEW_NOT_HEALTHY');
+          this.emitStep('telemetry',input,{message:'Preview iniciado e validado',operation:'Preview saudável',target:preview.url});
+        }catch(error){
+          this.emitStep('failed',input,{message:error instanceof Error?error.message:'PREVIEW_REQUIRED_FAILED',duration_ms:Date.now()-stepStartedAt});
+          throw new Error('EXECUTION_REQUIRED_PREVIEW_FAILED');
+        }
+      }
+    }
+    if(input.step_key==='05_final_audit'&&software&&successfulAudits.length===0){
+      this.emitStep('failed',input,{message:'A auditoria final não inspecionou o estado real do projeto.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_AUDIT_NO_TOOL_EVIDENCE');
+    }
+    const gate=/^(04_validate|05_final_audit)$/.test(input.step_key);
+    if(gate&&!/QUALITY_GATE:\s*PASS\b/i.test(text)){
+      this.emitStep('failed',input,{message:'Quality Gate não foi aprovado.',duration_ms:Date.now()-stepStartedAt});
+      throw new Error('EXECUTION_QUALITY_GATE_FAILED');
+    }
+    this.emitStep('completed',input,{message:'Etapa concluída com evidências',duration_ms:Date.now()-stepStartedAt,tool_calls:successfulAudits.length,changed_files:after.files.slice(0,30).map(item=>item.path),diff_additions:diff.additions,diff_deletions:diff.deletions});
+    return{
+      summary:text.slice(0,12000),
+      artifacts:[{
+        type:'evidence',
+        payload:{
+          step_key:input.step_key,internal_run_id:prepared.run.id,
+          git_head_before:before.head,git_head_after:after.head,
+          changed_files:after.files.slice(0,100),diff_additions:diff.additions,diff_deletions:diff.deletions,
+          quality_gate:gate?(/QUALITY_GATE:\s*PASS\b/i.test(text)?'pass':'revise'):'not_required',
+          completed_at:now(),
+        }
+      }],
+      usage:{
+        tokens:Number(finished.input_tokens||0)+Number(finished.output_tokens||0),
+        tool_calls:Number(finished.metadata?.tool_steps||0),
+      },
+    };
+  }
+}
+
+export class LongRunService{
+  private readonly runs:ChatRunRepository;
+  private readonly messages:MessageRepository;
+  private readonly activity:ActivityRepository;
+  constructor(private readonly db:Database){this.runs=new ChatRunRepository(db);this.messages=new MessageRepository(db);this.activity=new ActivityRepository(db)}
+
+  private roleAgents(selected:string[],decision:RoutingDecision){
+    const rows=this.db.prepare("SELECT id,name,role,description,enabled,paused,provider_id,model_id FROM agents WHERE enabled=1 AND paused=0 AND provider_id IS NOT NULL AND model_id IS NOT NULL").all() as Array<{id:string;name:string;role:string;description:string}>;
+    const canExpand=decision.target_mode!=='direct_agent';
+    const pool=canExpand?[...rows.filter(row=>selected.includes(row.id)),...rows.filter(row=>!selected.includes(row.id))]:rows.filter(row=>selected.includes(row.id));
+    const pick=(pattern:RegExp,fallback?:string|null)=>{
+      const hit=pool.find(row=>pattern.test((row.name+' '+row.role+' '+row.description).toLowerCase()));
+      return hit?.id??fallback??selected[0]??null;
+    };
+    const builder=pick(/builder|develop|code|engineer|program|frontend|backend/);
+    const planner=pick(/orchestr|plan|architect|lead|manager|research/,builder);
+    const reviewer=pick(/review|critic|qa|auditor|quality|test/,builder);
+    const validator=pick(/qa|test|validation|review|auditor/,reviewer);
+    const auditor=pick(/auditor|review|critic|orchestr|quality/,reviewer);
+    const delivery=pick(/orchestr|lead|manager|builder/,builder);
+    return{planner,builder,reviewer,validator,auditor,delivery};
+  }
+
+  create(prepared:PreparedChatRun,orchestration:{orchestration_run_id:string;decision:RoutingDecision},message:string,attachmentIds:string[]=[]){
+    const contract=goalContract(message);
+    const draft=planDraft({
+      project_id:prepared.run.project_id,orchestration_run_id:orchestration.orchestration_run_id,
+      decision:orchestration.decision,contract,selected_agents:prepared.selected_agents,selected_subagents:prepared.selected_subagents,
+      role_agents:this.roleAgents(prepared.selected_agents,orchestration.decision),
+    });
+    const plan=new ExecutionGraphService(this.db).createValidated(draft) as any;
+    const t=now();
+    this.db.prepare("INSERT INTO execution_artifacts(id,plan_id,step_id,type,uri,payload_json,created_at)VALUES(lower(hex(randomblob(16))),?,NULL,'goal_contract',NULL,?,?)").run(plan.id,JSON.stringify(contract),t);
+    this.db.prepare("INSERT INTO execution_artifacts(id,plan_id,step_id,type,uri,payload_json,created_at)VALUES(lower(hex(randomblob(16))),?,NULL,'mission_config',NULL,?,?)").run(plan.id,JSON.stringify({
+      root_run_id:prepared.run.id,conversation_id:prepared.conversation_id,project_id:prepared.run.project_id,
+      selected_agents:prepared.selected_agents,selected_subagents:prepared.selected_subagents,model_override:prepared.model_override??null,
+      orchestration_run_id:orchestration.orchestration_run_id,original_request:message,attachment_ids:attachmentIds,required_tools:orchestration.decision.required_tools??[],
+    }),t);
+    this.runs.update(prepared.run.id,{metadata:{...prepared.run.metadata,execution_plan_id:plan.id,long_running:true,goal_contract:contract}});
+    this.emit(prepared.run.id,prepared.run.project_id,'worker.state',{state:'planning',activity:'Execução longa preparada',execution_plan_id:plan.id});
+    return{plan,contract};
+  }
+
+  async run(planId:string,rootRunId:string,signal?:AbortSignal):Promise<void>{
+    let currentPlanId=planId;
+    let providerWaitStarted=0;
+    try{
+      while(true){
+        if(signal?.aborted){this.cancelPlan(currentPlanId);throw new Error('CHAT_RUN_CANCELLED')}
+        this.applyControlCommands(currentPlanId);
+        const plan=new ExecutionGraphService(this.db).getPlan(currentPlanId) as any;
+        if(!plan)throw new Error('EXECUTION_PLAN_NOT_FOUND');
+        if(plan.status==='cancelled')throw new Error('CHAT_RUN_CANCELLED');
+        if(plan.status==='completed'){await this.finishSuccess(currentPlanId,rootRunId);return}
+        if(plan.status==='failed'){
+          const next=this.autoReplan(currentPlanId);
+          if(next){currentPlanId=next;continue}
+          throw new Error('EXECUTION_LONG_RUN_FAILED');
+        }
+
+        const config=this.loadMissionConfig(currentPlanId);
+        const contract=this.loadGoalContract(currentPlanId);
+        const executor=new ChatStepExecutor(
+          this.db,rootRunId,config.conversation_id,config.project_id,contract,
+          config.selected_agents??[],config.selected_subagents??[],config.attachment_ids??[],config.required_tools??[],config.model_override??undefined,signal,
+        );
+        const scheduler=new ExecutionScheduler(this.db,executor);
+        const before=this.stepProgress(currentPlanId);
+        this.emit(rootRunId,config.project_id,'worker.state',{state:'working',activity:`Executando etapa ${before.completed+1} de ${before.total}`,execution_plan_id:currentPlanId,progress:before.total?before.completed/before.total:0});
+        const result=await scheduler.tick(currentPlanId);
+        const afterPlan=new ExecutionGraphService(this.db).getPlan(currentPlanId) as any;
+        const after=this.stepProgress(currentPlanId);
+        this.emit(rootRunId,config.project_id,'worker.state',{state:'reviewing',activity:`${after.completed} de ${after.total} etapas concluídas`,execution_plan_id:currentPlanId,progress:after.total?after.completed/after.total:0});
+
+        const waiting=(afterPlan?.steps??[]).filter((s:any)=>s.resume_state==='waiting_provider');
+        if(waiting.length){
+          if(!providerWaitStarted)providerWaitStarted=Date.now();
+          if(Date.now()-providerWaitStarted>30_000){
+            const durable=new DurableExecutionService(this.db);
+            for(const step of waiting)durable.resumeProvider(step.id);
+            providerWaitStarted=Date.now();
+          }
+          await sleep(5_000);
+        }else{
+          providerWaitStarted=0;
+          await sleep(result.started?250:1_000);
+        }
+      }
+    }catch(error){
+      const cancelled=signal?.aborted||(error instanceof Error&&error.message==='CHAT_RUN_CANCELLED');
+      const run=this.runs.get(rootRunId);
+      if(run)this.runs.update(rootRunId,{status:cancelled?'cancelled':'failed',ended_at:now(),error:cancelled?null:{message:error instanceof Error?error.message:'EXECUTION_LONG_RUN_FAILED'},metadata:{...run.metadata,execution_plan_id:currentPlanId}});
+      this.emit(rootRunId,run?.project_id??'',cancelled?'run.cancelled':'run.failed',{message:cancelled?'Execução cancelada':error instanceof Error?error.message:'EXECUTION_LONG_RUN_FAILED',execution_plan_id:currentPlanId});
+    }
+  }
+
+  private autoReplan(planId:string):string|null{
+    const graph=new ExecutionGraphService(this.db),plan=graph.getPlan(planId) as any;
+    if(!plan)return null;
+    const budget=plan.budget??{},count=Number(plan.replan_count||0);
+    if(count>=Number(budget.max_replans??5))return null;
+    const failed=(plan.steps??[]).filter((s:any)=>s.status==='failed');
+    if(!failed.length)return null;
+    const durable=new DurableExecutionService(this.db);
+    let request;
+    try{request=durable.requestReplan(planId,'Automatic remediation after a failed execution or quality gate.','automatic_quality_replan')}catch{return null}
+    if(request.status!=='pending')return null;
+    const config=this.loadMissionConfig(planId),contract=this.loadGoalContract(planId);
+    const decision=json<any>((this.db.prepare('SELECT decision_json FROM orchestration_runs WHERE id=?').get(config.orchestration_run_id) as any)?.decision_json,{});
+    const draft=planDraft({
+      project_id:config.project_id,orchestration_run_id:config.orchestration_run_id,decision,contract,
+      selected_agents:config.selected_agents??[],selected_subagents:config.selected_subagents??[],
+      role_agents:this.roleAgents(config.selected_agents??[],decision),
+    });
+    const next=durable.commitReplan(request.request_id,draft) as any;
+    if(!next?.id)return null;
+    const t=now();
+    this.db.prepare("INSERT INTO execution_artifacts(id,plan_id,step_id,type,uri,payload_json,created_at)VALUES(lower(hex(randomblob(16))),?,NULL,'goal_contract',NULL,?,?)").run(next.id,JSON.stringify(contract),t);
+    this.db.prepare("INSERT INTO execution_artifacts(id,plan_id,step_id,type,uri,payload_json,created_at)VALUES(lower(hex(randomblob(16))),?,NULL,'mission_config',NULL,?,?)").run(next.id,JSON.stringify({...config,replanned_from:planId}),t);
+    return next.id;
+  }
+
+  private loadMissionConfig(planId:string):any{
+    const row=this.db.prepare("SELECT payload_json FROM execution_artifacts WHERE plan_id=? AND type='mission_config' ORDER BY created_at DESC LIMIT 1").get(planId) as any;
+    if(row)return json(row.payload_json,{});
+    const parent=this.db.prepare('SELECT parent_plan_id FROM execution_plans WHERE id=?').get(planId) as any;
+    if(parent?.parent_plan_id)return this.loadMissionConfig(parent.parent_plan_id);
+    throw new Error('EXECUTION_MISSION_CONFIG_MISSING');
+  }
+  private loadGoalContract(planId:string):GoalContract{
+    const row=this.db.prepare("SELECT payload_json FROM execution_artifacts WHERE plan_id=? AND type='goal_contract' ORDER BY created_at DESC LIMIT 1").get(planId) as any;
+    if(row)return json(row.payload_json,goalContract(''));
+    const config=this.loadMissionConfig(planId);return goalContract(config.original_request??'');
+  }
+  private stepProgress(planId:string){
+    const rows=this.db.prepare('SELECT status FROM execution_steps WHERE plan_id=?').all(planId) as any[];
+    return{total:rows.length,completed:rows.filter(x=>x.status==='completed').length,failed:rows.filter(x=>x.status==='failed').length};
+  }
+  private applyControlCommands(planId:string){
+    const cancel=this.db.prepare("SELECT id FROM execution_commands WHERE plan_id=? AND status='pending' AND command_type='cancel' ORDER BY created_at LIMIT 1").get(planId) as any;
+    if(cancel){this.db.prepare("UPDATE execution_commands SET status='applied',applied_at=? WHERE id=?").run(now(),cancel.id);this.cancelPlan(planId);return}
+    const replan=this.db.prepare("SELECT id,payload_json FROM execution_commands WHERE plan_id=? AND status='pending' AND command_type='request_replan' ORDER BY created_at LIMIT 1").get(planId) as any;
+    if(replan){
+      this.db.prepare("UPDATE execution_commands SET status='applied',applied_at=? WHERE id=?").run(now(),replan.id);
+      const payload=json<any>(replan.payload_json,{});
+      try{new DurableExecutionService(this.db).requestReplan(planId,String(payload.reason||'User requested replan'),'user_orientation')}catch{}
+    }
+  }
+  private cancelPlan(planId:string){
+    const t=now();this.db.prepare("UPDATE execution_plans SET status='cancelled',updated_at=? WHERE id=? AND status NOT IN ('completed','failed','cancelled')").run(t,planId);
+    this.db.prepare("UPDATE execution_steps SET status='cancelled',resume_state='cancelled',updated_at=? WHERE plan_id=? AND status IN ('queued','ready','blocked')").run(t,planId);
+  }
+  private async finishSuccess(planId:string,rootRunId:string){
+    const config=this.loadMissionConfig(planId);
+    const last=this.db.prepare(`SELECT a.result_summary FROM step_attempts a JOIN execution_steps s ON s.id=a.step_id WHERE s.plan_id=? AND s.key='06_delivery' AND a.status='completed' ORDER BY a.attempt_number DESC LIMIT 1`).get(planId) as any;
+    const fallback=this.db.prepare("SELECT result_summary FROM step_attempts WHERE step_id IN (SELECT id FROM execution_steps WHERE plan_id=?) AND status='completed' ORDER BY ended_at DESC LIMIT 1").get(planId) as any;
+    const text=String(last?.result_summary||fallback?.result_summary||'Execução concluída e validada.').replace(/QUALITY_GATE:\s*PASS/gi,'').trim();
+    const wantsPreview=/\b(site|landing\s?page|p[aá]gina\s?de\s?venda|frontend|dashboard|web\s?app)\b/i.test(String(config.original_request||''));
+    if(wantsPreview){
+      const previews=new PreviewService(this.db);
+      let preview=previews.status(config.project_id);
+      if(!preview||preview.status!=='healthy'||!preview.url)preview=await previews.start(config.project_id,{chat_run_id:rootRunId});
+      if(!preview||preview.status!=='healthy'||!preview.url){
+        this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.failed',severity:'error',title:'Preview obrigatório falhou',detail:'A entrega web não foi considerada concluída porque o preview não ficou saudável.',payload:{status:preview?.status??null}});
+        throw new Error('EXECUTION_REQUIRED_PREVIEW_FINAL_CHECK_FAILED');
+      }
+      this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'preview.ready',title:'Preview pronto',detail:String(preview.url),payload:{url:preview.url,status:preview.status}});
+      chatEventHub.publish(rootRunId,'execution.preview.ready',{url:preview.url,status:preview.status,execution_plan_id:planId});
+    }
+    const message=this.messages.create({conversation_id:config.conversation_id,role:'assistant',content:text,metadata:{source:'long_run_v1',root_run_id:rootRunId,execution_plan_id:planId,final:true}});
+    const root=this.runs.get(rootRunId);if(root)this.runs.update(rootRunId,{status:'completed',ended_at:now(),error:null,metadata:{...root.metadata,execution_plan_id:planId,final_message_id:message.id,long_running:true}});
+    chatEventHub.publish(rootRunId,'response.delta',{text,stage:'final_delivery',long_running:true});
+    chatEventHub.publish(rootRunId,'response.completed',{message_id:message.id,final:true,execution_plan_id:planId,long_running:true});
+    chatEventHub.publish(rootRunId,'run.completed',{final_message_id:message.id,execution_plan_id:planId,long_running:true});
+    this.activity.append({project_id:config.project_id,conversation_id:config.conversation_id,run_id:rootRunId,type:'run.completed',title:'Execução longa concluída',detail:'Objetivo validado pela auditoria final.',payload:{execution_plan_id:planId}});
+  }
+  private emit(runId:string,projectId:string,event:string,payload:Record<string,unknown>){
+    if(projectId)this.activity.append({project_id:projectId,run_id:runId,type:event,title:typeof payload.activity==='string'?payload.activity:event,detail:typeof payload.message==='string'?payload.message:'',payload});
+    chatEventHub.publish(runId,event,payload);
+  }
+}

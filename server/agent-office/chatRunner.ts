@@ -27,6 +27,7 @@ import { ChatRunCancelledError } from './runtimeControls.js';
 import { AgentToolPolicyRepository, toolRegistry } from './toolRegistry.js';
 import { AgentOperationsService } from './agentOperations.js';
 import { SubagentService } from './subagentService.js';
+import { ResourceService } from './resourceService.js';
 
 export type ChatTarget = 'auto' | 'team' | string;
 
@@ -41,6 +42,12 @@ export interface PrepareChatRunInput {
   orchestration_run_id?: string;
   routing_level?: string;
   routing_decision?: Record<string, unknown>;
+  attachment_ids?: string[];
+  required_tools?: string[];
+  internal?: boolean;
+  parent_run_id?: string | null;
+  execution_plan_id?: string | null;
+  execution_step_id?: string | null;
 }
 
 export interface PreparedChatRun {
@@ -205,6 +212,27 @@ function sumUsage(values: Array<UniversalUsage | undefined>): UniversalUsage {
   };
 }
 
+
+function compactTelemetryValue(value:unknown,max=180):string{
+  if(typeof value==='string')return value.replace(/\s+/g,' ').trim().slice(0,max);
+  if(Array.isArray(value))return value.map(item=>String(item)).join(' ').slice(0,max);
+  return '';
+}
+function toolTelemetry(name:string,args:Record<string,unknown>){
+  const pathValue=compactTelemetryValue(args.path??args.to??args.from??args.cwd??args.url??args.selector,220);
+  const command=compactTelemetryValue(args.command??args.args??args.javascript,220);
+  const actionMap:Record<string,string>={
+    fs_read_any:'Lendo arquivo',fs_write_any:'Escrevendo arquivo',fs_create_directory:'Criando pasta',
+    fs_copy:'Copiando arquivo',fs_move:'Movendo arquivo',fs_delete:'Excluindo arquivo',
+    shell_command:'Executando comando',process_start:'Iniciando processo',process_status:'Verificando processo',process_stop:'Parando processo',
+    git_command:'Executando Git',github_command:'Executando GitHub',browser_open:'Abrindo navegador',browser_eval:'Executando no navegador',
+    browser_click:'Clicando no navegador',browser_type:'Digitando no navegador',browser_text:'Lendo página',
+    browser_upload:'Enviando arquivo',browser_download:'Baixando arquivo',browser_screenshot:'Capturando navegador',
+    computer_screenshot:'Capturando tela',computer_click:'Clicando no computador',computer_type:'Digitando no computador',
+    computer_hotkey:'Usando atalho',computer_scroll:'Rolando tela',deploy_command:'Publicando',http_request:'Chamando API',runtime_health:'Verificando runtime'
+  };
+  return{operation:actionMap[name]??'Executando '+name,target:pathValue||null,command:command||null};
+}
 export class ChatRunnerService {
   private readonly conversations: ConversationRepository;
   private readonly messages: MessageRepository;
@@ -274,6 +302,8 @@ export class ChatRunnerService {
 
     const toolsEnabled = selected.some((binding) => this.toolsAvailable(binding));
 
+    const attachmentIds=(input.attachment_ids??[]).filter(Boolean);
+    const resources=new ResourceService(this.database);
     const userMessage = this.messages.create({
       conversation_id: conversationId,
       role: 'user',
@@ -282,8 +312,14 @@ export class ChatRunnerService {
         source: 'chat_v2',
         target,
         tools_enabled: toolsEnabled,
+        attachment_ids: attachmentIds,
+        required_tools: input.required_tools ?? [],
+        hidden: input.internal === true,
+        execution_plan_id: input.execution_plan_id ?? null,
+        execution_step_id: input.execution_step_id ?? null,
       },
     });
+    resources.linkMessage(userMessage.id,attachmentIds);
 
     const mode = target === 'team' || selected.length > 1 ? 'team' : 'single';
     if (mode === 'team' && input.model_override) throw new Error('CHAT_MODEL_OVERRIDE_TEAM_UNSUPPORTED');
@@ -296,6 +332,7 @@ export class ChatRunnerService {
       model_id: mode === 'single' ? this.resolveModel(first, input.model_override).id : null,
       status: 'running',
       mode,
+      parent_run_id: input.parent_run_id ?? null,
       metadata: {
         source: 'chat_v2',
         target,
@@ -309,6 +346,10 @@ export class ChatRunnerService {
         orchestration_run_id: input.orchestration_run_id ?? null,
         routing_level: input.routing_level ?? null,
         routing_decision: input.routing_decision ?? null,
+        required_tools: input.required_tools ?? [],
+        hidden: input.internal === true,
+        execution_plan_id: input.execution_plan_id ?? null,
+        execution_step_id: input.execution_step_id ?? null,
       },
     });
 
@@ -690,6 +731,12 @@ export class ChatRunnerService {
     const teamRoomContext = this.teamRoomContextForWorker(binding);
     const recent = this.messages.list(conversationId, RECENT_MESSAGE_LIMIT);
     const currentUser = [...recent].reverse().find((message) => message.role === 'user')?.content ?? '';
+    const currentUserMessage=[...recent].reverse().find((message)=>message.role==='user');
+    const currentMeta=currentUserMessage?asMetadata(currentUserMessage):{};
+    const attachmentIds=Array.isArray(currentMeta.attachment_ids)?currentMeta.attachment_ids.filter((value):value is string=>typeof value==='string'):[];
+    const resourceService=new ResourceService(this.database);
+    const resourceContext=resourceService.context({projectId,agentId:binding.agent.id,subagentId:binding.subagent_id,query:currentUser,attachmentIds});
+    const multimodalAttachments=resourceService.multimodalAttachments(attachmentIds);
     const retrieved = currentUser
       ? this.memory.search(projectId, currentUser, undefined, RETRIEVED_MEMORY_LIMIT)
       : [];
@@ -708,6 +755,7 @@ export class ChatRunnerService {
       projectMemory?.architecture ? `Project architecture: ${projectMemory.architecture}` : '',
       projectMemory?.rules ? `Project rules: ${projectMemory.rules}` : '',
       projectMemory?.known_issues ? `Known issues: ${projectMemory.known_issues}` : '',
+      resourceContext ? `Knowledge, Skills and attached files:\n${resourceContext}` : '',
       retrieved.length
         ? `Relevant project memory:\n${retrieved.map((chunk) => `- [${chunk.kind}] ${chunk.text}`).join('\n')}`
         : '',
@@ -717,7 +765,10 @@ export class ChatRunnerService {
     const result: UniversalMessage[] = [{ role: 'system', content: systemParts.join('\n\n') }];
     for (const message of recent) {
       const normalized = messageTextForContext(message);
-      if (normalized) result.push(normalized);
+      if (normalized) {
+        if(currentUserMessage&&message.id===currentUserMessage.id&&multimodalAttachments.length) normalized.attachments=multimodalAttachments;
+        result.push(normalized);
+      }
     }
 
     return this.trimMessages(result, CHAT_CONTEXT_TOKEN_BUDGET);
@@ -958,6 +1009,15 @@ export class ChatRunnerService {
     let toolSteps = 0;
     let effectiveProvider = binding.provider.id;
     let effectiveModel = binding.model.model_id;
+    const requiredTools=new Set<string>(Array.isArray(rootRun.metadata?.required_tools)?rootRun.metadata.required_tools.filter((x:unknown):x is string=>typeof x==='string'):[]);
+    const usedRequiredTools=new Set<string>();
+    let requiredToolReminders=0;
+    if(requiredTools.size){
+      const availableNames=new Set(definitions.map(tool=>tool.name));
+      const unavailable=[...requiredTools].filter(name=>!availableNames.has(name));
+      if(unavailable.length)throw new Error('CHAT_REQUIRED_TOOL_UNAVAILABLE:'+unavailable.join(','));
+      messages.push({role:'system',content:'This run has mandatory tools: '+[...requiredTools].join(', ')+'. You MUST actually call every mandatory tool before giving the final answer. Do not substitute claims or memory for tool evidence.'});
+    }
 
     for (let step = 0; step <= policy.max_tool_steps; step += 1) {
       if (signal?.aborted) throw new ChatRunCancelledError();
@@ -989,6 +1049,14 @@ export class ChatRunnerService {
       effectiveModel = result.model_id ?? effectiveModel;
 
       if (!result.tool_calls?.length) {
+        const missing=[...requiredTools].filter(name=>!usedRequiredTools.has(name));
+        if(missing.length){
+          requiredToolReminders+=1;
+          if(requiredToolReminders>2)throw new Error('CHAT_REQUIRED_TOOL_NOT_USED:'+missing.join(','));
+          messages.push({role:'assistant',content:result.text||''});
+          messages.push({role:'system',content:'Mandatory tool requirement not satisfied. Before answering, call: '+missing.join(', ')+'. Use the tool now and ground the response in its actual result.'});
+          continue;
+        }
         if (result.text) {
           this.hub.publish(rootRun.id, 'response.delta', {
             ...this.workerPayload(binding),
@@ -1028,12 +1096,15 @@ export class ChatRunnerService {
           `Usando ${call.name}`,
           Math.min(0.85, 0.25 + (toolSteps / Math.max(1, policy.max_tool_steps)) * 0.5),
         );
+        const toolStartedAt=Date.now();
+        const telemetry=toolTelemetry(call.name,call.arguments as Record<string,unknown>);
         this.emit(rootRun, 'tool.started', `${binding.agent.name} iniciou ${call.name}`, {
           ...this.workerPayload(binding),
           child_run_id: childRun.id,
           tool_name: call.name,
           tool_call_id: call.id,
           step: toolSteps,
+          ...telemetry,
         });
 
         const toolContext = {
@@ -1097,6 +1168,8 @@ export class ChatRunnerService {
           );
         }
 
+        if(toolResult.ok&&requiredTools.has(call.name))usedRequiredTools.add(call.name);
+
         this.emit(
           rootRun,
           'tool.completed',
@@ -1111,6 +1184,8 @@ export class ChatRunnerService {
             ok: toolResult.ok,
             error: toolResult.error ?? null,
             audit_id: toolResult.audit_id,
+            duration_ms: Date.now()-toolStartedAt,
+            ...telemetry,
           },
           toolResult.ok ? 'info' : 'warning',
         );
@@ -1315,6 +1390,9 @@ export class ChatRunnerService {
         final: isFinal,
         tools_enabled: toolsEnabled,
         tool_steps: toolSteps,
+        hidden: rootRun.metadata?.hidden === true,
+        execution_plan_id: rootRun.metadata?.execution_plan_id ?? null,
+        execution_step_id: rootRun.metadata?.execution_step_id ?? null,
       },
     });
 
@@ -1388,17 +1466,25 @@ export class ChatRunnerService {
     payload: Record<string, unknown>,
     severity: 'debug' | 'info' | 'warning' | 'error' = 'info',
   ): void {
+    const enriched:Record<string,unknown>={
+      ...payload,
+      execution_plan_id:payload.execution_plan_id??run.metadata?.execution_plan_id??null,
+      execution_step_id:payload.execution_step_id??run.metadata?.execution_step_id??null,
+    };
     this.activity.append({
       project_id: run.project_id,
       conversation_id: run.conversation_id,
       run_id: run.id,
-      agent_id: typeof payload.agent_id === 'string' ? payload.agent_id : null,
+      agent_id: typeof enriched.agent_id === 'string' ? enriched.agent_id : null,
       type: event,
       severity,
       title,
-      detail: typeof payload.message === 'string' ? payload.message : '',
-      payload,
+      detail: typeof enriched.message === 'string' ? enriched.message : '',
+      payload:enriched,
     });
-    this.hub.publish(run.id, event, payload);
+    this.hub.publish(run.id, event, enriched);
+    if(run.parent_run_id){
+      this.hub.publish(run.parent_run_id,event,{...enriched,source_run_id:run.id});
+    }
   }
 }

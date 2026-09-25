@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "overrides": [
+    {
+      "assetId": "desk.combination.001.complete.workstation.22f9e85f92",
+      "confidence": "curated",
+      "canonicalScale": 1.0,
+      "occlusion": {
+        "mode": "horizontal-split",
+        "splitY": 150
+      },
+      "sockets": [
+        {
+          "id": "seat",
+          "kind": "work",
+          "x": 110,
+          "y": 205,
+          "facing": "north",
+          "pose": "seated-working",
+          "layer": "same"
+        }
+      ],
+      "notes": [
+        "Example only. Stage 5.2B must replace splitY/socket coordinates with measured values from the private calibrated PNG."
+      ]
+    },
+    {
+      "assetId": "character.01.manager.navy.front.idle.c6dc34cd78",
+      "confidence": "curated",
+      "notes": [
+        "Character height is controlled by characterCalibration.ts, not by room-level scale."
+      ]
+    }
+  ]
+}

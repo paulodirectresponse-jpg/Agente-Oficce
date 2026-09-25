@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="70" y1="50" x2="455" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1f5fff"/>
+      <stop offset=".33" stop-color="#173bb6"/>
+      <stop offset=".68" stop-color="#0a1e69"/>
+      <stop offset="1" stop-color="#07133f"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="70" y1="40" x2="470" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#63f2ff"/>
+      <stop offset=".45" stop-color="#1c8dff"/>
+      <stop offset="1" stop-color="#2450ff"/>
+    </linearGradient>
+    <linearGradient id="aLeft" x1="188" y1="150" x2="292" y2="390" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset=".38" stop-color="#dff7ff"/>
+      <stop offset=".72" stop-color="#74dcff"/>
+      <stop offset="1" stop-color="#387bff"/>
+    </linearGradient>
+    <linearGradient id="aRight" x1="285" y1="160" x2="380" y2="390" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f2fbff"/>
+      <stop offset=".28" stop-color="#b3ecff"/>
+      <stop offset=".72" stop-color="#277dff"/>
+      <stop offset="1" stop-color="#1840c8"/>
+    </linearGradient>
+    <linearGradient id="bridge" x1="145" y1="330" x2="385" y2="365" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#68eeff"/>
+      <stop offset=".42" stop-color="#d9fbff"/>
+      <stop offset="1" stop-color="#3c84ff"/>
+    </linearGradient>
+    <radialGradient id="orb" cx=".35" cy=".25" r=".8">
+      <stop stop-color="#f4ffff"/>
+      <stop offset=".2" stop-color="#9ff7ff"/>
+      <stop offset=".56" stop-color="#1fbfff"/>
+      <stop offset="1" stop-color="#2064f0"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="106" fill="url(#bg)"/>
+  <rect x="28" y="28" width="456" height="456" rx="102" fill="none" stroke="url(#rim)" stroke-width="7" opacity=".95"/>
+  <path d="M67 115C166 78 365 75 453 132" fill="none" stroke="#64ecff" stroke-width="8" opacity=".28" filter="url(#soft)"/>
+  <path d="M88 336C120 174 345 102 428 206C486 278 413 390 274 407C133 424 91 378 88 336Z" fill="none" stroke="#43d9ff" stroke-width="9" opacity=".62" filter="url(#glow)"/>
+  <path d="M88 336C120 174 345 102 428 206C486 278 413 390 274 407C133 424 91 378 88 336Z" fill="none" stroke="#63eaff" stroke-width="3.5" opacity=".9"/>
+  <path d="M165 386L256 170C268 142 298 142 313 170L392 367C398 382 388 394 373 394H340C326 394 318 388 313 374L284 299L227 382C219 393 210 398 194 398H179C166 398 159 394 165 386Z" fill="url(#aRight)"/>
+  <path d="M159 386L251 171C259 152 276 143 292 151L308 161L208 391C203 400 192 403 178 403H168C158 403 154 397 159 386Z" fill="url(#aLeft)"/>
+  <path d="M181 365C230 333 281 321 325 331C349 337 371 348 393 365L375 395C351 379 330 369 308 364C267 354 228 365 194 390Z" fill="url(#bridge)" opacity=".98"/>
+  <circle cx="108" cy="284" r="27" fill="url(#orb)" filter="url(#glow)"/>
+  <circle cx="108" cy="284" r="24" fill="url(#orb)"/>
+  <circle cx="390" cy="176" r="27" fill="url(#orb)" filter="url(#glow)"/>
+  <circle cx="390" cy="176" r="24" fill="url(#orb)"/>
+  <circle cx="383" cy="384" r="29" fill="url(#orb)" filter="url(#glow)"/>
+  <circle cx="383" cy="384" r="25" fill="url(#orb)"/>
+</svg>

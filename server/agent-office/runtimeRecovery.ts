@@ -8,8 +8,8 @@ export interface RecoveryResult {
 
 export function recoverInterruptedChatRuns(database: Database): RecoveryResult {
   const rows = database.prepare(
-    "SELECT id FROM chat_runs WHERE status IN ('running', 'created') ORDER BY started_at ASC",
-  ).all() as Array<{ id: string }>;
+    "SELECT id,parent_run_id,metadata_json FROM chat_runs WHERE status IN ('running', 'created') ORDER BY started_at ASC",
+  ).all() as Array<{ id: string; parent_run_id:string|null; metadata_json:string }>;
 
   const runs = new ChatRunRepository(database);
   const activity = new ActivityRepository(database);
@@ -21,6 +21,19 @@ export function recoverInterruptedChatRuns(database: Database): RecoveryResult {
     for (const row of rows) {
       const run = runs.get(row.id);
       if (!run) continue;
+      let persistedMetadata:Record<string,unknown>={};
+      try{persistedMetadata=JSON.parse(row.metadata_json||'{}')}catch{}
+      const durableRoot=!row.parent_run_id&&persistedMetadata.long_running===true&&typeof persistedMetadata.execution_plan_id==='string';
+      if(durableRoot){
+        runs.update(run.id,{metadata:{...run.metadata,recovered_after_restart:true,recovered_at:recoveredAt,resume_pending:true}});
+        activity.append({
+          project_id:run.project_id,conversation_id:run.conversation_id,run_id:run.id,agent_id:run.agent_id,
+          type:'run.recovering',severity:'warning',title:'Execução longa será retomada',
+          detail:'O root durável foi preservado; o plano será retomado a partir do último checkpoint seguro.',
+          payload:{recovered_at:recoveredAt,execution_plan_id:persistedMetadata.execution_plan_id},
+        });
+        continue;
+      }
       runs.update(run.id, {
         status: 'failed',
         ended_at: recoveredAt,

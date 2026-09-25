@@ -15,9 +15,18 @@ export interface UniversalToolCall {
   arguments: Record<string, unknown>;
 }
 
+export interface UniversalAttachment {
+  kind: 'image'|'video'|'audio'|'document'|'code'|'archive'|'other'|string;
+  mime_type: string;
+  file_name: string;
+  size_bytes: number;
+  data_base64: string;
+}
+
 export interface UniversalMessage {
   role: UniversalMessageRole;
   content: string;
+  attachments?: UniversalAttachment[];
   name?: string;
   tool_call_id?: string;
   tool_calls?: UniversalToolCall[];
@@ -198,6 +207,42 @@ function extractTextValue(value: unknown): string {
   return '';
 }
 
+
+function openAiChatContent(message:UniversalMessage):unknown{
+  const media=(message.attachments??[]).filter(a=>a.kind==='image'&&a.mime_type.startsWith('image/'));
+  if(!media.length)return message.content;
+  return [{type:'text',text:message.content},...media.map(a=>({type:'image_url',image_url:{url:`data:${a.mime_type};base64,${a.data_base64}`}}))];
+}
+function openAiResponsesContent(message:UniversalMessage):unknown{
+  const parts:any[]=[{type:'input_text',text:message.content}];
+  for(const a of message.attachments??[]){
+    if(a.kind==='image'&&a.mime_type.startsWith('image/'))parts.push({type:'input_image',image_url:`data:${a.mime_type};base64,${a.data_base64}`});
+    else if(a.mime_type==='application/pdf')parts.push({type:'input_file',filename:a.file_name,file_data:`data:${a.mime_type};base64,${a.data_base64}`});
+  }
+  return parts;
+}
+function anthropicContent(message:UniversalMessage):unknown{
+  const parts:any[]=[];
+  for(const a of message.attachments??[]){
+    if(a.kind==='image'&&a.mime_type.startsWith('image/'))parts.push({type:'image',source:{type:'base64',media_type:a.mime_type,data:a.data_base64}});
+    else if(a.mime_type==='application/pdf')parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:a.data_base64}});
+  }
+  parts.push({type:'text',text:message.content});
+  return parts.length===1?message.content:parts;
+}
+function geminiParts(message:UniversalMessage):any[]{
+  const parts:any[]=[{text:message.content}];
+  for(const a of message.attachments??[])parts.push({inlineData:{mimeType:a.mime_type,data:a.data_base64}});
+  return parts;
+}
+function requiredModalities(input?:UniversalCompletionInput):Set<string>{
+  const set=new Set<string>();
+  for(const m of input?.messages??[])for(const a of m.attachments??[]){
+    if(a.kind==='image')set.add('image');else if(a.kind==='audio')set.add('audio');else if(a.kind==='video')set.add('video');else if(a.mime_type==='application/pdf')set.add('pdf');
+  }
+  return set;
+}
+
 function systemAndConversation(messages: UniversalMessage[]): {
   system: string;
   conversation: UniversalMessage[];
@@ -335,7 +380,7 @@ class OpenAiChatDriver implements ProtocolDriver {
     const messages = input.messages.map((message) => {
       const base: Record<string, unknown> = {
         role: message.role,
-        content: message.content,
+        content: openAiChatContent(message),
       };
       if (message.name) base.name = message.name;
       if (message.tool_call_id) base.tool_call_id = message.tool_call_id;
@@ -449,7 +494,7 @@ class OpenAiChatDriver implements ProtocolDriver {
           return name ? [{
             model_id: name,
             display_name: name,
-            capabilities: { text: true, streaming: true },
+            capabilities: { text: true, streaming: true, image: true, pdf: this.id === 'openai_responses' },
             context_window: null,
             max_output_tokens: null,
             metadata: object,
@@ -465,7 +510,7 @@ class OpenAiChatDriver implements ProtocolDriver {
         return modelId ? [{
           model_id: modelId,
           display_name: getString(object.display_name) || modelId,
-          capabilities: { text: true, streaming: true },
+          capabilities: { text: true, streaming: true, image: true, pdf: this.id === 'openai_responses' },
           context_window: typeof object.context_window === 'number' ? object.context_window : null,
           max_output_tokens: typeof object.max_output_tokens === 'number' ? object.max_output_tokens : null,
           metadata: object,
@@ -489,7 +534,7 @@ class OpenAiResponsesDriver extends OpenAiChatDriver {
     const { system, conversation } = systemAndConversation(input.messages);
     const body: Record<string, unknown> = {
       model: input.model,
-      input: conversation.map((message) => ({ role: message.role, content: message.content })),
+      input: conversation.map((message) => ({ role: message.role, content: openAiResponsesContent(message) })),
       stream,
     };
     if (system) body.instructions = system;
@@ -550,7 +595,7 @@ class AnthropicMessagesDriver implements ProtocolDriver {
       max_tokens: input.max_output_tokens ?? configNumber(provider, 'default_max_output_tokens') ?? 8192,
       messages: conversation.map((message) => ({
         role: message.role === 'assistant' ? 'assistant' : 'user',
-        content: message.content,
+        content: anthropicContent(message),
       })),
       stream,
     };
@@ -628,7 +673,7 @@ class AnthropicMessagesDriver implements ProtocolDriver {
         return modelId ? [{
           model_id: modelId,
           display_name: getString(object.display_name) || modelId,
-          capabilities: { text: true, streaming: true },
+          capabilities: { text: true, streaming: true, image: true, pdf: true },
           context_window: typeof object.context_window === 'number' ? object.context_window : null,
           max_output_tokens: typeof object.max_output_tokens === 'number' ? object.max_output_tokens : null,
           metadata: object,
@@ -668,7 +713,7 @@ class GoogleGeminiDriver implements ProtocolDriver {
     const body: Record<string, unknown> = {
       contents: conversation.map((message) => ({
         role: message.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: message.content }],
+        parts: geminiParts(message),
       })),
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
@@ -739,6 +784,10 @@ class GoogleGeminiDriver implements ProtocolDriver {
           capabilities: {
             text: methods.includes('generateContent') || methods.includes('streamGenerateContent'),
             streaming: methods.includes('streamGenerateContent'),
+            image: true,
+            audio: true,
+            video: true,
+            pdf: true,
           },
           context_window: typeof object.inputTokenLimit === 'number' ? object.inputTokenLimit : null,
           max_output_tokens: typeof object.outputTokenLimit === 'number' ? object.outputTokenLimit : null,
@@ -1116,9 +1165,31 @@ export class UniversalProviderEngine {
     // try another enabled compatible model from the SAME provider before giving up.
     // This does not run on auth/config errors and does not override explicit fallbacks.
     const needsTools = Boolean(input?.tools?.length);
+    const modalities=requiredModalities(input);
+    const providerAccepts=(candidateProvider:Provider,candidateModel:string)=>{
+      if(!modalities.size)return true;
+      const modelRow=this.providers.listModels(candidateProvider.id,false).find(item=>item.model_id===candidateModel);
+      const caps=modelRow?.capabilities??{};
+      const protocol=candidateProvider.protocol_driver;
+      const modelName=candidateModel.toLowerCase();
+      const imageHeuristic=/(gpt-4o|gpt-4\.1|gpt-5|gpt-6|vision|vl\b|qwen.*vl|llava|gemma-3|grok.*vision)/i.test(modelName);
+      for(const modality of modalities){
+        if(caps[modality]===false)return false;
+        if(caps[modality]===true)continue;
+        if(modality==='image'&&['openai_responses','anthropic_messages','google_gemini'].includes(protocol))continue;
+        if(modality==='image'&&protocol==='openai_chat'&&imageHeuristic)continue;
+        if(modality==='pdf'&&['openai_responses','anthropic_messages','google_gemini'].includes(protocol))continue;
+        if((modality==='audio'||modality==='video')&&protocol==='google_gemini')continue;
+        return false;
+      }
+      return true;
+    };
+    const initial=result.filter(item=>{const p=this.providers.get(item.providerId);return Boolean(p&&providerAccepts(p,item.model))});
+    result.splice(0,result.length,...initial);
     const sameProviderModels = this.providers.listModels(providerId, false)
       .filter(item => item.enabled && item.model_id !== model)
       .filter(item => !needsTools || item.capabilities.tools !== false)
+      .filter(item => {const p=this.providers.get(providerId);return Boolean(p&&providerAccepts(p,item.model_id))})
       .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.display_name.localeCompare(b.display_name));
 
     for (const item of sameProviderModels) {
@@ -1128,6 +1199,21 @@ export class UniversalProviderEngine {
       result.push({ providerId, model: item.model_id, implicit: true });
     }
 
+    if(modalities.size){
+      for(const candidateProvider of this.providers.list().filter(item=>item.enabled&&item.id!==providerId)){
+        const modelRow=this.providers.listModels(candidateProvider.id,false)
+          .filter(item=>item.enabled)
+          .sort((a,b)=>Number(b.is_default)-Number(a.is_default)||a.display_name.localeCompare(b.display_name))
+          .find(item=>providerAccepts(candidateProvider,item.model_id)&&(!needsTools||item.capabilities.tools!==false));
+        if(!modelRow)continue;
+        const key=candidateProvider.id+'::'+modelRow.model_id;
+        if(seen.has(key))continue;
+        seen.add(key);
+        result.push({providerId:candidateProvider.id,model:modelRow.model_id,implicit:true});
+      }
+    }
+
+    if(!result.length&&requiredModalities(input).size)throw new UniversalProviderError('MODEL_MULTIMODAL_UNSUPPORTED','No configured provider/model can accept the attached media types. Configure a compatible multimodal model or fallback.');
     return result;
   }
 

@@ -10,6 +10,8 @@ import { OrchestratorGateway } from '../agent-office/orchestratorGateway.js';
 import { UniversalOrchestratorLLM } from '../agent-office/orchestratorRuntime.js';
 import { TeamService } from '../agent-office/teamService.js';
 import { WorkspaceService } from '../agent-office/workspaceService.js';
+import { LongRunService, shouldUseLongRun } from '../agent-office/longRunService.js';
+import { ResourceService } from '../agent-office/resourceService.js';
 
 export const chatRouter = Router();
 
@@ -37,6 +39,15 @@ chatRouter.post('/runs', async (request, response) => {
     const projectId = String(request.body?.project_id || '');
     const message = String(request.body?.message || '');
     const requestedTarget = typeof request.body?.target === 'string' ? request.body.target : 'auto';
+    const executionPolicy = typeof request.body?.execution_policy === 'string' ? request.body.execution_policy : 'auto';
+    const toolHint = typeof request.body?.tool_hint === 'string' ? request.body.tool_hint : '';
+    const attachmentIds = Array.isArray(request.body?.attachment_ids) ? request.body.attachment_ids.filter((value: unknown): value is string => typeof value === 'string') : [];
+    const attachmentKinds = [...new Set(new ResourceService(database.connection).attachments(attachmentIds).map(item=>String(item.metadata.kind||'other')))];
+    const routingHints:string[]=[];
+    if(attachmentKinds.length)routingHints.push('The request includes attached media/files of type(s): '+attachmentKinds.join(', ')+'. Route execution so the actual attachments are inspected by a compatible multimodal model. Never claim to have analyzed an attachment that was not actually provided to the model.');
+    if(toolHint==='web_search'||executionPolicy==='research')routingHints.push('This request requires live web/browser research. Prefer a worker with browser tools and actually inspect sources before answering.');
+    if(executionPolicy!=='auto')routingHints.push('Requested execution policy: '+executionPolicy+'.');
+    const routingMessage = routingHints.length ? message+'\n\n[Routing context only: '+routingHints.join(' ')+']' : message;
     if (!database.connection.prepare('SELECT 1 FROM projects WHERE id=?').get(projectId)) {
       throw new Error('CHAT_PROJECT_NOT_FOUND');
     }
@@ -47,11 +58,12 @@ chatRouter.post('/runs', async (request, response) => {
     ).route({
       project_id: projectId,
       conversation_id: typeof request.body?.conversation_id === 'string' ? request.body.conversation_id : null,
-      message,
+      message: routingMessage,
       target: requestedTarget,
     });
 
     const decision = orchestration.decision;
+    if(toolHint==='web_search'||executionPolicy==='research')decision.required_tools=[...new Set([...(decision.required_tools??[]),'browser_open'])];
     let selectedAgentIds: string[] = [];
     let selectedSubagentIds: string[] = [];
     if (decision.target_agent_id) {
@@ -95,6 +107,8 @@ chatRouter.post('/runs', async (request, response) => {
       orchestration_run_id: orchestration.orchestration_run_id,
       routing_level: orchestration.level,
       routing_decision: decision as unknown as Record<string, unknown>,
+      attachment_ids: attachmentIds,
+      required_tools: decision.required_tools,
     });
 
     const receipt = service.receipt(prepared);
@@ -102,6 +116,29 @@ chatRouter.post('/runs', async (request, response) => {
     const workforceId = decision.target_mode === 'dynamic_team' ? decision.target_team_id : undefined;
     if (workforceId) new TeamService(database.connection).bindWorkforceToChat(workforceId, prepared.run.id);
     const signal = chatRunControls.register(prepared.run.id);
+    const forceDurable=['plan','build','review','test','until_done'].includes(executionPolicy);
+    const longRunning = forceDurable || shouldUseLongRun(message, decision);
+    if (longRunning) {
+      const durable = new LongRunService(database.connection);
+      const created = durable.create(prepared, orchestration, message, attachmentIds);
+      void durable.run(created.plan.id, prepared.run.id, signal)
+        .catch(() => undefined)
+        .finally(() => {
+          try {
+            if (workforceId) {
+              const run = new ChatRunRepository(database.connection).get(prepared.run.id);
+              const terminal = run?.status === 'completed' ? 'completed' : run?.status === 'cancelled' ? 'cancelled' : 'failed';
+              new TeamService(database.connection).finishWorkforce(workforceId, terminal);
+            }
+          } finally {
+            chatRunControls.finish(prepared.run.id);
+            database.connection.close();
+          }
+        });
+      response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id, execution_plan_id: created.plan.id, long_running: true } });
+      return;
+    }
+
     void service.execute(prepared, signal)
       .catch(() => undefined)
       .finally(() => {
@@ -117,7 +154,7 @@ chatRouter.post('/runs', async (request, response) => {
         }
       });
 
-    response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id } });
+    response.status(202).json({ ok: true, data: { ...receipt, orchestration_run_id: orchestration.orchestration_run_id, long_running: false } });
   } catch (error) {
     database.connection.close();
     const code = codeOf(error, 'CHAT_RUN_START_FAILED');

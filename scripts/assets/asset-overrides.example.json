@@ -1,0 +1,25 @@
+[
+  {
+    "match": {
+      "pack": "Top_Down_Modern_Corporate_Office",
+      "path": "glass.*corner"
+    },
+    "set": {
+      "category": "glass",
+      "layer": "wall_front",
+      "roomTags": ["development", "strategy", "leadership"],
+      "tags": ["glass", "premium", "modular"],
+      "priority": 40
+    }
+  },
+  {
+    "match": {
+      "path": ".*workstation.*"
+    },
+    "set": {
+      "interaction": "workstation",
+      "tags": ["work", "tech"],
+      "priority": 30
+    }
+  }
+]

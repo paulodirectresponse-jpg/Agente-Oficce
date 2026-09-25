@@ -7,10 +7,17 @@ import type {
   ChatStreamEnvelope,
   Conversation,
   Project,
+  ResourceFile,
   ToolApproval,
   UniversalProvider,
+  WorkspaceSnapshot,
 } from './types.js';
 import { api } from './api.js';
+import { MessageContent } from './conversation/MessageContent.js';
+import { PendingAttachmentCard, StoredAttachmentCard } from './conversation/ResourcePreview.js';
+import { VoiceInputButton } from './conversation/VoiceInputButton.js';
+import { applyComposerSuggestion, composerSuggestions, parseComposerInput } from './conversation/ComposerDirectives.js';
+import { OfficeMap } from './room/OfficeMap.js';
 
 type OfficeFocus = 'office' | 'chat';
 type VisualState =
@@ -32,23 +39,9 @@ interface OfficeViewProps {
   focus?: OfficeFocus;
 }
 
-const STATE_LABELS: Record<VisualState, string> = {
-  offline: 'Offline',
-  idle: 'Disponível',
-  resting: 'Descansando',
-  thinking: 'Pensando',
-  planning: 'Planejando',
-  responding: 'Respondendo',
-  coding: 'Programando',
-  testing: 'Testando',
-  reviewing: 'Revisando',
-  waiting: 'Aguardando',
-  blocked: 'Bloqueado',
-  error: 'Erro',
-};
-
 const STREAM_EVENTS = [
   'run.created',
+  'worker.state',
   'agent.state',
   'response.delta',
   'response.streaming_fallback',
@@ -58,6 +51,11 @@ const STREAM_EVENTS = [
   'tool.started',
   'tool.completed',
   'tool.approval_required',
+  'execution.step.started',
+  'execution.step.telemetry',
+  'execution.step.completed',
+  'execution.step.failed',
+  'execution.preview.ready',
   'run.completed',
   'run.failed',
   'run.cancelled',
@@ -86,6 +84,20 @@ function formatTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function roomTelemetrySummary(event:ChatStreamEnvelope){
+  const data=event.data;
+  const operation=typeof data.operation==='string'?data.operation:'';
+  const target=typeof data.target==='string'?data.target:'';
+  const command=typeof data.command==='string'?data.command:'';
+  if(event.event==='tool.started'||event.event==='tool.completed')return (operation||String(data.tool_name||'Ação'))+(target?' · '+target:command?' · '+command:'');
+  if(event.event==='execution.step.started')return 'Etapa iniciada · '+String(data.step_title||'');
+  if(event.event==='execution.step.completed')return 'Etapa concluída · '+String(data.step_title||'');
+  if(event.event==='execution.step.failed')return 'Ajustando etapa · '+String(data.message||data.step_title||'');
+  if(event.event==='execution.step.telemetry')return String(data.message||operation||'Validando');
+  if(event.event==='execution.preview.ready')return 'Preview validado';
+  if(event.event==='worker.state')return String(data.activity||'Trabalhando');
+  return event.event;
 }
 
 function activitySummary(event: ActivityEventV2): string {
@@ -170,6 +182,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [activity, setActivity] = useState<ActivityEventV2[]>([]);
   const [message, setMessage] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [target, setTarget] = useState('auto');
   const [sending, setSending] = useState(false);
   const [currentRun, setCurrentRun] = useState<ChatRunReceipt | null>(null);
@@ -181,19 +194,22 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   const [approvals, setApprovals] = useState<ToolApproval[]>([]);
   const [resolvingApproval, setResolvingApproval] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
+  const [roomChatExpanded,setRoomChatExpanded]=useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const loadSnapshot = useCallback(async () => {
     if (!project) return;
     try {
-      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity, nextApprovals] = await Promise.all([
+      const [nextAgents, nextProviders, nextStates, nextConversation, nextActivity, nextApprovals, nextWorkspace] = await Promise.all([
         api.listAgentsV2(),
         api.listProvidersV2(),
         api.listAgentStatesV2(project.id),
         api.getConversation(project.id),
         api.listActivityV2(project.id),
         api.listToolApprovalsV2(project.id),
+        api.getWorkspaceSnapshotV3(project.id),
       ]);
       setAgents(nextAgents.filter((agent) => agent.enabled).sort((a, b) => a.sort_order - b.sort_order));
       setProviders(nextProviders);
@@ -201,6 +217,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
       setConversation(nextConversation);
       setActivity(nextActivity);
       setApprovals(nextApprovals);
+      setWorkspace(nextWorkspace);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar o escritório.');
@@ -215,6 +232,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     setLiveEvents([]);
     setLastHandoff(null);
     setApprovals([]);
+    setRoomChatExpanded(false);
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
     void loadSnapshot();
@@ -226,6 +244,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         api.listActivityV2(project.id).then(setActivity),
         api.getConversation(project.id).then(setConversation),
         api.listToolApprovalsV2(project.id).then(setApprovals),
+        api.getWorkspaceSnapshotV3(project.id).then(setWorkspace),
       ]).catch(() => undefined);
     }, 3500);
 
@@ -321,13 +340,14 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   }, [activity, liveEvents, currentRun, project]);
 
   const activeCount = visibleAgents.filter((agent) => {
+    if (agent.paused) return false;
     const visual = deriveVisualState(agent, stateByAgent.get(agent.id), liveStates[agent.id], providers);
     return visual !== 'offline' && visual !== 'resting';
   }).length;
 
-  const connectRunStream = useCallback(async (receipt: ChatRunReceipt) => {
+  const connectRunStream = useCallback(async (runId: string) => {
     eventSourceRef.current?.close();
-    const url = await api.getChatStreamUrl(receipt.run_id);
+    const url = await api.getChatStreamUrl(runId);
     const source = new EventSource(url);
     eventSourceRef.current = source;
 
@@ -344,15 +364,30 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
         ...current.filter((item) => !(item.run_id === envelope.run_id && item.sequence === envelope.sequence)),
       ].slice(0, 50));
 
-      if (envelope.event === 'agent.state') {
+      if (envelope.event === 'agent.state' || envelope.event === 'worker.state') {
         const agentId = typeof envelope.data.agent_id === 'string' ? envelope.data.agent_id : '';
-        const state = typeof envelope.data.state === 'string' ? envelope.data.state : 'idle';
+        const state = typeof envelope.data.state === 'string' ? envelope.data.state : 'responding';
         const activityText = typeof envelope.data.activity === 'string' ? envelope.data.activity : '';
         if (agentId) {
           setLiveStates((current) => ({
             ...current,
             [agentId]: {
               state,
+              activity: activityText || current[agentId]?.activity || 'Trabalhando',
+              updated_at: envelope.timestamp,
+            },
+          }));
+        }
+      }
+
+      if (['tool.started','tool.completed','execution.step.telemetry','execution.step.failed','execution.preview.ready'].includes(envelope.event)) {
+        const agentId = typeof envelope.data.agent_id === 'string' ? envelope.data.agent_id : '';
+        if (agentId) {
+          const activityText=roomTelemetrySummary(envelope);
+          setLiveStates((current)=>({
+            ...current,
+            [agentId]:{
+              state: envelope.event==='execution.step.failed'?'error':current[agentId]?.state||'responding',
               activity: activityText,
               updated_at: envelope.timestamp,
             },
@@ -422,7 +457,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     }
 
     source.onerror = () => {
-      void api.getChatRun(receipt.run_id)
+      void api.getChatRun(runId)
         .then((run) => {
           if (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') {
             setRunStatus(run.status);
@@ -446,11 +481,24 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
     };
   }, [loadSnapshot, project]);
 
+  const commandHints=useMemo(()=>composerSuggestions(message,agents),[message,agents]);
+  const workspaceRunId=workspace?.active_run?.id??null;
+  useEffect(()=>{
+    if(!workspaceRunId||eventSourceRef.current||currentRun?.run_id===workspaceRunId)return;
+    setRunStatus('running');
+    setSending(true);
+    void connectRunStream(workspaceRunId).catch(()=>undefined);
+  },[workspaceRunId,currentRun?.run_id,connectRunStream]);
+  const activeSteps=workspace?.active_plan?.steps??[];
+  const completedSteps=activeSteps.filter(step=>step.status==='completed').length;
+  const roomTelemetry=useMemo(()=>liveEvents.filter(event=>['tool.started','tool.completed','execution.step.started','execution.step.telemetry','execution.step.completed','execution.step.failed','execution.preview.ready','worker.state'].includes(event.event)).slice(0,roomChatExpanded?4:1),[liveEvents,roomChatExpanded]);
+
   const cancelCurrentRun = async () => {
-    if (!currentRun || runStatus !== 'running') return;
+    const runId=currentRun?.run_id??workspace?.active_run?.id;
+    if (!runId || runStatus !== 'running') return;
     setError(null);
     try {
-      await api.cancelChatRun(currentRun.run_id);
+      await api.cancelChatRun(runId);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao cancelar a execução.');
     }
@@ -471,46 +519,48 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!project || !message.trim() || sending) return;
+    if (!project || (!message.trim() && !pendingFiles.length) || sending) return;
 
-    const text = message.trim();
+    const parsed=parseComposerInput(message,agents);
+    const text = parsed.message || 'Analise os arquivos anexados.';
+    const actualTarget=parsed.target??target;
+    const files = pendingFiles.slice();
+    const optimisticId=`optimistic-${Date.now()}`;
     setMessage('');
+    setPendingFiles([]);
     setSending(true);
     setRunStatus('running');
     setError(null);
     setStreamingByAgent({});
     setLiveEvents([]);
     setLastHandoff(null);
+    setConversation((current) => current ? {
+      ...current,
+      messages:[...current.messages,{id:optimisticId,role:'user',agent_id:null,content:text,created_at:new Date().toISOString(),metadata:{pending:true,pending_file_names:files.map(file=>file.name)}}],
+    }:current);
 
     try {
+      const uploaded: ResourceFile[] = files.length ? await Promise.all(files.map((file) => api.uploadResource(project.id, file, 'chat'))) : [];
+      setConversation(current=>current?{...current,messages:current.messages.map(item=>item.id===optimisticId?{...item,metadata:{...item.metadata,pending:false,attachments:uploaded,attachment_ids:uploaded.map(file=>file.id)}}:item)}:current);
       const receipt = await api.startChatRun({
         project_id: project.id,
         conversation_id: conversation?.conversation_id,
         message: text,
-        target,
+        target:actualTarget,
+        attachment_ids: uploaded.map((file) => file.id),
+        execution_policy:parsed.execution_policy,
+        tool_hint:parsed.tool_hint,
+        directives:parsed.directives,
       });
       setCurrentRun(receipt);
-      setConversation((current) => current
-        ? {
-          ...current,
-          messages: [
-            ...current.messages,
-            {
-              id: `optimistic-${Date.now()}`,
-              role: 'user',
-              agent_id: null,
-              content: text,
-              created_at: new Date().toISOString(),
-            },
-          ],
-        }
-        : current);
-      await connectRunStream(receipt);
+      await connectRunStream(receipt.run_id);
     } catch (reason) {
+      setConversation(current=>current?{...current,messages:current.messages.filter(item=>item.id!==optimisticId)}:current);
       setSending(false);
       setRunStatus('failed');
       setError(reason instanceof Error ? reason.message : 'Falha ao iniciar o chat.');
       setMessage(text);
+      setPendingFiles(files);
     }
   };
 
@@ -525,7 +575,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
   }
 
   return (
-    <div className={`experience-grid ${focus === 'chat' ? 'chat-emphasis' : ''}`}>
+    <div className={`experience-grid ${focus === 'chat' ? 'chat-emphasis' : 'room-mode'}`}>
       <section className="experience-center">
         <header className="office-topbar">
           <div>
@@ -548,125 +598,17 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       ? 'Falhou'
                       : 'Pronto'}
             </span>
-            {runStatus === 'running' && currentRun && (
-              <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>Cancelar</button>
+            {runStatus === 'running' && (currentRun || workspace?.active_run) && (
+              <button type="button" className="cancel-run-button" onClick={cancelCurrentRun}>■ Parar</button>
             )}
             <span className="api-only-pill">{currentRun?.tools_enabled ? 'Tools ativos' : 'Texto/API'}</span>
             <span className="agent-count-pill">{activeCount}/{visibleAgents.length || 0} ativos</span>
           </div>
         </header>
 
-        <div className="office-scene-card">
-          <div className="office-back-wall">
-            <div className="wall-poster left">GOOD<br />AGENTS<br />GREAT<br />THINGS</div>
-            <div className="office-sign">
-              <strong>Agent Office</strong>
-              <span>LOCAL IDEAS. REAL PROGRESS.</span>
-            </div>
-            <div className="wall-poster right">PLAN<br />DELEGATE<br />ITERATE<br />SHIP</div>
-          </div>
+        <OfficeMap agents={visibleAgents} providers={providers} states={states} liveStates={liveStates} target={target} onTarget={setTarget} lastHandoff={lastHandoff}/>
 
-          <div className="office-room">
-            <div className="office-plant plant-a">✦</div>
-            <div className="office-plant plant-b">✦</div>
-            <div className="office-plant plant-c">✦</div>
-
-            <div className={`agent-stations agent-count-${Math.min(visibleAgents.length, 10)}`}>
-              {visibleAgents.map((agent, index) => {
-                const persisted = stateByAgent.get(agent.id);
-                const visualState = deriveVisualState(agent, persisted, liveStates[agent.id], providers);
-                const provider = agent.provider_id ? providerById.get(agent.provider_id) : undefined;
-                const activityText = liveStates[agent.id]?.activity || persisted?.activity || STATE_LABELS[visualState];
-                const selected = target === agent.id || target === agent.slug;
-                return (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    className={`agent-station state-${visualState} ${selected ? 'selected' : ''}`}
-                    onClick={() => setTarget(selected ? 'auto' : agent.id)}
-                    title={visualState === 'offline'
-                      ? `${agent.name} precisa de provider/modelo disponível`
-                      : `Enviar a próxima mensagem diretamente para ${agent.name}`}
-                    disabled={visualState === 'offline'}
-                  >
-                    <div className="agent-floating-card">
-                      <div className="agent-floating-title">
-                        <span className="agent-state-dot" />
-                        <strong>{agent.name}</strong>
-                      </div>
-                      <span>{activityText || STATE_LABELS[visualState]}</span>
-                      <div className="agent-progress-track">
-                        <span style={{ width: persisted?.progress != null ? `${Math.max(8, persisted.progress * 100)}%` : visualState === 'idle' || visualState === 'resting' ? '18%' : '62%' }} />
-                      </div>
-                    </div>
-
-                    <div className="desk-illustration">
-                      <div className="desk-monitor monitor-left"><span /></div>
-                      <div className="desk-monitor monitor-main"><span /></div>
-                      <div className={`agent-character character-${index % 3}`}>
-                        <div className="character-head">
-                          <span className="character-hair" />
-                          <span className="character-face" />
-                          <span className="character-headset" />
-                        </div>
-                        <div className="character-body" />
-                      </div>
-                      <div className="desk-surface">
-                        <span className="keyboard" />
-                        <span className="desk-mug">•</span>
-                        <span className="desk-plant">✦</span>
-                      </div>
-                      <div className="desk-legs left" />
-                      <div className="desk-legs right" />
-                    </div>
-
-                    <div className="agent-nameplate">
-                      <strong>{agent.name}</strong>
-                      <span>{agent.role || 'AI Agent'}</span>
-                      <small>
-                        {provider?.name ?? 'Provider não configurado'} · {STATE_LABELS[visualState]}
-                      </small>
-                    </div>
-                  </button>
-                );
-              })}
-
-              {visibleAgents.length === 0 && (
-                <div className="office-no-agents">
-                  <strong>Nenhum agente configurado</strong>
-                  <span>Na Fase F você poderá criar e posicionar agentes pelo painel.</span>
-                </div>
-              )}
-            </div>
-
-            <div className="office-handoff-line">
-              {lastHandoff ? (
-                <>
-                  <span className="handoff-node">{lastHandoff.from}</span>
-                  <span className="handoff-arrow">────→</span>
-                  <span className="handoff-bubble">Handoff</span>
-                  <span className="handoff-arrow">────→</span>
-                  <span className="handoff-node">{lastHandoff.to}</span>
-                </>
-              ) : (
-                <>
-                  <span className="shared-context-dot" />
-                  <span>Mesmo contexto · múltiplos agentes · handoffs ao vivo</span>
-                </>
-              )}
-            </div>
-
-            <div className="office-lounge">
-              <div className="office-sofa">
-                <span /><span /><span />
-              </div>
-              <div className="office-table"><span>✦</span></div>
-              <div className="office-rug">A CALMER<br />MORE CAPABLE<br />YOU</div>
-            </div>
-          </div>
-        </div>
-
-        <section className="office-chat-card" aria-label="Chat">
+        <section className={'office-chat-card '+(focus==='office'?(roomChatExpanded?'room-chat-expanded':'room-chat-compact'):'')} aria-label="Chat">
           <div className="chat-header">
             <div>
               <strong>Chat</strong>
@@ -678,10 +620,19 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               ) : (
                 <span>{agents.length} agentes disponíveis</span>
               )}
+              {focus==='office'&&<button type="button" className="room-chat-toggle" onClick={()=>setRoomChatExpanded(value=>!value)}>{roomChatExpanded?'Ocultar histórico':'Histórico'}</button>}
             </div>
           </div>
 
-          <div className="chat-transcript">
+          {roomTelemetry.length>0&&<div className="room-live-trace">{roomTelemetry.map(event=><div key={event.run_id+':'+event.sequence}><span/><strong>{roomTelemetrySummary(event)}</strong><small>{formatTime(event.timestamp)}</small></div>)}</div>}
+
+          {activeSteps.length>0&&<section className="room-inline-plan">
+            <div><strong>Etapas</strong><span>{completedSteps}/{activeSteps.length}</span></div>
+            <div className="room-inline-plan-track">{activeSteps.map(step=><span key={step.id} className={step.status} title={step.title||step.key}>{step.status==='completed'?'✓':step.status==='running'?'●':'○'}</span>)}</div>
+            <small>{activeSteps.find(step=>step.status==='running')?.title||activeSteps.find(step=>step.status!=='completed')?.title||'Concluído'}</small>
+          </section>}
+
+          {(focus!=='office'||roomChatExpanded)&&<div className="chat-transcript">
             {conversation?.messages.length ? conversation.messages.slice(-16).map((item) => {
               const agent = item.agent_id ? agents.find((candidate) => candidate.id === item.agent_id) : null;
               return (
@@ -692,7 +643,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <strong>{item.role === 'user' ? 'Você' : agent?.name || item.agent_id || 'Agente'}</strong>
                       <span>{formatTime(item.created_at)}</span>
                     </div>
-                    <p>{item.content}</p>
+                    <MessageContent content={item.content}/>
+                    {Array.isArray((item as any).metadata?.attachments)&&<div className="work-v2-attachments">{(item as any).metadata.attachments.map((file:ResourceFile)=><StoredAttachmentCard key={file.id} file={file}/>)}</div>}
                   </div>
                 </div>
               );
@@ -713,16 +665,17 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <strong>{agent?.name || agentId}</strong>
                       <span className="typing-indicator">respondendo ao vivo</span>
                     </div>
-                    <p>{text}<span className="stream-caret">▍</span></p>
+                    <MessageContent content={text} streaming/>
                   </div>
                 </div>
               );
             })}
             <div ref={chatEndRef} />
-          </div>
+          </div>}
 
-          <form className="chat-composer" onSubmit={submit}>
-            <textarea
+          <form className="chat-composer" onSubmit={submit} onDragOver={(event)=>{event.preventDefault();event.dataTransfer.dropEffect='copy'}} onDrop={(event)=>{event.preventDefault();setPendingFiles(cur=>[...cur,...Array.from(event.dataTransfer.files??[])].slice(0,12))}}>
+            {pendingFiles.length>0&&<div className="work-v2-pending-files">{pendingFiles.map((file,index)=><PendingAttachmentCard key={file.name+'-'+index} file={file} onRemove={()=>setPendingFiles(cur=>cur.filter((_,i)=>i!==index))}/>)}</div>}
+            <div className="composer-input-wrap"><textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               onKeyDown={(event) => {
@@ -735,6 +688,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
               rows={2}
               disabled={sending}
             />
+            {commandHints.length>0&&<div className="composer-command-hints">{commandHints.map(item=><button type="button" key={item.token} onMouseDown={e=>e.preventDefault()} onClick={()=>setMessage(current=>applyComposerSuggestion(current,item.token))}><strong>{item.token}</strong><span>{item.label}</span></button>)}</div>}</div>
             <div className="composer-row">
               <div className="composer-context">
                 <span className="shared-context-dot" />
@@ -745,6 +699,8 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                 <span>local-first</span>
               </div>
               <div className="composer-actions">
+                <label className="work-v2-file-button" title="Anexar arquivos">+<input type="file" multiple onChange={event=>{setPendingFiles(cur=>[...cur,...Array.from(event.target.files??[])].slice(0,12));event.currentTarget.value=''}}/></label>
+                <VoiceInputButton disabled={sending} onTranscript={text=>setMessage(current=>current.trim()?current.trimEnd()+' '+text:text)}/>
                 <select value={target} onChange={(event) => setTarget(event.target.value)} disabled={sending}>
                   <option value="auto">Auto</option>
                   <option value="team">Team</option>
@@ -758,7 +714,7 @@ export function OfficeView({ project, focus = 'office' }: OfficeViewProps) {
                       <option key={agent.id} value={agent.id}>{agent.name}</option>
                     ))}
                 </select>
-                <button type="submit" className="send-button" disabled={sending || !message.trim()}>
+                <button type="submit" className="send-button" disabled={sending || (!message.trim()&&!pendingFiles.length)}>
                   {sending ? '•••' : '➤'}
                 </button>
               </div>
