@@ -46,7 +46,9 @@ export function compileDevelopment52B(
   const library=new PrefabLibrary(DEVELOPMENT_PREFABS);
   const room=compilePrefabRoom(DEVELOPMENT_52B_BLUEPRINT,library,registry,calibrations);
   if(room.errors.length)throw new Error(`Development 5.2B blueprint invalid: ${room.errors.join(', ')}`);
-  const workSockets=socketsByKind(room,'work').filter(socket=>socket.prefabInstanceId==='work');
+  const allWorkSockets=socketsByKind(room,'work').filter(socket=>socket.prefabInstanceId==='work');
+  const calibratedWorkSockets=allWorkSockets.filter(socket=>socket.source==='asset');
+  const workSockets=calibratedWorkSockets.length>=6?calibratedWorkSockets:allWorkSockets.filter(socket=>socket.source==='prefab');
   const planningSockets=[
     ...socketsByKind(room,'present').filter(socket=>socket.prefabInstanceId==='planning'),
     ...socketsByKind(room,'stand').filter(socket=>socket.prefabInstanceId==='planning'),
