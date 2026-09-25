@@ -17,7 +17,6 @@ const loungeTable='coffee.010.round.lounge.coffee.table.4ec13eb00f';
 const floorLamp='lighting.prop.009.floor.lamp.22dbca4e23';
 const bookcase='storage.prop.016.tall.bookcase.141dcb5f7a';
 const documentCabinet='storage.prop.017.document.cabinet.d8643d2784';
-const printer='electronics.prop.020.compact.printer.scanner.4611e63027';
 const glassLong='glass.architecture.009.glass.horizontal.long.5327be0d0f';
 const whiteboard='whiteboard.035.p02.17.whiteboard.with.diagrams.5db621d5d2';
 const dashboard='monitor.tech.007.large.market.video.wall.b3fd1bf0dc';
@@ -70,10 +69,10 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
       {id:'ws1',assetId:workstation,x:115,y:95,scaleToken:'standard',tags:['workstation']},
       {id:'ws2',assetId:workstation,x:310,y:95,scaleToken:'standard',tags:['workstation']},
       {id:'ws3',assetId:workstation,x:505,y:95,scaleToken:'standard',tags:['workstation']},
-      {id:'divider1',assetId:divider,x:115,y:190,scaleToken:'compact',layerOverride:'furniture_front',tags:['divider']},
-      {id:'divider2',assetId:divider,x:245,y:190,scaleToken:'compact',layerOverride:'furniture_front',tags:['divider']},
-      {id:'divider3',assetId:divider,x:375,y:190,scaleToken:'compact',layerOverride:'furniture_front',tags:['divider']},
-      {id:'divider4',assetId:divider,x:505,y:190,scaleToken:'compact',layerOverride:'furniture_front',tags:['divider']},
+      {id:'divider1',assetId:divider,x:115,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
+      {id:'divider2',assetId:divider,x:245,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
+      {id:'divider3',assetId:divider,x:375,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
+      {id:'divider4',assetId:divider,x:505,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
       {id:'ws4',assetId:workstation,x:115,y:280,scaleToken:'standard',tags:['workstation']},
       {id:'ws5',assetId:workstation,x:310,y:280,scaleToken:'standard',tags:['workstation']},
       {id:'ws6',assetId:workstation,x:505,y:280,scaleToken:'standard',tags:['workstation']},
@@ -183,16 +182,32 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     placements:[
       {id:'bookcase',assetId:bookcase,x:75,y:135,scaleToken:'standard'},
       {id:'cabinet',assetId:documentCabinet,x:75,y:320,scaleToken:'standard'},
-      {id:'printer',assetId:printer,x:75,y:245,scaleToken:'standard',layerOverride:'surface'},
     ],
     sockets:[
-      {id:'printer',kind:'interact',x:135,y:245,facing:'west',pose:'standing-interact',tags:['printer']},
       {id:'storage',kind:'interact',x:135,y:320,facing:'west',pose:'standing-interact',tags:['storage']},
     ],
     collision:[{x:15,y:20,width:110,height:340}],
     keepClear:[{x:125,y:155,width:25,height:200}],
     tags:['storage','office-support'],roomTags:['development'],teamTags:['general'],
     notes:['Designed to sit flush against a wall.'],
+  }),
+  prefab({
+    id:'development.support-low',
+    name:'Development Low Support Wall',
+    category:'storage',
+    width:300,height:120,pivot:{x:150,y:60},
+    placements:[
+      {id:'credenza',assetId:credenza,x:150,y:82,scaleToken:'standard',layerOverride:'furniture_back'},
+      {id:'plant-left',assetId:plantMedium,x:28,y:90,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'plant-right',assetId:plantMedium,x:272,y:90,scaleToken:'compact',layerOverride:'furniture_front'},
+    ],
+    sockets:[
+      {id:'support',kind:'interact',x:150,y:112,facing:'north',pose:'standing-interact',capacity:1,tags:['storage','support']},
+    ],
+    collision:[{x:38,y:40,width:224,height:72}],
+    keepClear:[{x:70,y:0,width:160,height:38}],
+    tags:['development','support','storage'],roomTags:['development'],teamTags:['general'],
+    notes:['Low wall support unit used to finish the lower perimeter without blocking circulation.'],
   }),
   prefab({
     id:'entrance.bottom.open',
