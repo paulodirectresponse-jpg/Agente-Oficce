@@ -17,9 +17,9 @@ export const AGENT_OFFICE_CHARACTER_SCALE=CharacterScaleProfileSchema.parse({
   schemaVersion:1,
   id:'agent-office-character-scale-v1',
   canonicalTileSize:32,
-  standingHeightTiles:1.5,
-  seatedHeightTiles:1.08,
-  workingHeightTiles:1.08,
+  standingHeightTiles:1.75,
+  seatedHeightTiles:1.5,
+  workingHeightTiles:1.5,
   minimumScale:.2,
   maximumScale:2,
 });
