@@ -94,15 +94,8 @@ function stationPosition(agent:RoomAgentView,index:number){
   const cycle=Math.floor(index/list.length);
   return{x:base.x+cycle*34,y:base.y+cycle*26};
 }
-function behaviorPosition(agent:RoomAgentView,home:Vec,index:number,useDevelopmentV3=false):Vec{
+function behaviorPosition(agent:RoomAgentView,home:Vec,index:number):Vec{
   const lane=(hash(agent.id)%5)-2;
-  if(useDevelopmentV3&&agent.station==='development'){
-    if(agent.state==='thinking'||agent.state==='planning')return{x:DEVELOPMENT_V3_BEHAVIOR.planning.x+lane*18,y:DEVELOPMENT_V3_BEHAVIOR.planning.y+(index%2)*16};
-    if(agent.state==='testing'||agent.state==='reviewing')return{x:DEVELOPMENT_V3_BEHAVIOR.review.x+lane*18,y:DEVELOPMENT_V3_BEHAVIOR.review.y+(index%2)*16};
-    if(agent.state==='waiting'||agent.state==='paused')return{x:DEVELOPMENT_V3_BEHAVIOR.waiting.x+lane*16,y:DEVELOPMENT_V3_BEHAVIOR.waiting.y+(index%2)*14};
-    if(agent.state==='resting'||agent.state==='completed')return{x:DEVELOPMENT_V3_BEHAVIOR.lounge.x+lane*16,y:DEVELOPMENT_V3_BEHAVIOR.lounge.y+(index%2)*14};
-    return home;
-  }
   if(agent.state==='thinking'||agent.state==='planning')return{x:165+lane*34,y:185+(index%2)*22};
   if(agent.state==='testing'||agent.state==='reviewing')return{x:935+lane*38,y:845+(index%2)*28};
   if(agent.state==='waiting')return{x:180+lane*34,y:880+(index%2)*24};
@@ -305,7 +298,7 @@ export function OfficeGameCanvas({agents,onSelect,lastHandoff}:Props){
         return{agent,pos:{x:target.x,y:target.y}};
       }
       const home=stationPosition(agent,stationIndex);
-      return{agent,pos:behaviorPosition(agent,home,index,false)};
+      return{agent,pos:behaviorPosition(agent,home,index)};
     });
   },[agents,v3Ready]);
 
