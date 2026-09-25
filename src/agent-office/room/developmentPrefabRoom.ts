@@ -20,6 +20,7 @@ export const DEVELOPMENT_52B_BLUEPRINT={
     {id:'meeting',prefabId:'meeting.glass.6',x:1080,y:475},
     {id:'lounge',prefabId:'lounge.standard',x:245,y:690},
     {id:'storage',prefabId:'storage.wall.standard',x:95,y:420},
+    {id:'support-right',prefabId:'development.support-low',x:1080,y:770},
     {id:'entry',prefabId:'entrance.bottom.open',x:630,y:790},
   ],
   protectedZones:[
