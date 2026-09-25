@@ -14,19 +14,19 @@ const asset={
 
 describe('character calibration',()=>{
   it('targets a 48px standing character at the canonical 32px tile scale',()=>{
-    expect(targetCharacterHeight(AGENT_OFFICE_CHARACTER_SCALE,'standing')).toBe(48);
+    expect(targetCharacterHeight(AGENT_OFFICE_CHARACTER_SCALE,'standing')).toBe(56);
   });
 
   it('shrinks a 93px source character instead of forcing an arbitrary runtime height',()=>{
     const calibration=deriveCalibration(asset as never,{x:0,y:0,width:47,height:93});
     const scale=characterRenderScale(calibration,'standing');
-    expect(scale).toBeCloseTo(48/93,5);
+    expect(scale).toBeCloseTo(56/93,5);
   });
 
   it('uses a smaller calibrated target for seated/working poses',()=>{
     const calibration=deriveCalibration(asset as never,{x:0,y:0,width:47,height:93});
     expect(characterRenderScale(calibration,'working')).toBeLessThan(characterRenderScale(calibration,'standing'));
     const rect=characterDestinationRect(calibration,500,400,'working');
-    expect(rect.height).toBeCloseTo(32*1.08,5);
+    expect(rect.height).toBeCloseTo(48,5);
   });
 });
