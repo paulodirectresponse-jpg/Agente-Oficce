@@ -2,7 +2,7 @@ import { PrefabDefinitionSchema, type PrefabDefinition } from './prefabSystem.js
 
 const workstation='desk.combination.001.complete.workstation.22f9e85f92';
 const divider='plant.061.p04.04.workstation.divider.planter.888514e87d';
-const meetingRug='rug.055.p03.18.blue.executive.office.rug.4d633abdd4';
+const meetingRug='rug.01.executive.area.rug.1e092d7f';
 const meetingGlassH='glass.architecture.013.glass.partition.horizontal.8c253f3341';
 const meetingGlassV='glass.architecture.014.glass.partition.vertical.b89e37da3f';
 const meetingTable='table.001.p01.01.large.rectangular.conference.table.9fa0913ec6';
@@ -10,7 +10,7 @@ const chairN='chair.furniture.009.conference.chair.north.2c380d40b7';
 const chairS='chair.furniture.010.conference.chair.south.39b5b2d98e';
 const chairL='chair.furniture.011.conference.chair.left.ee6b8f37d1';
 const chairR='chair.furniture.012.conference.chair.right.a62ae2fd1e';
-const loungeRug='rug.prop.011.lounge.rug.744e8a1f81';
+const loungeRug='rug.04.deep.teal.area.rug.7fc5b269';
 const loungeSofa='seating.prop.028.teal.lounge.sofa.e10cd9310c';
 const loungeChair='seating.012.p01.12.teal.lounge.armchair.9440121898';
 const loungeTable='coffee.010.round.lounge.coffee.table.4ec13eb00f';
@@ -69,10 +69,8 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
       {id:'ws1',assetId:workstation,x:115,y:95,scaleToken:'standard',tags:['workstation']},
       {id:'ws2',assetId:workstation,x:310,y:95,scaleToken:'standard',tags:['workstation']},
       {id:'ws3',assetId:workstation,x:505,y:95,scaleToken:'standard',tags:['workstation']},
-      {id:'divider1',assetId:divider,x:115,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
-      {id:'divider2',assetId:divider,x:245,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
-      {id:'divider3',assetId:divider,x:375,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
-      {id:'divider4',assetId:divider,x:505,y:190,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
+      {id:'divider1',assetId:divider,x:178,y:204,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
+      {id:'divider2',assetId:divider,x:425,y:204,scaleToken:'compact',layerOverride:'furniture_back',tags:['divider']},
       {id:'ws4',assetId:workstation,x:115,y:280,scaleToken:'standard',tags:['workstation']},
       {id:'ws5',assetId:workstation,x:310,y:280,scaleToken:'standard',tags:['workstation']},
       {id:'ws6',assetId:workstation,x:505,y:280,scaleToken:'standard',tags:['workstation']},
@@ -131,11 +129,11 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
       {id:'glassLeft',assetId:meetingGlassV,x:25,y:215,scaleToken:'standard',layerOverride:'wall_front'},
       {id:'glassTop1',assetId:meetingGlassH,x:110,y:35,scaleToken:'standard',layerOverride:'wall_back'},
       {id:'glassTop2',assetId:meetingGlassH,x:220,y:35,scaleToken:'standard',layerOverride:'wall_back'},
-      {id:'table',assetId:meetingTable,x:165,y:250,scaleToken:'standard'},
-      {id:'north',assetId:chairN,x:165,y:160,scaleToken:'standard'},
-      {id:'south',assetId:chairS,x:165,y:335,scaleToken:'standard',layerOverride:'furniture_front'},
-      {id:'west',assetId:chairL,x:80,y:260,scaleToken:'standard',layerOverride:'furniture_front'},
-      {id:'east',assetId:chairR,x:250,y:260,scaleToken:'standard',layerOverride:'furniture_front'},
+      {id:'table',assetId:meetingTable,x:165,y:238,scaleToken:'compact'},
+      {id:'north',assetId:chairN,x:165,y:158,scaleToken:'compact'},
+      {id:'south',assetId:chairS,x:165,y:330,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'west',assetId:chairL,x:89,y:238,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'east',assetId:chairR,x:241,y:238,scaleToken:'compact',layerOverride:'furniture_front'},
       {id:'plant',assetId:plantLarge,x:300,y:110,scaleToken:'compact',layerOverride:'furniture_front'},
     ],
     sockets:[
@@ -159,9 +157,9 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
       {id:'rug',assetId:loungeRug,x:170,y:250,scaleToken:'standard',layerOverride:'floor'},
       {id:'sofa',assetId:loungeSofa,x:90,y:190,scaleToken:'standard'},
       {id:'chair',assetId:loungeChair,x:265,y:205,scaleToken:'standard',layerOverride:'furniture_front'},
-      {id:'table',assetId:loungeTable,x:190,y:205,scaleToken:'standard'},
+      {id:'table',assetId:loungeTable,x:165,y:205,scaleToken:'standard'},
       {id:'lamp',assetId:floorLamp,x:25,y:145,scaleToken:'standard'},
-      {id:'plant',assetId:plantLarge,x:0,y:235,scaleToken:'compact',layerOverride:'furniture_front'},
+      {id:'plant',assetId:plantLarge,x:18,y:215,scaleToken:'compact',layerOverride:'furniture_front'},
     ],
     sockets:[
       {id:'sofa1',kind:'seat',x:85,y:205,facing:'east',pose:'seated-rest'},

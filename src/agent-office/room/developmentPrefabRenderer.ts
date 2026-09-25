@@ -8,7 +8,7 @@ import {
 import type { Development52BRuntime } from './developmentPrefabRoom.js';
 import { DEVELOPMENT_52B_BOUNDS } from './developmentPrefabRoom.js';
 
-export const DEVELOPMENT_52B_FLOOR_ID='floor.architecture.001.floor.wood.plank.tile.3957bd6a02';
+export const DEVELOPMENT_52B_FLOOR_ID='floor.animated.corporate.wood.plank.tile.14298a60';
 
 export type Development52BRenderRuntime={
   registry:AssetRegistry;
@@ -31,10 +31,25 @@ function drawFloor(ctx:CanvasRenderingContext2D,runtime:Development52BRenderRunt
   const tile=runtime.images.get(DEVELOPMENT_52B_FLOOR_ID);
   if(tile?.complete&&tile.naturalWidth){
     ctx.save();ctx.imageSmoothingEnabled=false;
-    const size=32;
-    for(let y=b.y;y<b.y+b.height;y+=size){
-      for(let x=b.x;x<b.x+b.width;x+=size){
-        ctx.drawImage(tile,x,y,size,size);
+    const calibration=runtime.calibrations.require(DEVELOPMENT_52B_FLOOR_ID);
+    const source=calibration.alphaBounds;
+    const tileW=Math.max(32,Math.round(source.width*calibration.canonicalScale));
+    const tileH=Math.max(32,Math.round(source.height*calibration.canonicalScale));
+    const firstX=b.x-Math.ceil((((b.x%tileW)+tileW)%tileW));
+    const firstY=b.y-Math.ceil((((b.y%tileH)+tileH)%tileH));
+    for(let y=firstY;y<b.y+b.height;y+=tileH){
+      for(let x=firstX;x<b.x+b.width;x+=tileW){
+        const clipped={
+          x:Math.max(x,b.x),y:Math.max(y,b.y),
+          width:Math.min(x+tileW,b.x+b.width)-Math.max(x,b.x),
+          height:Math.min(y+tileH,b.y+b.height)-Math.max(y,b.y),
+        };
+        if(clipped.width<=0||clipped.height<=0)continue;
+        const sx=source.x+(clipped.x-x)/tileW*source.width;
+        const sy=source.y+(clipped.y-y)/tileH*source.height;
+        const sw=clipped.width/tileW*source.width;
+        const sh=clipped.height/tileH*source.height;
+        ctx.drawImage(tile,sx,sy,sw,sh,clipped.x,clipped.y,clipped.width,clipped.height);
       }
     }
     ctx.restore();
@@ -46,9 +61,9 @@ function drawFloor(ctx:CanvasRenderingContext2D,runtime:Development52BRenderRunt
     b.x+b.width*.5,b.y+b.height*.44,120,
     b.x+b.width*.5,b.y+b.height*.44,b.width*.72,
   );
-  vignette.addColorStop(0,'rgba(255,192,104,.025)');
-  vignette.addColorStop(.68,'rgba(7,24,31,.015)');
-  vignette.addColorStop(1,'rgba(3,15,22,.12)');
+  vignette.addColorStop(0,'rgba(255,192,104,.02)');
+  vignette.addColorStop(.68,'rgba(7,24,31,.01)');
+  vignette.addColorStop(1,'rgba(3,15,22,.06)');
   ctx.fillStyle=vignette;ctx.fillRect(b.x,b.y,b.width,b.height);
 }
 
