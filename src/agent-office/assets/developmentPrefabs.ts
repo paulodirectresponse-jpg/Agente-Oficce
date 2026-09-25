@@ -192,6 +192,22 @@ export const DEVELOPMENT_PREFABS:PrefabDefinition[]=[
     notes:['Designed to sit flush against a wall.'],
   }),
   prefab({
+    id:'development.base-storage',
+    name:'Development Low Credenza',
+    category:'storage',
+    width:300,height:120,pivot:{x:150,y:60},
+    placements:[
+      {id:'credenza',assetId:credenza,x:150,y:82,scaleToken:'standard',layerOverride:'furniture_back'},
+    ],
+    sockets:[
+      {id:'support',kind:'interact',x:150,y:112,facing:'north',pose:'standing-interact',capacity:1,tags:['storage','support']},
+    ],
+    collision:[{x:70,y:45,width:160,height:70}],
+    keepClear:[{x:80,y:0,width:140,height:38}],
+    tags:['development','support','storage','base-run'],roomTags:['development'],teamTags:['general'],
+    notes:['A low credenza module for the lower perimeter; narrow collision follows the cabinet body and leaves the central entry aisle open.'],
+  }),
+  prefab({
     id:'development.support-low',
     name:'Development Low Support Wall',
     category:'storage',

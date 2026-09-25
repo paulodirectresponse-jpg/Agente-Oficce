@@ -21,11 +21,16 @@ export const DEVELOPMENT_52B_BLUEPRINT={
     {id:'lounge',prefabId:'lounge.standard',x:245,y:690},
     {id:'storage',prefabId:'storage.wall.standard',x:95,y:420},
     {id:'support-right',prefabId:'development.support-low',x:1080,y:770},
-    {id:'entry',prefabId:'entrance.bottom.open',x:630,y:790},
+    {id:'support-lower-left',prefabId:'development.base-storage',x:480,y:770},
+    {id:'support-lower-center',prefabId:'development.base-storage',x:880,y:770},
+    {id:'entry',prefabId:'entrance.bottom.open',x:704,y:790},
   ],
   protectedZones:[
-    {id:'main-entry-corridor',x:540,y:650,width:180,height:160,tags:['circulation','entry']},
-    {id:'work-left-aisle',x:300,y:300,width:65,height:350,tags:['circulation']},
+    // The passage is aligned with the opening in the bottom shell segments.
+    {id:'main-entry-corridor',x:629,y:650,width:150,height:160,tags:['circulation','entry']},
+    // Keep the protected aisle in the real gap between left storage and the
+    // workpod's conservative collision envelope (which includes chair backs).
+    {id:'work-left-aisle',x:160,y:300,width:140,height:350,tags:['circulation']},
     {id:'meeting-access',x:895,y:500,width:50,height:220,tags:['circulation']},
   ],
   tags:['development','approved-reference','prefab-runtime'],
